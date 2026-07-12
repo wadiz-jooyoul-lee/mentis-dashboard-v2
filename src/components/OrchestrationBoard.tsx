@@ -23,6 +23,7 @@ import {
 } from "antd";
 import { LinkOutlined, WarningOutlined, FileTextOutlined } from "@ant-design/icons";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
+import IssueReport from "@/components/IssueReport";
 import { dobbyColor } from "@/lib/dobby";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
@@ -530,6 +531,79 @@ export default function OrchestrationBoard({
               ),
             }))}
           />
+        </div>
+      )}
+
+      {/* 분석 (analysis.md) — v1 착수 상세처럼 */}
+      {epic!.analysisMd && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>분석</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{epic!.analysisMd}</ReactMarkdown>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 구현 / 산출 */}
+      {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>{epic!.workType === "nonsource" ? "산출" : "구현"}</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) ?? ""}
+              </ReactMarkdown>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 산출물 (deliverables/) */}
+      {epic!.deliverables.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>산출물</Title>
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            {epic!.deliverables.map((d) => (
+              <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
+                {d.kind === "md" ? (
+                  <div className="markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{d.content}</ReactMarkdown>
+                  </div>
+                ) : d.kind === "html" ? (
+                  <iframe
+                    title={d.name}
+                    srcDoc={d.content}
+                    sandbox=""
+                    style={{ width: "100%", height: 520, border: "1px solid #f0f0f0", borderRadius: 6 }}
+                  />
+                ) : (
+                  <Text type="secondary">미리보기를 지원하지 않는 파일입니다.</Text>
+                )}
+              </Card>
+            ))}
+          </Space>
+        </div>
+      )}
+
+      {/* 검증 (test-runs) — v1 이슈 테스트 리포트 그대로 */}
+      {epic!.runs.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>검증</Title>
+          <IssueReport issueKey={epicKey} runs={epic!.runs} embedded />
+        </div>
+      )}
+
+      {/* 종료 서머리 (summary.md) */}
+      {epic!.summaryMd && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>종료 서머리</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{epic!.summaryMd}</ReactMarkdown>
+            </div>
+          </Card>
         </div>
       )}
     </div>

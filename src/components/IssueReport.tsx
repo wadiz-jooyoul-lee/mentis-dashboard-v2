@@ -236,10 +236,13 @@ export default function IssueReport({
   issueKey,
   runs,
   status,
+  embedded,
 }: {
   issueKey: string;
   runs: ReportRun[];
   status?: IssueStatus | null;
+  /** 오케스트레이션 보드 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
+  embedded?: boolean;
 }) {
   const badge = status ? stateBadge(status.state) : null;
   const inProgress =
@@ -251,37 +254,36 @@ export default function IssueReport({
 
   return (
     <div>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/issue-test">이슈 테스트</Link> },
-          { title: issueKey },
-        ]}
-        style={{ marginBottom: 12 }}
-      />
-      <Space align="center" style={{ marginBottom: 8 }} size={12} wrap>
-        <Title level={2} style={{ margin: 0 }}>
-          {issueKey}
-        </Title>
-        {badge && (
-          <Badge
-            status={badge.status}
-            text={
-              inProgress && status?.total != null
-                ? `${badge.text} (${status.done ?? 0}/${status.total})`
-                : badge.text
-            }
+      {!embedded && (
+        <>
+          <Breadcrumb
+            items={[
+              { title: <Link href="/">홈</Link> },
+              { title: <Link href="/orchestration">오케스트레이션</Link> },
+              { title: issueKey },
+            ]}
+            style={{ marginBottom: 12 }}
           />
-        )}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(issueKey)}
-          target="_blank"
-        >
-          Jira에서 열기
-        </Button>
-      </Space>
+          <Space align="center" style={{ marginBottom: 8 }} size={12} wrap>
+            <Title level={2} style={{ margin: 0 }}>
+              {issueKey}
+            </Title>
+            {badge && (
+              <Badge
+                status={badge.status}
+                text={
+                  inProgress && status?.total != null
+                    ? `${badge.text} (${status.done ?? 0}/${status.total})`
+                    : badge.text
+                }
+              />
+            )}
+            <Button type="link" icon={<LinkOutlined />} href={jiraUrl(issueKey)} target="_blank">
+              Jira에서 열기
+            </Button>
+          </Space>
+        </>
+      )}
 
       {selected ? (
         <>

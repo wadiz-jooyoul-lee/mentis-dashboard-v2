@@ -12,6 +12,7 @@ import { getMetaDir } from "@/lib/issues";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
 import { parseOrderStatus } from "@/lib/parseOrderStatus";
 import type { Metric } from "@/lib/lifecycle";
+import type { ReportRun } from "@/lib/issues";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
 const KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
@@ -235,13 +236,77 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
   return { logPath, found: true, baseDir: base, files: files.map(rel), diffs, commits, summary };
 }
 
+export type Deliverable = { name: string; content: string; kind: "md" | "html" | "other" };
+
 export type EpicDetail = {
   epicKey: string;
   orchestration: Orchestration | null;
   contracts: Contract[];
   reviews: ReviewFile[];
   agentWorks: AgentWork[];
+  /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
+  workType: WorkType;
+  title: string | null;
+  analysisMd: string | null;
+  implementationMd: string | null;
+  produceMd: string | null;
+  summaryMd: string | null;
+  deliverables: Deliverable[];
+  runs: ReportRun[];
 };
+
+/** test-runs/{시각}/result.md 회차들(최신순). */
+function readRuns(key: string): ReportRun[] {
+  const runsDir = path.join(orderDir(key), "test-runs");
+  if (!fs.existsSync(runsDir)) return [];
+  const runs: ReportRun[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(runsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const runDir = path.join(runsDir, e.name);
+    let mds: string[] = [];
+    try {
+      mds = fs.readdirSync(runDir).filter((f) => f.toLowerCase().endsWith(".md"));
+    } catch {
+      continue;
+    }
+    const file = mds.find((f) => /result/i.test(f)) ?? mds[0];
+    if (!file) continue;
+    const content = readFileSafe(path.join(runDir, file)) ?? "";
+    const m = e.name.match(/(\d{4})-?(\d{2})-?(\d{2})[-_ ]?(\d{2}):?(\d{2}):?(\d{2})/);
+    const label = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : e.name;
+    const sortKey = m
+      ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime()
+      : 0;
+    runs.push({ id: e.name, label, file: path.join("test-runs", e.name, file), content, sortKey });
+  }
+  runs.sort((a, b) => b.sortKey - a.sortKey);
+  return runs;
+}
+
+/** deliverables/ 산출물(produce.md 제외). md/html/기타 구분. */
+function readDeliverables(key: string): Deliverable[] {
+  const dir = path.join(orderDir(key), "deliverables");
+  if (!fs.existsSync(dir)) return [];
+  const out: Deliverable[] = [];
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (f === "produce.md") continue;
+      const lower = f.toLowerCase();
+      const kind = lower.endsWith(".md") ? "md" : lower.endsWith(".html") || lower.endsWith(".htm") ? "html" : "other";
+      const content = kind === "other" ? "" : readFileSafe(path.join(dir, f)) ?? "";
+      out.push({ name: f, content, kind });
+    }
+  } catch {
+    /* skip */
+  }
+  return out;
+}
 
 export function getEpic(epicKey: string): EpicDetail | null {
   const dir = orderDir(epicKey);
@@ -292,7 +357,24 @@ export function getEpic(epicKey: string): EpicDetail | null {
   }
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
-  return { epicKey, orchestration, contracts, reviews, agentWorks };
+  const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
+  return {
+    epicKey,
+    orchestration,
+    contracts,
+    reviews,
+    agentWorks,
+    workType: workTypeOf(epicKey, statusMd),
+    title: st?.meta.title ?? null,
+    analysisMd: readFileSafe(path.join(dir, "analysis.md")),
+    implementationMd: readFileSafe(path.join(dir, "implementation.md")),
+    produceMd:
+      readFileSafe(path.join(dir, "produce.md")) ??
+      readFileSafe(path.join(dir, "deliverables", "produce.md")),
+    summaryMd: readFileSafe(path.join(dir, "summary.md")),
+    deliverables: readDeliverables(epicKey),
+    runs: readRuns(epicKey),
+  };
 }
 
 /** 허브 카드용 work-type별 지표(개발/비개발). */
