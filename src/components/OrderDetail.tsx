@@ -25,8 +25,10 @@ import { jiraUrl } from "@/lib/jira";
 import IssueReport from "@/components/IssueReport";
 import OrchestrationBoard from "@/components/OrchestrationBoard";
 import OrchestrationChanges from "@/components/OrchestrationChanges";
+import JobConsole from "@/components/JobConsole";
 import { PHASE_ORDER, phaseBadge, type PhaseKey } from "@/lib/parseOrderStatus";
 import type { OrderDetail as Detail } from "@/lib/orders";
+import type { JobStatus } from "@/lib/jobs";
 import "./markdown.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -59,7 +61,13 @@ function PhaseTimeline({ phase }: { phase: PhaseKey }) {
   );
 }
 
-export default function OrderDetail({ order }: { order: Detail }) {
+export default function OrderDetail({
+  order,
+  jobStatus,
+}: {
+  order: Detail;
+  jobStatus?: JobStatus;
+}) {
   const { status } = order;
   const [active, setActive] = useState("overview");
 
@@ -232,6 +240,11 @@ export default function OrderDetail({ order }: { order: Detail }) {
     ...(order.summaryMd
       ? [{ key: "summary", label: "종료", children: <Md>{order.summaryMd}</Md> }]
       : []),
+    {
+      key: "run",
+      label: jobStatus && jobStatus.state === "running" ? "실행 ●" : "실행",
+      children: <JobConsole orderKey={order.key} initial={jobStatus} height={380} />,
+    },
   ];
 
   const wt = order.workType ? WORKTYPE_TAG[order.workType] : null;

@@ -27,9 +27,12 @@ function passRate(o: OrderSummary): number | null {
 export default function OrderList({
   orders,
   metaDir,
+  launcher,
 }: {
   orders: OrderSummary[];
   metaDir: string;
+  /** 실행 패널(서버에서 주입) */
+  launcher?: React.ReactNode;
 }) {
   const router = useRouter();
 
@@ -125,6 +128,7 @@ export default function OrderList({
           읽는 경로: <Text code>{metaDir}</Text>
         </Paragraph>
       </div>
+      {launcher}
       <DateFoldedTable<OrderSummary>
         items={orders}
         dateOf={(o) => o.updatedAt}

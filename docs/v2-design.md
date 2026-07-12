@@ -195,14 +195,13 @@ getMetrics(): Metric[]                 // 허브 지표 (phase별 카운트 등)
 
 ---
 
-## 7. jobs.ts (잡 실행) — ⏸ 2차로 연기
+## 7. jobs.ts (잡 실행) — ✅ 2차 구현 완료
 
-**1차 범위 = 읽기 전용 뷰어.** 잡 실행/정지/재개(`dobby-order` spawn)는 1차에서 **제외**하고, 복사 시 `jobs.ts`·`/api/issue-start`·`JobConsole`·`OrderLauncher`·콘솔 라우트는 **비활성 또는 미포함**으로 둔다(읽기 경로에 위험 spawn을 섞지 않음).
-
-2차 도입 시 설계(참고용으로만 기록):
-- v1 `claude -p "/issue-start {키}"` → **`/dobby-order {키}`** spawn. 잡 폴더 `$DOBBY_META/.mentis-jobs/{키}/` 유지. 피드 파서·`--resume` 그대로.
-- v1 리뷰 반영: PID에 **시작시각 대조**(재사용 PID 오인·엉뚱한 그룹 SIGTERM 방지, P2), `result` 없는 종료를 `stopped`/`failed`로 구분.
-- API `/api/orders` — 키 검증 유지.
+- `lib/jobs.ts`: `claude -p "/dobby-order {키}"`를 detached spawn(`bypassPermissions`·stream-json). 잡 폴더 `$DOBBY_META/.mentis-jobs/{키}/`. `--resume` 재개, archive/unarchive.
+- **PID 안전성 보강**: `isRunning`은 `process.kill(pid,0)` + `ps -o command=`로 **claude 명령 대조**(재사용 PID 오인 방지). `stopOrder`는 실행 확인 후에만 프로세스 그룹(`-pid`) SIGTERM하고 `stoppedAt` 기록 → `getJobStatus`가 `stopped`/`failed`/`done` 구분.
+- `app/api/orders/route.ts`: POST(실행/재개/복원)·DELETE(정지/보관)·GET(상태/목록). 키 검증(`ORDER_KEY_RE`, 대소문자 보존 → TASK 키 안전).
+- 컴포넌트: `FeedView`(로그), `JobConsole`(단건 라이브 콘솔: 실행/정지/재개/보관), `OrderLauncher`(`/orders` 상단 실행 패널). 상세엔 "실행" 탭.
+- 클라이언트 번들에 `node:fs`가 새지 않게 키 정규식은 `lib/keys.ts`(node 무의존)로 분리.
 
 ---
 

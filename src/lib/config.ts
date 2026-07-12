@@ -6,6 +6,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { ORDER_KEY_RE, isOrderKey } from "@/lib/keys";
+
+export { ORDER_KEY_RE, isOrderKey };
 
 /** 경로 문자열의 `~`·`$HOME`을 홈 디렉터리로 확장한다. */
 export function expandPath(v: string): string {
@@ -65,13 +68,6 @@ export function getSubtreeDir(): string {
 /** 원본 소스 저장소들이 있는 루트($DOBBY_REPOS_ROOT). */
 export function getReposRoot(): string {
   return resolveConfig("DOBBY_REPOS_ROOT", path.join(os.homedir(), "work", "repos"));
-}
-
-/** Jira 이슈 키(`FE1-1187`) 또는 문서 전용 작업 키(`TASK-{slug}`). */
-export const ORDER_KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
-
-export function isOrderKey(name: string): boolean {
-  return ORDER_KEY_RE.test(name);
 }
 
 /**
