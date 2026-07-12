@@ -184,7 +184,7 @@ function AgentCard({
         </Space>
         {a.issue && a.issue !== "-" && (
           <Link
-            href={`/issue-start/${a.issue}`}
+            href={`/orchestration/${a.issue}`}
             onClick={(e) => e.stopPropagation()}
           >
             <Text strong>{a.issue}</Text>

@@ -73,7 +73,7 @@ export default function JobConsole({ issueKey }: { issueKey: string }) {
       `/api/issue-start?key=${encodeURIComponent(issueKey)}&action=archive`,
       { method: "DELETE" }
     );
-    if (r.ok) router.push("/issue-start");
+    if (r.ok) router.push("/orchestration");
     else setError("보관에 실패했습니다.");
   }
 
@@ -88,7 +88,7 @@ export default function JobConsole({ issueKey }: { issueKey: string }) {
       <Breadcrumb
         items={[
           { title: <Link href="/">홈</Link> },
-          { title: <Link href="/issue-start">이슈 착수</Link> },
+          { title: <Link href="/orchestration">오케스트레이션</Link> },
           { title: `콘솔: ${issueKey}` },
         ]}
         style={{ marginBottom: 12 }}

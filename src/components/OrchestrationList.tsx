@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { Breadcrumb, Table, Tag, Typography, Empty, Space, Progress } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
+import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
+import OrderLaunchPanel from "@/components/OrderLaunchPanel";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -37,9 +39,11 @@ function distribution(c: EpicSummary["counts"]) {
 export default function OrchestrationList({
   epics,
   sourceDir,
+  initialJobs = [],
 }: {
   epics: EpicSummary[];
   sourceDir: string;
+  initialJobs?: JobWithKey[];
 }) {
   const router = useRouter();
 
@@ -135,6 +139,9 @@ export default function OrchestrationList({
       <Title level={2} style={{ marginTop: 0 }}>
         오케스트레이션 보드
       </Title>
+
+      <OrderLaunchPanel initialJobs={initialJobs} />
+
       <Text type="secondary">읽는 경로: {sourceDir}</Text>
       <div style={{ marginTop: 16 }}>
         {epics.length === 0 ? (
