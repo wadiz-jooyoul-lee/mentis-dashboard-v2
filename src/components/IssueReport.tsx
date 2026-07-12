@@ -236,10 +236,13 @@ export default function IssueReport({
   issueKey,
   runs,
   status,
+  embedded,
 }: {
   issueKey: string;
   runs: ReportRun[];
   status?: IssueStatus | null;
+  /** 오더 상세 탭 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
+  embedded?: boolean;
 }) {
   const badge = status ? stateBadge(status.state) : null;
   const inProgress =
@@ -251,14 +254,16 @@ export default function IssueReport({
 
   return (
     <div>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/issue-test">이슈 테스트</Link> },
-          { title: issueKey },
-        ]}
-        style={{ marginBottom: 12 }}
-      />
+      {!embedded && (
+        <Breadcrumb
+          items={[
+            { title: <Link href="/">홈</Link> },
+            { title: <Link href="/orders">오더</Link> },
+            { title: issueKey },
+          ]}
+          style={{ marginBottom: 12 }}
+        />
+      )}
       <Space align="center" style={{ marginBottom: 8 }} size={12} wrap>
         <Title level={2} style={{ margin: 0 }}>
           {issueKey}

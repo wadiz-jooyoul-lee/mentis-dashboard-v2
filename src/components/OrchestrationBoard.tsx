@@ -152,7 +152,7 @@ function AgentCard({
   const stale = isStale(a);
   const clickable = !!changeSlug;
   const goToChanges = clickable
-    ? () => router.push(`/orchestration/${epicKey}/changes#agent-${changeSlug}`)
+    ? () => router.push(`/orders/${epicKey}?tab=changes#agent-${changeSlug}`)
     : undefined;
   return (
     <Card
@@ -183,7 +183,7 @@ function AgentCard({
         </Space>
         {a.issue && a.issue !== "-" && (
           <Link
-            href={`/issue-start/${a.issue}`}
+            href={`/orders/${a.issue}`}
             onClick={(e) => e.stopPropagation()}
           >
             <Text strong>{a.issue}</Text>
@@ -225,9 +225,12 @@ function AgentCard({
 export default function OrchestrationBoard({
   epicKey,
   epic,
+  embedded,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  /** 오더 상세 탭 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
+  embedded?: boolean;
 }) {
   const o = epic?.orchestration ?? null;
 
@@ -253,7 +256,7 @@ export default function OrchestrationBoard({
   };
   const hasChanges = changeSlugs.size > 0;
 
-  const header = (
+  const header = embedded ? null : (
     <div>
       <div
         style={{
@@ -266,7 +269,7 @@ export default function OrchestrationBoard({
         <Breadcrumb
           items={[
             { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orchestration">오케스트레이션</Link> },
+            { title: <Link href="/orders">오더</Link> },
             { title: epicKey },
           ]}
         />
@@ -298,7 +301,7 @@ export default function OrchestrationBoard({
           Jira에서 열기
         </Button>
         {hasChanges && (
-          <Link href={`/orchestration/${epicKey}/changes`}>
+          <Link href={`/orders/${epicKey}?tab=changes`}>
             <Button type="link" icon={<FileTextOutlined />}>
               코드 변경
             </Button>

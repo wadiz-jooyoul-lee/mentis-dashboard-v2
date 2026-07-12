@@ -60,9 +60,12 @@ function DiffView({ hunks }: { hunks: EditHunk[] }) {
 export default function OrchestrationChanges({
   epicKey,
   epic,
+  embedded,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  /** 오더 상세 탭 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
+  embedded?: boolean;
 }) {
   const roleBySlug = new Map(
     (epic?.contracts ?? []).map((c) => [
@@ -79,13 +82,13 @@ export default function OrchestrationChanges({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  const header = (
+  const header = embedded ? null : (
     <>
       <Breadcrumb
         items={[
           { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orchestration">오케스트레이션</Link> },
-          { title: <Link href={`/orchestration/${epicKey}`}>{epicKey}</Link> },
+          { title: <Link href="/orders">오더</Link> },
+          { title: <Link href={`/orders/${epicKey}`}>{epicKey}</Link> },
           { title: "코드 변경" },
         ]}
         style={{ marginBottom: 12 }}

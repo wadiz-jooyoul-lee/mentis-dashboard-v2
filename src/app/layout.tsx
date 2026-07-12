@@ -5,8 +5,8 @@ import koKR from "antd/locale/ko_KR";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "Mentis Dashboard",
-  description: "issue-test 결과(.issue-test) 리포트 대시보드",
+  title: "Mentis Dashboard v2",
+  description: "go-dobby 오더($DOBBY_META/{키}/) 진행 대시보드",
 };
 
 export default function RootLayout({

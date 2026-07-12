@@ -1,104 +1,16 @@
+/**
+ * go-dobby 오케스트레이션(K≥2) 리더. (서버 전용, node I/O)
+ * K≥2일 때 루트 키 폴더 `$DOBBY_META/{키}/`에 orchestration.md·agents/·reviews/·agent-logs.json이 있다.
+ * 기존 컴포넌트(OrchestrationBoard·OrchestrationChanges)가 쓰는 타입·getEpic 시그니처는 유지한다.
+ */
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getMetaDir, type IssueSummary, listIssues } from "@/lib/issues";
-import { getStart } from "@/lib/lifecycle";
-import type { IssueStart } from "@/lib/parseStart";
+import { getMetaDir, orderDir, readFileSafe } from "@/lib/config";
 import {
   parseOrchestration,
   type Orchestration,
 } from "@/lib/parseOrchestration";
-import { isToday, type Metric } from "@/lib/lifecycle";
-
-export function getAgentStartDir(): string {
-  return process.env.AGENT_START_DIR || path.join(getMetaDir(), ".agent-start");
-}
-
-function epicDirs(): string[] {
-  const root = getAgentStartDir();
-  if (!fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
-}
-
-function readFileSafe(p: string): string | null {
-  try {
-    return fs.readFileSync(p, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-export type Counts = { total: number } & Record<string, number>;
-
-function countAgents(o: Orchestration): Counts {
-  const c: Counts = { total: 0 };
-  for (const a of o.agents) {
-    c.total++;
-    c[a.state] = (c[a.state] ?? 0) + 1;
-  }
-  return c;
-}
-
-export type EpicSummary = {
-  epicKey: string;
-  mode: string | null;
-  counts: Counts;
-  agentCount: number;
-  latestEventTime: string | null;
-  latestEventText: string | null;
-  /** 정체 판단용: 가장 최근 활동 시각(이벤트/에이전트 갱신 중 최신, 원문) */
-  lastActivity: string | null;
-};
-
-function orchestrationOf(epicKey: string): Orchestration | null {
-  const md = readFileSafe(
-    path.join(getAgentStartDir(), epicKey, "orchestration.md")
-  );
-  if (!md) return null;
-  const o = parseOrchestration(md);
-  if (!o.epicKey) o.epicKey = epicKey;
-  return o;
-}
-
-function summarize(epicKey: string, o: Orchestration): EpicSummary {
-  const counts = countAgents(o);
-  const times = [
-    ...o.events.map((e) => e.time),
-    ...o.agents.map((a) => a.updatedAt).filter(Boolean),
-  ].sort();
-  return {
-    epicKey: o.epicKey,
-    mode: o.mode,
-    counts,
-    agentCount: o.agents.length,
-    latestEventTime: o.events[0]?.time ?? null,
-    latestEventText: o.events[0]?.text ?? null,
-    lastActivity: times.length ? times[times.length - 1] : null,
-  };
-}
-
-export function listEpics(): EpicSummary[] {
-  const epics: EpicSummary[] = [];
-  for (const key of epicDirs()) {
-    const o = orchestrationOf(key);
-    if (o) epics.push(summarize(key, o));
-    else
-      epics.push({
-        epicKey: key,
-        mode: null,
-        counts: { total: 0 },
-        agentCount: 0,
-        latestEventTime: null,
-        latestEventText: null,
-        lastActivity: null,
-      });
-  }
-  epics.sort((a, b) => (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
-  return epics;
-}
 
 export type Contract = { slug: string; role: string; raw: string };
 export type ReviewFile = { round: number; slug: string; content: string };
@@ -113,17 +25,29 @@ export type AgentWork = {
   slug: string;
   logPath: string;
   found: boolean;
-  /** 수정/생성 파일의 공통 상위 경로(표시용) */
   baseDir: string;
-  /** baseDir 기준 상대 경로 목록(수정·생성) */
   files: string[];
-  /** 코드 파일별 실제 변경(diff). 메타 파일(.issue-start/.agent-start)은 제외 */
   diffs: FileDiff[];
-  /** git commit/push 명령 발췌 */
   commits: string[];
-  /** 에이전트의 마지막 응답(요약) */
   summary: string;
 };
+
+export type EpicDetail = {
+  epicKey: string;
+  orchestration: Orchestration | null;
+  contracts: Contract[];
+  reviews: ReviewFile[];
+  /** 에이전트별 실제 작업 내역(agent-logs.json → 대화 로그 파싱) */
+  agentWorks: AgentWork[];
+};
+
+function orchestrationOf(epicKey: string): Orchestration | null {
+  const md = readFileSafe(path.join(orderDir(epicKey), "orchestration.md"));
+  if (!md) return null;
+  const o = parseOrchestration(md);
+  if (!o.epicKey) o.epicKey = epicKey;
+  return o;
+}
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
@@ -159,10 +83,11 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
   } catch {
     return empty;
   }
+  // 메타 파일($DOBBY_META 하위: status.md·analysis.md 등)은 코드 변경에서 제외한다.
+  const metaRoot = getMetaDir();
+  const isMeta = (p: string) => p.startsWith(metaRoot);
   const fileSet = new Set<string>();
-  const diffMap = new Map<string, EditHunk[]>(); // 코드 파일 → hunks(시간순)
-  const isMeta = (p: string) =>
-    p.includes("/.issue-start/") || p.includes("/.agent-start/");
+  const diffMap = new Map<string, EditHunk[]>();
   const commits: string[] = [];
   let summary = "";
   for (const line of content.split("\n")) {
@@ -231,26 +156,14 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
   };
 }
 
-export type EpicDetail = {
-  epicKey: string;
-  orchestration: Orchestration | null;
-  contracts: Contract[];
-  reviews: ReviewFile[];
-  /** 에이전트별 실제 작업 내역(agent-logs.json → 대화 로그 파싱) */
-  agentWorks: AgentWork[];
-  /** 하위이슈 키 → 착수 메타(구현 섹션 등). 없으면 생략 */
-  subStatuses: Record<string, IssueStart>;
-  /** 하위이슈 키 → 테스트 요약(있으면) */
-  subTests: Record<string, IssueSummary>;
-};
-
+/** K≥2 오케스트레이션 상세. orchestration.md가 없으면(K=1 등) null. */
 export function getEpic(epicKey: string): EpicDetail | null {
-  const dir = path.join(getAgentStartDir(), epicKey);
+  const dir = orderDir(epicKey);
   if (!fs.existsSync(dir)) return null;
-
   const orchestration = orchestrationOf(epicKey);
+  if (!orchestration) return null; // K=1 이면 orchestration.md 없음
 
-  // 계약
+  // 계약(agents/{슬러그}.md · review-agent.md)
   const contracts: Contract[] = [];
   const agentsDir = path.join(dir, "agents");
   if (fs.existsSync(agentsDir)) {
@@ -262,7 +175,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     }
   }
 
-  // 리뷰 (round-{n}/{slug}.md)
+  // 리뷰(reviews/round-{n}/{슬러그}.md)
   const reviews: ReviewFile[] = [];
   const reviewsDir = path.join(dir, "reviews");
   if (fs.existsSync(reviewsDir)) {
@@ -282,7 +195,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
   }
   reviews.sort((a, b) => b.round - a.round || a.slug.localeCompare(b.slug));
 
-  // 에이전트별 실제 작업 내역 (agent-logs.json → 대화 로그 파싱)
+  // 에이전트별 실제 작업 내역(agent-logs.json → 대화 로그 파싱)
   const agentWorks: AgentWork[] = [];
   const logsJson = readFileSafe(path.join(dir, "agent-logs.json"));
   if (logsJson) {
@@ -299,46 +212,5 @@ export function getEpic(epicKey: string): EpicDetail | null {
   }
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
-  // 하위이슈 착수·테스트 메타
-  const subStatuses: Record<string, IssueStart> = {};
-  const subTests: Record<string, IssueSummary> = {};
-  const testMap = new Map(listIssues().map((t) => [t.key, t]));
-  const issueKeys = new Set(
-    (orchestration?.agents ?? []).map((a) => a.issue).filter(Boolean)
-  );
-  for (const k of Array.from(issueKeys)) {
-    const s = getStart(k);
-    if (s) subStatuses[k] = s;
-    const t = testMap.get(k);
-    if (t) subTests[k] = t;
-  }
-
-  return {
-    epicKey,
-    orchestration,
-    contracts,
-    reviews,
-    agentWorks,
-    subStatuses,
-    subTests,
-  };
-}
-
-/** 허브 오케스트레이션 카드용 지표 */
-export function orchestrationMetrics(): Metric[] {
-  const epics = listEpics();
-  if (epics.length === 0) return [];
-  const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현중");
-  const fix = sum("수정중");
-  const review = sum("리뷰중");
-  const done = sum("완료");
-  const epicsToday = epics.filter((e) => isToday(e.lastActivity)).length;
-  return [
-    { label: "에픽", value: epics.length, today: epicsToday },
-    ...(impl > 0 ? [{ label: "구현중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰중", value: review, color: "orange" }] : []),
-    ...(fix > 0 ? [{ label: "수정중", value: fix, color: "orange" }] : []),
-    ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
-  ];
+  return { epicKey, orchestration, contracts, reviews, agentWorks };
 }

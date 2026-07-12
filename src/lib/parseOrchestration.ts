@@ -46,7 +46,7 @@ export const STATE_ORDER: string[] = [
   "완료",
 ];
 
-function normAgentState(v: string): AgentState {
+export function normAgentState(v: string): AgentState {
   const s = v.replace(/\*/g, "").trim();
   const base = s.split(/[(（]/)[0].trim(); // "수정중(round-3)" → "수정중"
   if (s.includes("분석완료")) return "분석완료"; // "완료" 검사보다 먼저
