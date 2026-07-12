@@ -18,15 +18,17 @@ import {
   Table,
   Steps,
   Alert,
+  Drawer,
 } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { jiraUrl } from "@/lib/jira";
 import IssueReport from "@/components/IssueReport";
 import OrchestrationBoard from "@/components/OrchestrationBoard";
-import OrchestrationChanges from "@/components/OrchestrationChanges";
+import AgentWorkView from "@/components/AgentWorkView";
 import JobConsole from "@/components/JobConsole";
 import { PHASE_ORDER, phaseBadge, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
+import type { AgentRow } from "@/lib/parseOrchestration";
 import type { OrderDetail as Detail } from "@/lib/orders";
 import type { JobStatus } from "@/lib/jobs";
 import "./markdown.css";
@@ -70,6 +72,7 @@ export default function OrderDetail({
 }) {
   const { status } = order;
   const [active, setActive] = useState("overview");
+  const [drawer, setDrawer] = useState<{ slug?: string; agent: AgentRow } | null>(null);
 
   // 딥링크: ?tab=changes 등 초기 탭을 URL에서 읽는다(클라이언트 전용).
   useEffect(() => {
@@ -87,7 +90,14 @@ export default function OrderDetail({
 
   const isNonsource = order.workType === "nonsource";
   const hasEpic = !!order.epic;
-  const hasChanges = (order.epic?.agentWorks?.length ?? 0) > 0;
+
+  // Drawer에 띄울 에이전트 작업 내역(slug로 매칭) + 계약 폴백
+  const drawerWork = drawer?.slug
+    ? order.epic?.agentWorks.find((w) => w.slug === drawer.slug) ?? null
+    : null;
+  const drawerContract = drawer?.slug
+    ? order.epic?.contracts.find((c) => c.slug === drawer.slug) ?? null
+    : null;
 
   // ── 개요 탭 ──
   const progressCols: ColumnsType<(typeof status.progress)[number]> = [
@@ -179,6 +189,16 @@ export default function OrderDetail({
           }
         />
       )}
+
+      {/* 에이전트 상태 칸반(구 '에이전트' 탭 내용) — 카드 클릭 시 Drawer로 작업 내역 */}
+      {hasEpic && (
+        <OrchestrationBoard
+          epicKey={order.key}
+          epic={order.epic}
+          embedded
+          onAgentClick={(p) => setDrawer(p)}
+        />
+      )}
     </Space>
   );
 
@@ -226,24 +246,6 @@ export default function OrderDetail({
           },
         ]
       : []),
-    ...(hasEpic
-      ? [
-          {
-            key: "agents",
-            label: "에이전트",
-            children: <OrchestrationBoard epicKey={order.key} epic={order.epic} embedded />,
-          },
-        ]
-      : []),
-    ...(hasChanges
-      ? [
-          {
-            key: "changes",
-            label: "변경",
-            children: <OrchestrationChanges epicKey={order.key} epic={order.epic} embedded />,
-          },
-        ]
-      : []),
     ...(order.summaryMd
       ? [{ key: "summary", label: "종료", children: <Md>{order.summaryMd}</Md> }]
       : []),
@@ -285,6 +287,51 @@ export default function OrderDetail({
         </Paragraph>
       )}
       <Tabs activeKey={active} onChange={onTab} items={items} />
+
+      <Drawer
+        open={!!drawer}
+        onClose={() => setDrawer(null)}
+        width={Math.min(720, typeof window !== "undefined" ? window.innerWidth - 40 : 720)}
+        title={
+          drawer ? (
+            <Space size={8} wrap>
+              <Text strong>{drawer.agent.agent || drawer.slug || "에이전트"}</Text>
+              {drawer.agent.state && <Tag>{drawer.agent.state}</Tag>}
+              {drawer.agent.branch && drawer.agent.branch !== "-" && (
+                <Text code style={{ fontSize: 12 }}>{drawer.agent.branch}</Text>
+              )}
+            </Space>
+          ) : null
+        }
+      >
+        {drawerWork ? (
+          <AgentWorkView work={drawerWork} />
+        ) : (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Alert
+              type="info"
+              showIcon
+              message="작업 로그 없음"
+              description="이 에이전트의 대화 로그(agent-logs.json)가 아직 없어 수정 파일·diff를 표시할 수 없습니다. 상태·계약 정보만 표시합니다."
+            />
+            <Descriptions size="small" column={1} bordered>
+              {drawer?.agent.issue && drawer.agent.issue !== "-" && (
+                <Descriptions.Item label="이슈/작업">{drawer.agent.issue}</Descriptions.Item>
+              )}
+              <Descriptions.Item label="상태">{drawer?.agent.state || "—"}</Descriptions.Item>
+              {drawer?.agent.round && <Descriptions.Item label="라운드">{drawer.agent.round}</Descriptions.Item>}
+              {drawer?.agent.updatedAt && <Descriptions.Item label="갱신">{drawer.agent.updatedAt}</Descriptions.Item>}
+            </Descriptions>
+            {drawerContract && (
+              <Card size="small" title="계약">
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{drawerContract.raw}</ReactMarkdown>
+                </div>
+              </Card>
+            )}
+          </Space>
+        )}
+      </Drawer>
     </Space>
   );
 }
