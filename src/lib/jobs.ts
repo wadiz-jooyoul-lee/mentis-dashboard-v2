@@ -19,6 +19,34 @@ function jobDir(key: string): string {
 }
 const logPath = (key: string) => path.join(jobDir(key), "run.log");
 const metaPath = (key: string) => path.join(jobDir(key), "run.json");
+const pendingPath = (key: string) => path.join(jobDir(key), "pending.txt");
+
+/** 예약 메시지: 다음 턴(현재 실행 종료 직후)에 자동으로 이어서 넣을 피드백. */
+export function setPending(key: string, text: string): boolean {
+  if (!JOB_ID_RE.test(key) || !text.trim()) return false;
+  try {
+    fs.mkdirSync(jobDir(key), { recursive: true });
+    fs.writeFileSync(pendingPath(key), text.trim());
+    return true;
+  } catch {
+    return false;
+  }
+}
+export function getPending(key: string): string | null {
+  try {
+    const t = fs.readFileSync(pendingPath(key), "utf8").trim();
+    return t || null;
+  } catch {
+    return null;
+  }
+}
+export function clearPending(key: string): void {
+  try {
+    fs.rmSync(pendingPath(key), { force: true });
+  } catch {
+    /* noop */
+  }
+}
 
 function claudeBin(): string {
   const local = path.join(os.homedir(), ".local", "bin", "claude");
@@ -185,14 +213,27 @@ export function unarchiveJob(key: string): { ok: boolean; reason?: string } {
   return setArchived(key, false) ? { ok: true } : { ok: false, reason: "not_found" };
 }
 
-/** 이어서 진행: 로그의 session_id로 같은 세션을 --resume 한다. */
-export function resumeOrder(key: string): { ok: boolean; reason?: string } {
+/**
+ * 이어서 진행: 로그의 session_id로 같은 세션을 --resume 한다.
+ * message가 있으면 그 피드백을 다음 턴 지시로 넣고, 없으면 기본 "계속 진행" 문구.
+ */
+export function resumeOrder(key: string, message?: string): { ok: boolean; reason?: string } {
   if (!JOB_ID_RE.test(key)) return { ok: false, reason: "invalid_key" };
   if (isRunning(key)) return { ok: false, reason: "already_running" };
   const sid = parseSessionId(readLog(key));
   if (!sid) return { ok: false, reason: "no_session" };
-  spawnClaude(key, ["--resume", sid, "-p", "중단된 지점부터 이어서 계속 진행해줘."], true);
+  const msg = (message && message.trim()) || "중단된 지점부터 이어서 계속 진행해줘.";
+  spawnClaude(key, ["--resume", sid, "-p", msg], true);
   return { ok: true };
+}
+
+/** 예약 메시지를 소비해 이어서 진행(턴 종료 직후 자동 주입). 성공 시 예약을 비운다. */
+export function applyPending(key: string): { ok: boolean; reason?: string } {
+  const msg = getPending(key);
+  if (!msg) return { ok: false, reason: "no_pending" };
+  const r = resumeOrder(key, msg);
+  if (r.ok) clearPending(key);
+  return r;
 }
 
 export type FeedItem = {
@@ -209,6 +250,8 @@ export type JobStatus =
       startedAt: number;
       feed: FeedItem[];
       sessionId: string | null;
+      /** 예약된 피드백(다음 턴 자동 주입 대기 중). 없으면 null. */
+      pending: string | null;
     };
 
 function parseSessionId(log: string): string | null {
@@ -329,5 +372,6 @@ export function getJobStatus(key: string): JobStatus {
     startedAt: m.startedAt,
     feed: feed.slice(-80),
     sessionId: parseSessionId(log),
+    pending: getPending(key),
   };
 }

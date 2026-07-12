@@ -46,24 +46,33 @@ export type OrderDetail = OrderSummary & {
   produceMd: string | null;
   testPlanMd: string | null;
   summaryMd: string | null;
-  /** 비소스 산출물(deliverables/ 안의 md, produce.md 제외) */
-  deliverables: { name: string; content: string }[];
+  /** 비소스 산출물(deliverables/ 안, produce.md 제외). kind로 렌더 방식 구분. */
+  deliverables: { name: string; content: string; kind: "md" | "html" | "other" }[];
   /** 테스트 회차(전체, 최신순) */
   runs: ReportRun[];
   /** K≥2 오케스트레이션 상세(K=1이면 null) */
   epic: EpicDetail | null;
 };
 
-/** deliverables/ 안의 md 파일들을 읽는다(produce.md는 제외 — 요약으로 따로 표시). */
-function readDeliverables(key: string): { name: string; content: string }[] {
+/** deliverables/ 안의 산출물 파일들을 읽는다(produce.md 제외). md/html/기타 구분. */
+function readDeliverables(
+  key: string
+): { name: string; content: string; kind: "md" | "html" | "other" }[] {
   const dir = path.join(orderDir(key), "deliverables");
   if (!fs.existsSync(dir)) return [];
-  const out: { name: string; content: string }[] = [];
+  const out: { name: string; content: string; kind: "md" | "html" | "other" }[] = [];
   try {
     for (const f of fs.readdirSync(dir)) {
-      if (!f.toLowerCase().endsWith(".md") || f === "produce.md") continue;
-      const c = readFileSafe(path.join(dir, f));
-      if (c != null) out.push({ name: f, content: c });
+      if (f === "produce.md") continue;
+      const lower = f.toLowerCase();
+      const kind = lower.endsWith(".md")
+        ? "md"
+        : lower.endsWith(".html") || lower.endsWith(".htm")
+        ? "html"
+        : "other";
+      // 큰 바이너리/기타는 내용을 읽지 않고 파일명만 표시
+      const content = kind === "other" ? "" : readFileSafe(path.join(dir, f)) ?? "";
+      out.push({ name: f, content, kind });
     }
   } catch {
     /* skip */

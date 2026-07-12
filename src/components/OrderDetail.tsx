@@ -194,7 +194,18 @@ export default function OrderDetail({
           <Md>{order.produceMd}</Md>
           {order.deliverables.map((d) => (
             <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
-              <Md>{d.content}</Md>
+              {d.kind === "md" ? (
+                <Md>{d.content}</Md>
+              ) : d.kind === "html" ? (
+                <iframe
+                  title={d.name}
+                  srcDoc={d.content}
+                  sandbox=""
+                  style={{ width: "100%", height: 520, border: "1px solid #f0f0f0", borderRadius: 6 }}
+                />
+              ) : (
+                <Text type="secondary">미리보기를 지원하지 않는 파일입니다.</Text>
+              )}
             </Card>
           ))}
         </Space>

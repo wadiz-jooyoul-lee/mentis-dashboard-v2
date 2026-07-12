@@ -237,6 +237,12 @@ function parseIssueMeta(
     }
   }
 
+  // 2.5) 상단 자유 불릿("- 작업/제목/대상/주제: ...") 폴백
+  if (!title) {
+    const m = md.match(/^\s*[-*]\s*(?:작업|제목|대상|주제)\s*[:：]\s*(.+)$/m);
+    if (m) title = m[1].trim().replace(/^`|`$/g, "") || null;
+  }
+
   // 3) 문서 전용(TASK)의 대상 경로/URL: 라벨 → 상단표 "대상" → 자유 불릿
   const docPath = isTask
     ? field(src, "문서") ??
@@ -253,18 +259,22 @@ function rowsOf(t: TableData | null): string[][] {
 }
 
 function parseAgents(md: string): AgentRow[] {
-  const t = findTable(md, "슬러그");
+  // 에이전트 표: 이름 컬럼이 "슬러그" 또는 "에이전트"(skill 런마다 다름), 상태 컬럼 필수.
+  const t = findTable(md, "슬러그", "에이전트");
   if (!t) return [];
+  const nameIdx = columnIndex(t.headers, "슬러그", "에이전트");
+  const stateIdx = columnIndex(t.headers, "상태");
+  if (nameIdx < 0 || stateIdx < 0) return [];
   const ci = {
-    slug: columnIndex(t.headers, "슬러그"),
+    name: nameIdx,
     issue: columnIndex(t.headers, "이슈", "작업"),
     branch: columnIndex(t.headers, "브랜치"),
-    state: columnIndex(t.headers, "상태"),
+    state: stateIdx,
     round: columnIndex(t.headers, "라운드"),
     upd: columnIndex(t.headers, "갱신"),
   };
   return rowsOf(t).map((r) => ({
-    agent: at(r, ci.slug),
+    agent: at(r, ci.name),
     issue: at(r, ci.issue),
     branch: at(r, ci.branch),
     state: normAgentState(at(r, ci.state)),

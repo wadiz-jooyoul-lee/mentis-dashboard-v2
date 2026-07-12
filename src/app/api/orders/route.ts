@@ -8,6 +8,9 @@ import {
   getJobStatus,
   listJobs,
   listArchivedJobs,
+  setPending,
+  clearPending,
+  applyPending,
   JOB_ID_RE,
 } from "@/lib/jobs";
 
@@ -23,11 +26,30 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const jobId = String(body?.key ?? "").trim();
 
-  if (body?.unarchive || body?.resume) {
+  // 잡 조작(예약/이어서/복원/자동주입)은 잡 id로.
+  const isJobOp =
+    body?.unarchive || body?.resume || body?.queue || body?.unqueue || body?.applyPending;
+  if (isJobOp) {
     if (!JOB_ID_RE.test(jobId)) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
-    const r = body?.unarchive ? unarchiveJob(jobId) : resumeOrder(jobId);
+    const message = typeof body?.message === "string" ? body.message : undefined;
+
+    // 예약: 실행 중에도 저장 가능(다음 턴에 자동 주입)
+    if (body?.queue) {
+      const ok = setPending(jobId, message ?? "");
+      return NextResponse.json({ ok }, { status: ok ? 200 : 400 });
+    }
+    if (body?.unqueue) {
+      clearPending(jobId);
+      return NextResponse.json({ ok: true });
+    }
+
+    const r = body?.unarchive
+      ? unarchiveJob(jobId)
+      : body?.applyPending
+      ? applyPending(jobId)
+      : resumeOrder(jobId, message);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: jobId }, { status: 202 });
   }
