@@ -37,7 +37,7 @@ $DOBBY_META/{키}/                # 키 = FE1-1187 (이슈) 또는 TASK-{slug} (
 - **단독/오케스트레이션 통합**: K=1(단일)과 K≥2(다중)는 같은 오더이며, 팬아웃 K는 속성입니다.
 - **탭 딥링크**: `/orders/{키}?tab=changes` 처럼 탭이 URL과 동기화됩니다.
 - 모든 페이지는 **30초마다 자동 갱신**(서버 데이터만 재로딩)됩니다. `[key]`는 키 형식을 검증해 존재하지 않으면 404(경로 탈출 방지).
-- **잡 실행**: 이슈 키로 `/dobby-order`를 백그라운드(detached) `claude`로 띄우고 stream-json 로그를 실시간 표시합니다. 실행 중 프로세스는 시그널 확인 + 명령어(`ps`) 대조로 PID 재사용 오인을 막고, 정지/실패/완료를 구분합니다. 로그는 `$DOBBY_META/.mentis-jobs/{키}/`.
+- **잡 실행**: `/orders` 상단 실행 패널(텍스트에어리어)에 **이슈 키·이슈/문서 URL·이슈 없는 요구사항/문서**(+ `base=`/`agents=`/`mode=` 인자)를 넣으면 그 내용을 `/dobby-order` 뒤에 그대로 붙여 백그라운드 `claude`로 띄우고 stream-json 로그를 실시간 표시합니다. 잡 폴더 id는 이슈 키/URL이면 그 키, 문서 전용이면 `task-{slug}-{hash}`(→ dobby-order가 만드는 최종 `TASK-` 오더 키와는 별개). 실행 중 프로세스는 시그널 확인 + 명령어(`ps`) 대조로 PID 재사용 오인을 막고, 정지/실패/완료를 구분합니다. 로그는 `$DOBBY_META/.mentis-jobs/{잡id}/`.
   - ⚠️ 헤드리스 claude를 `--permission-mode bypassPermissions`로 실행합니다. 로컬 신뢰 환경에서만 쓰세요(대시보드에 인증 계층 없음).
 
 ## 설정

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, Input, Button, Space, Collapse, Badge, Typography, message, Empty } from "antd";
 import { PlayCircleOutlined } from "@ant-design/icons";
 import JobConsole from "@/components/JobConsole";
-import { ORDER_KEY_RE } from "@/lib/keys";
 import type { JobWithKey, JobState } from "@/lib/jobs";
+
+const { TextArea } = Input;
 
 const { Text, Paragraph } = Typography;
 
@@ -23,7 +24,7 @@ export default function OrderLauncher({
   initialJobs: JobWithKey[];
   initialArchived: JobWithKey[];
 }) {
-  const [key, setKey] = useState("");
+  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState<JobWithKey[]>(initialJobs);
   const [archived, setArchived] = useState<JobWithKey[]>(initialArchived);
@@ -51,9 +52,9 @@ export default function OrderLauncher({
   }, [anyRunning, refresh]);
 
   const launch = async () => {
-    const k = key.trim();
-    if (!ORDER_KEY_RE.test(k)) {
-      message.error("이슈 키 형식이 아닙니다 (예: FE1-1187)");
+    const t = text.trim();
+    if (!t) {
+      message.error("이슈 키·URL·문서 또는 요구사항을 입력하세요");
       return;
     }
     setBusy(true);
@@ -61,12 +62,12 @@ export default function OrderLauncher({
       const r = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: k }),
+        body: JSON.stringify({ target: t }),
       });
       const body = await r.json().catch(() => ({}));
       if (r.ok) {
-        message.success(`${k} 실행 시작`);
-        setKey("");
+        message.success(`실행 시작 (${body?.key ?? "잡"})`);
+        setText("");
         await refresh();
       } else {
         message.error(body?.error === "already_running" ? "이미 실행 중" : body?.error ?? "실패");
@@ -118,22 +119,29 @@ export default function OrderLauncher({
     <Card size="small" title={<Space><PlayCircleOutlined />오더 실행 (dobby-order)</Space>}>
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
         <Paragraph type="secondary" style={{ margin: 0 }}>
-          이슈 키로 <code>/dobby-order</code>를 백그라운드 실행합니다. 진행 로그는 아래에서 실시간으로 확인됩니다.
+          입력을 <code>/dobby-order</code> 뒤에 그대로 전달해 백그라운드 실행합니다. 진행 로그는 아래에서 실시간 확인.
           <br />
-          <Text type="warning">주의: 헤드리스 claude를 bypassPermissions로 실행합니다.</Text>
+          받는 것: <b>이슈 키</b>(FE1-1187) · <b>이슈/문서 URL</b> · <b>이슈 없이 요구사항·문서만</b>(→ dobby-order가 <code>TASK-</code> 생성). 인자도 가능: <code>base=</code> <code>agents=N</code> <code>mode=A|B</code>.
+          <br />
+          <Text type="warning">주의: 헤드리스 claude를 bypassPermissions로 실행합니다(로컬 신뢰 환경 전용).</Text>
         </Paragraph>
-        <Space.Compact style={{ width: "100%", maxWidth: 420 }}>
-          <Input
-            placeholder="FE1-1187"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            onPressEnter={launch}
-            disabled={busy}
-          />
-          <Button type="primary" icon={<PlayCircleOutlined />} onClick={launch} loading={busy}>
-            실행
-          </Button>
-        </Space.Compact>
+        <TextArea
+          placeholder={"예)\nFE1-1187\nhttps://wadiz.atlassian.net/browse/FE1-1187 base=develop\n로그인 리팩터링 리서치해서 리포트 작성해줘  (문서 전용 → TASK 생성)"}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onPressEnter={(e) => {
+            // Ctrl/⌘+Enter로 실행(줄바꿈은 그냥 Enter)
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              launch();
+            }
+          }}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          disabled={busy}
+        />
+        <Button type="primary" icon={<PlayCircleOutlined />} onClick={launch} loading={busy}>
+          실행 (⌘/Ctrl+Enter)
+        </Button>
 
         {jobs.length > 0 ? (
           <Collapse items={jobPanels} defaultActiveKey={anyRunning ? [jobs.find((j) => j.state === "running")!.key] : []} />

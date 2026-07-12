@@ -107,11 +107,43 @@ function spawnClaude(key: string, promptArgs: string[], append: boolean): void {
   child.unref();
 }
 
-export function startOrder(key: string): { ok: boolean; reason?: string } {
-  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
-  if (isRunning(key)) return { ok: false, reason: "already_running" };
-  spawnClaude(key, ["-p", `/dobby-order ${key}`], false);
-  return { ok: true };
+/** 잡 폴더 id 형식(파일시스템 안전). 이슈 키·TASK 키·task-{slug} 모두 허용. */
+export const JOB_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
+
+/**
+ * 실행 입력(이슈 키·이슈 URL·문서 URL/경로·자유 요구사항)에서 잡 폴더 id를 도출한다.
+ * - 이슈 키/URL → 그 키(오더 키와 일치)
+ * - 그 외(문서 전용 등) → task-{slug} 임시 id (최종 TASK-{slug} 오더 키와는 별개)
+ */
+export function deriveJobId(target: string): string {
+  const t = target.trim();
+  const first = t.split(/\s+/)[0] || t;
+  if (ORDER_KEY_RE.test(first)) return first;
+  const m = t.match(/\/browse\/([A-Za-z][A-Za-z0-9]*-\d+)/);
+  if (m) return m[1];
+  // 문서 전용: ascii slug + 대상 해시(한글 등 비-ascii로 slug가 비어도 고유·결정적)
+  const slug = t
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return `task-${slug ? slug + "-" : ""}${h.toString(36)}`;
+}
+
+/**
+ * dobby-order 실행. target은 `/dobby-order` 뒤에 그대로 전달된다
+ * (이슈 키·URL·문서·요구사항 + base=/agents=/mode= 인자 포함 가능).
+ */
+export function startOrder(target: string): { ok: boolean; reason?: string; jobId?: string } {
+  const t = target.trim();
+  if (!t) return { ok: false, reason: "empty" };
+  const jobId = deriveJobId(t);
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-order ${t}`], false);
+  return { ok: true, jobId };
 }
 
 /** 정지: 실행 중인 프로세스(그룹)를 종료한다. */
@@ -143,19 +175,19 @@ function setArchived(key: string, val: boolean): boolean {
 }
 
 export function archiveJob(key: string): { ok: boolean; reason?: string } {
-  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
+  if (!JOB_ID_RE.test(key)) return { ok: false, reason: "invalid_key" };
   if (isRunning(key)) return { ok: false, reason: "running" };
   return setArchived(key, true) ? { ok: true } : { ok: false, reason: "not_found" };
 }
 
 export function unarchiveJob(key: string): { ok: boolean; reason?: string } {
-  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
+  if (!JOB_ID_RE.test(key)) return { ok: false, reason: "invalid_key" };
   return setArchived(key, false) ? { ok: true } : { ok: false, reason: "not_found" };
 }
 
 /** 이어서 진행: 로그의 session_id로 같은 세션을 --resume 한다. */
 export function resumeOrder(key: string): { ok: boolean; reason?: string } {
-  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
+  if (!JOB_ID_RE.test(key)) return { ok: false, reason: "invalid_key" };
   if (isRunning(key)) return { ok: false, reason: "already_running" };
   const sid = parseSessionId(readLog(key));
   if (!sid) return { ok: false, reason: "no_session" };
