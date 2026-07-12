@@ -142,28 +142,23 @@ function AgentCard({
   a,
   epicKey,
   changeSlug,
-  onOpen,
 }: {
   a: AgentRow;
   epicKey: string;
   /** 이 에이전트의 변경 기록 slug(있으면 카드 클릭 시 해당 섹션으로 이동) */
   changeSlug?: string;
-  /** 클릭 시 작업 내역 열기(제공되면 이 핸들러 우선, 라우팅 대신 Drawer 등) */
-  onOpen?: () => void;
 }) {
   const router = useRouter();
   const stale = isStale(a);
-  const clickable = !!onOpen || !!changeSlug;
-  const handleClick =
-    onOpen ??
-    (changeSlug
-      ? () => router.push(`/orders/${epicKey}/changes#agent-${changeSlug}`)
-      : undefined);
+  const clickable = !!changeSlug;
+  const goToChanges = clickable
+    ? () => router.push(`/orchestration/${epicKey}/changes#agent-${changeSlug}`)
+    : undefined;
   return (
     <Card
       size="small"
       hoverable={clickable}
-      onClick={handleClick}
+      onClick={goToChanges}
       style={{
         marginBottom: 8,
         borderColor: stale ? "#ffccc7" : undefined,
@@ -188,7 +183,7 @@ function AgentCard({
         </Space>
         {a.issue && a.issue !== "-" && (
           <Link
-            href={`/orders/${a.issue}`}
+            href={`/issue-start/${a.issue}`}
             onClick={(e) => e.stopPropagation()}
           >
             <Text strong>{a.issue}</Text>
@@ -230,15 +225,9 @@ function AgentCard({
 export default function OrchestrationBoard({
   epicKey,
   epic,
-  embedded,
-  onAgentClick,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
-  /** 오더 상세 탭 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
-  embedded?: boolean;
-  /** 에이전트 카드 클릭 핸들러(제공 시 카드가 항상 클릭 가능, Drawer 등으로 작업 내역 표시) */
-  onAgentClick?: (payload: { slug?: string; agent: AgentRow }) => void;
 }) {
   const o = epic?.orchestration ?? null;
 
@@ -264,7 +253,7 @@ export default function OrchestrationBoard({
   };
   const hasChanges = changeSlugs.size > 0;
 
-  const header = embedded ? null : (
+  const header = (
     <div>
       <div
         style={{
@@ -277,7 +266,7 @@ export default function OrchestrationBoard({
         <Breadcrumb
           items={[
             { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orders">오더</Link> },
+            { title: <Link href="/orchestration">오케스트레이션</Link> },
             { title: epicKey },
           ]}
         />
@@ -309,7 +298,7 @@ export default function OrchestrationBoard({
           Jira에서 열기
         </Button>
         {hasChanges && (
-          <Link href={`/orders/${epicKey}/changes`}>
+          <Link href={`/orchestration/${epicKey}/changes`}>
             <Button type="link" icon={<FileTextOutlined />}>
               코드 변경
             </Button>
@@ -426,11 +415,6 @@ export default function OrchestrationBoard({
                     a={a}
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
-                    onOpen={
-                      onAgentClick
-                        ? () => onAgentClick({ slug: changeSlugFor(a.agent), agent: a })
-                        : undefined
-                    }
                   />
                 ))}
               </div>

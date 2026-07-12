@@ -1,17 +1,13 @@
-import OrderHome from "@/components/OrderHome";
-import OrderLauncher from "@/components/OrderLauncher";
-import { listOrders } from "@/lib/orders";
-import { getMetaDir } from "@/lib/config";
-import { listJobs, listArchivedJobs } from "@/lib/jobs";
+import SectionGrid from "@/components/SectionGrid";
+import { sections } from "@/lib/sections";
+import { orchestrationMetricsFor } from "@/lib/orchestration";
 
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  return (
-    <OrderHome
-      orders={listOrders()}
-      metaDir={getMetaDir()}
-      launcher={<OrderLauncher initialJobs={listJobs()} initialArchived={listArchivedJobs()} />}
-    />
-  );
+  const stats = {
+    "orch-code": orchestrationMetricsFor("code"),
+    "orch-nonsource": orchestrationMetricsFor("nonsource"),
+  };
+  return <SectionGrid sections={sections} stats={stats} />;
 }
