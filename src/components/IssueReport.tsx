@@ -258,8 +258,8 @@ export default function IssueReport({
         <Breadcrumb
           items={[
             { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orders">오더</Link> },
-            { title: issueKey },
+            { title: <Link href={`/orders/${issueKey}`}>{issueKey}</Link> },
+            { title: "검증" },
           ]}
           style={{ marginBottom: 12 }}
         />

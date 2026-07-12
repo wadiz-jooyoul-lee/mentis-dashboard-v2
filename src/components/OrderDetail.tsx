@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,26 +10,24 @@ import {
   Tag,
   Badge,
   Button,
-  Tabs,
   Card,
   Empty,
   Descriptions,
   Table,
   Steps,
   Alert,
-  Drawer,
+  Progress,
 } from "antd";
-import { LinkOutlined } from "@ant-design/icons";
+import {
+  LinkOutlined,
+  PlayCircleOutlined,
+  ExperimentOutlined,
+  FileTextOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import { jiraUrl } from "@/lib/jira";
-import IssueReport from "@/components/IssueReport";
 import OrchestrationBoard from "@/components/OrchestrationBoard";
-import AgentWorkView from "@/components/AgentWorkView";
-import JobConsole from "@/components/JobConsole";
 import { PHASE_ORDER, phaseBadge, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
-import type { AgentRow } from "@/lib/parseOrchestration";
 import type { OrderDetail as Detail } from "@/lib/orders";
-import type { JobStatus } from "@/lib/jobs";
 import "./markdown.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -41,7 +38,7 @@ const WORKTYPE_TAG: Record<string, { color: string; label: string }> = {
 };
 
 function Md({ children }: { children: string | null }) {
-  if (!children || !children.trim()) return <Empty description="내용 없음" />;
+  if (!children || !children.trim()) return <Empty description="내용 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   return (
     <div className="markdown-body">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
@@ -49,7 +46,6 @@ function Md({ children }: { children: string | null }) {
   );
 }
 
-/** 착수→…→종료 진행 표시. */
 function PhaseTimeline({ phase }: { phase: PhaseKey }) {
   const idx = PHASE_ORDER.indexOf(phase);
   return (
@@ -63,43 +59,22 @@ function PhaseTimeline({ phase }: { phase: PhaseKey }) {
   );
 }
 
-export default function OrderDetail({
-  order,
-  jobStatus,
-}: {
-  order: Detail;
-  jobStatus?: JobStatus;
-}) {
+function testPassRate(o: Detail): number | null {
+  const t = o.latestTest;
+  if (!t || t.pass == null) return null;
+  const total = (t.pass ?? 0) + (t.fail ?? 0) + (t.skip ?? 0);
+  return total > 0 ? Math.round(((t.pass ?? 0) / total) * 100) : null;
+}
+
+/** 오더 상세 — v1 스타일 단일 스크롤 페이지(탭 없음). 무거운 뷰는 서브 라우트. */
+export default function OrderDetail({ order }: { order: Detail }) {
   const { status } = order;
-  const [active, setActive] = useState("overview");
-  const [drawer, setDrawer] = useState<{ slug?: string; agent: AgentRow } | null>(null);
-
-  // 딥링크: ?tab=changes 등 초기 탭을 URL에서 읽는다(클라이언트 전용).
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (t) setActive(t);
-  }, []);
-
-  const onTab = (key: string) => {
-    setActive(key);
-    const url = new URL(window.location.href);
-    if (key === "overview") url.searchParams.delete("tab");
-    else url.searchParams.set("tab", key);
-    window.history.replaceState(null, "", url.toString());
-  };
-
   const isNonsource = order.workType === "nonsource";
   const hasEpic = !!order.epic;
+  const hasChanges = (order.epic?.agentWorks?.length ?? 0) > 0;
+  const wt = order.workType ? WORKTYPE_TAG[order.workType] : null;
+  const rate = testPassRate(order);
 
-  // Drawer에 띄울 에이전트 작업 내역(slug로 매칭) + 계약 폴백
-  const drawerWork = drawer?.slug
-    ? order.epic?.agentWorks.find((w) => w.slug === drawer.slug) ?? null
-    : null;
-  const drawerContract = drawer?.slug
-    ? order.epic?.contracts.find((c) => c.slug === drawer.slug) ?? null
-    : null;
-
-  // ── 개요 탭 ──
   const progressCols: ColumnsType<(typeof status.progress)[number]> = [
     { title: "단계", dataIndex: "phase" },
     { title: "스킬", dataIndex: "skill", render: (v: string) => (v ? <Text code>{v}</Text> : "—") },
@@ -113,8 +88,47 @@ export default function OrderDetail({
     { title: "경로", dataIndex: "path", render: (v: string) => (v ? <Text code>{v}</Text> : "—") },
   ];
 
-  const overview = (
+  return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Breadcrumb items={[{ title: <Link href="/">홈</Link> }, { title: order.key }]} />
+
+      {/* 헤더 */}
+      <Space align="center" size={12} wrap>
+        <Title level={3} style={{ margin: 0 }}>
+          {order.key}
+        </Title>
+        <Badge status={phaseBadge(status.phase)} text={phaseText(status.phaseRaw, status.phase)} />
+        {status.k != null && <Tag color={status.k >= 2 ? "blue" : "default"}>K={status.k}</Tag>}
+        {wt && <Tag color={wt.color}>{wt.label}</Tag>}
+        {order.kind === "task" && <Tag>문서</Tag>}
+      </Space>
+      {status.meta.title && (
+        <Paragraph type="secondary" style={{ margin: 0 }}>
+          {status.meta.title}
+        </Paragraph>
+      )}
+      <Space wrap>
+        <Link href={`/orders/${order.key}/console`}>
+          <Button icon={<PlayCircleOutlined />}>실행 콘솔</Button>
+        </Link>
+        {!isNonsource && (
+          <Link href={`/orders/${order.key}/test`}>
+            <Button icon={<ExperimentOutlined />}>검증 리포트{order.runs.length ? ` (${order.runs.length})` : ""}</Button>
+          </Link>
+        )}
+        {hasChanges && (
+          <Link href={`/orders/${order.key}/changes`}>
+            <Button icon={<FileTextOutlined />}>변경 내역</Button>
+          </Link>
+        )}
+        {order.jira && (
+          <Button type="link" icon={<LinkOutlined />} href={order.jira} target="_blank">
+            Jira에서 열기
+          </Button>
+        )}
+      </Space>
+
+      {/* 현재 단계 */}
       <Card size="small">
         <PhaseTimeline phase={status.phase} />
         {status.phaseRaw && status.phaseRaw.trim().length > 10 && (
@@ -124,22 +138,17 @@ export default function OrderDetail({
         )}
       </Card>
 
+      {/* 이슈/작업 메타 */}
       <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered>
         <Descriptions.Item label="키">{order.key}</Descriptions.Item>
         <Descriptions.Item label="타입">{status.meta.type ?? "—"}</Descriptions.Item>
-        <Descriptions.Item label="제목" span={2}>
-          {status.meta.title ?? "—"}
-        </Descriptions.Item>
         <Descriptions.Item label="담당 스킬">
           {status.skill ? <Text code>{status.skill}</Text> : "—"}
         </Descriptions.Item>
         <Descriptions.Item label="팬아웃 K">
           {status.k != null ? `K=${status.k}` : "—"}
           {status.k != null && (
-            <Text type="secondary">
-              {" "}
-              ({status.k >= 2 ? `부모 브랜치 feature/${order.key}` : "부모 브랜치 없음"})
-            </Text>
+            <Text type="secondary"> ({status.k >= 2 ? `부모 브랜치 feature/${order.key}` : "부모 브랜치 없음"})</Text>
           )}
         </Descriptions.Item>
         {status.meta.docPath && (
@@ -149,6 +158,10 @@ export default function OrderDetail({
         )}
       </Descriptions>
 
+      {/* 에이전트 상태 보드 — 카드 클릭 시 /changes 로 이동(v1) */}
+      {hasEpic && <OrchestrationBoard epicKey={order.key} epic={order.epic} embedded />}
+
+      {/* 단계별 진행 */}
       {status.progress.length > 0 && (
         <Card size="small" title="단계별 진행">
           <Table
@@ -162,6 +175,7 @@ export default function OrderDetail({
         </Card>
       )}
 
+      {/* 워크트리 */}
       {status.worktrees.length > 0 && (
         <Card size="small" title="워크트리 / 브랜치">
           <Table
@@ -175,6 +189,66 @@ export default function OrderDetail({
         </Card>
       )}
 
+      {/* 분석 */}
+      <Card size="small" title="분석 (analysis.md)">
+        <Md>{order.analysisMd}</Md>
+      </Card>
+
+      {/* 구현 / 산출 */}
+      <Card size="small" title={isNonsource ? "산출 (produce.md)" : "구현 (implementation.md)"}>
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Md>{isNonsource ? order.produceMd : order.implementationMd}</Md>
+          {isNonsource &&
+            order.deliverables.map((d) => (
+              <Card key={d.name} size="small" type="inner" title={<Text code>deliverables/{d.name}</Text>}>
+                {d.kind === "md" ? (
+                  <Md>{d.content}</Md>
+                ) : d.kind === "html" ? (
+                  <iframe
+                    title={d.name}
+                    srcDoc={d.content}
+                    sandbox=""
+                    style={{ width: "100%", height: 520, border: "1px solid #f0f0f0", borderRadius: 6 }}
+                  />
+                ) : (
+                  <Text type="secondary">미리보기를 지원하지 않는 파일입니다.</Text>
+                )}
+              </Card>
+            ))}
+        </Space>
+      </Card>
+
+      {/* 검증 요약 (code) */}
+      {!isNonsource && (
+        <Card
+          size="small"
+          title="검증"
+          extra={
+            order.runs.length ? (
+              <Link href={`/orders/${order.key}/test`}>리포트 보기 →</Link>
+            ) : null
+          }
+        >
+          {rate != null ? (
+            <Space size={12} align="center">
+              <Progress
+                type="circle"
+                size={44}
+                percent={rate}
+                status={order.latestTest?.fail ? "exception" : "success"}
+              />
+              <Text>
+                최근 회차: 성공 {order.latestTest?.pass ?? 0} · 실패 {order.latestTest?.fail ?? 0} · skip{" "}
+                {order.latestTest?.skip ?? 0}
+              </Text>
+            </Space>
+          ) : (
+            <Text type="secondary">테스트 회차 없음 — dobby-test 실행 시 생성됩니다.</Text>
+          )}
+        </Card>
+      )}
+
+      {/* 해결 / 종료 */}
       {status.resolution && (
         <Alert
           type="success"
@@ -189,149 +263,11 @@ export default function OrderDetail({
           }
         />
       )}
-
-      {/* 에이전트 상태 칸반(구 '에이전트' 탭 내용) — 카드 클릭 시 Drawer로 작업 내역 */}
-      {hasEpic && (
-        <OrchestrationBoard
-          epicKey={order.key}
-          epic={order.epic}
-          embedded
-          onAgentClick={(p) => setDrawer(p)}
-        />
+      {order.summaryMd && (
+        <Card size="small" title="종료 서머리 (summary.md)">
+          <Md>{order.summaryMd}</Md>
+        </Card>
       )}
-    </Space>
-  );
-
-  // ── 탭 구성 ──
-  const items = [
-    { key: "overview", label: "개요", children: overview },
-    { key: "analysis", label: "분석", children: <Md>{order.analysisMd}</Md> },
-    {
-      key: "impl",
-      label: isNonsource ? "산출" : "구현",
-      children: isNonsource ? (
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Md>{order.produceMd}</Md>
-          {order.deliverables.map((d) => (
-            <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
-              {d.kind === "md" ? (
-                <Md>{d.content}</Md>
-              ) : d.kind === "html" ? (
-                <iframe
-                  title={d.name}
-                  srcDoc={d.content}
-                  sandbox=""
-                  style={{ width: "100%", height: 520, border: "1px solid #f0f0f0", borderRadius: 6 }}
-                />
-              ) : (
-                <Text type="secondary">미리보기를 지원하지 않는 파일입니다.</Text>
-              )}
-            </Card>
-          ))}
-        </Space>
-      ) : (
-        <Md>{order.implementationMd}</Md>
-      ),
-    },
-    ...(!isNonsource
-      ? [
-          {
-            key: "test",
-            label: `검증${order.runs.length ? ` (${order.runs.length})` : ""}`,
-            children: order.runs.length ? (
-              <IssueReport issueKey={order.key} runs={order.runs} embedded />
-            ) : (
-              <Empty description="테스트 회차 없음 — dobby-test 실행 시 생성됩니다." />
-            ),
-          },
-        ]
-      : []),
-    ...(order.summaryMd
-      ? [{ key: "summary", label: "종료", children: <Md>{order.summaryMd}</Md> }]
-      : []),
-    {
-      key: "run",
-      label: jobStatus && jobStatus.state === "running" ? "실행 ●" : "실행",
-      children: <JobConsole orderKey={order.key} initial={jobStatus} height={380} />,
-    },
-  ];
-
-  const wt = order.workType ? WORKTYPE_TAG[order.workType] : null;
-
-  return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orders">오더</Link> },
-          { title: order.key },
-        ]}
-      />
-      <Space align="center" size={12} wrap>
-        <Title level={3} style={{ margin: 0 }}>
-          {order.key}
-        </Title>
-        <Badge status={phaseBadge(status.phase)} text={phaseText(status.phaseRaw, status.phase)} />
-        {status.k != null && <Tag color={status.k >= 2 ? "blue" : "default"}>K={status.k}</Tag>}
-        {wt && <Tag color={wt.color}>{wt.label}</Tag>}
-        {order.kind === "task" && <Tag>문서</Tag>}
-        {order.jira && (
-          <Button type="link" icon={<LinkOutlined />} href={order.jira} target="_blank">
-            Jira에서 열기
-          </Button>
-        )}
-      </Space>
-      {status.meta.title && (
-        <Paragraph type="secondary" style={{ margin: 0 }}>
-          {status.meta.title}
-        </Paragraph>
-      )}
-      <Tabs activeKey={active} onChange={onTab} items={items} />
-
-      <Drawer
-        open={!!drawer}
-        onClose={() => setDrawer(null)}
-        width={Math.min(720, typeof window !== "undefined" ? window.innerWidth - 40 : 720)}
-        title={
-          drawer ? (
-            <Space size={8} wrap>
-              <Text strong>{drawer.agent.agent || drawer.slug || "에이전트"}</Text>
-              {drawer.agent.state && <Tag>{drawer.agent.state}</Tag>}
-              {drawer.agent.branch && drawer.agent.branch !== "-" && (
-                <Text code style={{ fontSize: 12 }}>{drawer.agent.branch}</Text>
-              )}
-            </Space>
-          ) : null
-        }
-      >
-        {drawerWork ? (
-          <AgentWorkView work={drawerWork} />
-        ) : (
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Alert
-              type="info"
-              showIcon
-              message="작업 로그 없음"
-              description="이 에이전트의 대화 로그(agent-logs.json)가 아직 없어 수정 파일·diff를 표시할 수 없습니다. 상태·계약 정보만 표시합니다."
-            />
-            <Descriptions size="small" column={1} bordered>
-              {drawer?.agent.issue && drawer.agent.issue !== "-" && (
-                <Descriptions.Item label="이슈/작업">{drawer.agent.issue}</Descriptions.Item>
-              )}
-              <Descriptions.Item label="상태">{drawer?.agent.state || "—"}</Descriptions.Item>
-              {drawer?.agent.round && <Descriptions.Item label="라운드">{drawer.agent.round}</Descriptions.Item>}
-              {drawer?.agent.updatedAt && <Descriptions.Item label="갱신">{drawer.agent.updatedAt}</Descriptions.Item>}
-            </Descriptions>
-            {drawerContract && (
-              <Card size="small" title="계약">
-                <div className="markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{drawerContract.raw}</ReactMarkdown>
-                </div>
-              </Card>
-            )}
-          </Space>
-        )}
-      </Drawer>
     </Space>
   );
 }

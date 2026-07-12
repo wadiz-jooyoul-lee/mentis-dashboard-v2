@@ -157,7 +157,7 @@ function AgentCard({
   const handleClick =
     onOpen ??
     (changeSlug
-      ? () => router.push(`/orders/${epicKey}?tab=changes#agent-${changeSlug}`)
+      ? () => router.push(`/orders/${epicKey}/changes#agent-${changeSlug}`)
       : undefined);
   return (
     <Card
@@ -309,7 +309,7 @@ export default function OrchestrationBoard({
           Jira에서 열기
         </Button>
         {hasChanges && (
-          <Link href={`/orders/${epicKey}?tab=changes`}>
+          <Link href={`/orders/${epicKey}/changes`}>
             <Button type="link" icon={<FileTextOutlined />}>
               코드 변경
             </Button>

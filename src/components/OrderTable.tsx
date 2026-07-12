@@ -1,21 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Typography, Space, Tag, Badge, Progress } from "antd";
+import { Typography, Space, Tag, Badge, Progress } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
-import Link from "next/link";
 import type { ColumnsType } from "antd/es/table";
 import DateFoldedTable from "@/components/DateFoldedTable";
-import { jiraUrl } from "@/lib/jira";
 import { phaseBadge, phaseText } from "@/lib/parseOrderStatus";
 import type { OrderSummary } from "@/lib/orders";
 
-const { Title, Text, Paragraph } = Typography;
-
-const WORKTYPE_TAG: Record<string, { color: string; label: string }> = {
-  code: { color: "geekblue", label: "code" },
-  nonsource: { color: "purple", label: "비소스" },
-};
+const { Text } = Typography;
 
 function passRate(o: OrderSummary): number | null {
   const t = o.latestTest;
@@ -24,15 +17,13 @@ function passRate(o: OrderSummary): number | null {
   return total > 0 ? Math.round(((t.pass ?? 0) / total) * 100) : null;
 }
 
-export default function OrderList({
+/** 오더 목록 표(날짜 접이식). 브레드크럼·제목·실행 패널은 상위(OrderHome)에서. */
+export default function OrderTable({
   orders,
-  metaDir,
-  launcher,
+  emptyText,
 }: {
   orders: OrderSummary[];
-  metaDir: string;
-  /** 실행 패널(서버에서 주입) */
-  launcher?: React.ReactNode;
+  emptyText?: string;
 }) {
   const router = useRouter();
 
@@ -61,14 +52,6 @@ export default function OrderList({
       title: "타입",
       dataIndex: "type",
       render: (v: string | null) => (v ? <Tag>{v}</Tag> : <Text type="secondary">—</Text>),
-    },
-    {
-      title: "work-type",
-      dataIndex: "workType",
-      render: (v: string | null) => {
-        const t = v ? WORKTYPE_TAG[v] : null;
-        return t ? <Tag color={t.color}>{t.label}</Tag> : <Text type="secondary">—</Text>;
-      },
     },
     {
       title: "단계",
@@ -118,25 +101,13 @@ export default function OrderList({
   ];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Breadcrumb items={[{ title: <Link href="/">홈</Link> }, { title: "오더" }]} />
-      <div>
-        <Title level={3} style={{ marginBottom: 4 }}>
-          오더
-        </Title>
-        <Paragraph type="secondary" style={{ margin: 0 }}>
-          읽는 경로: <Text code>{metaDir}</Text>
-        </Paragraph>
-      </div>
-      {launcher}
-      <DateFoldedTable<OrderSummary>
-        items={orders}
-        dateOf={(o) => o.updatedAt}
-        columns={columns}
-        rowKey="key"
-        onRowClick={(o) => router.push(`/orders/${o.key}`)}
-        emptyText="오더 없음 — dobby-order로 작업을 시작하면 여기에 표시됩니다."
-      />
-    </Space>
+    <DateFoldedTable<OrderSummary>
+      items={orders}
+      dateOf={(o) => o.updatedAt}
+      columns={columns}
+      rowKey="key"
+      onRowClick={(o) => router.push(`/orders/${o.key}`)}
+      emptyText={emptyText ?? "오더 없음"}
+    />
   );
 }

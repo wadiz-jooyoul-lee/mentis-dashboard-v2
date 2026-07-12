@@ -35,7 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.6 }}>v2 · go-dobby</span>
         </Link>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 18 }}>
-          <Link href="/orders" style={{ color: "rgba(255,255,255,0.85)", textDecoration: "none", fontSize: 14 }}>
+          <Link href="/" style={{ color: "rgba(255,255,255,0.85)", textDecoration: "none", fontSize: 14 }}>
             오더
           </Link>
           <Link href="/agents" style={{ color: "rgba(255,255,255,0.85)", textDecoration: "none", fontSize: 14 }}>

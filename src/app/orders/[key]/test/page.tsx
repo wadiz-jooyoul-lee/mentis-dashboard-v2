@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
-import OrderDetail from "@/components/OrderDetail";
+import IssueReport from "@/components/IssueReport";
 import { getOrder } from "@/lib/orders";
 import { isOrderKey } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
-export default function OrderDetailPage({
+export default function OrderTestPage({
   params,
 }: {
   params: { key: string };
@@ -13,5 +13,5 @@ export default function OrderDetailPage({
   if (!isOrderKey(params.key)) notFound();
   const order = getOrder(params.key);
   if (!order) notFound();
-  return <OrderDetail order={order} />;
+  return <IssueReport issueKey={params.key} runs={order.runs} />;
 }
