@@ -80,7 +80,11 @@ export function listOrderKeys(): string[] {
   }
   return entries
     .filter((d) => d.isDirectory() && !d.name.startsWith(".") && isOrderKey(d.name))
-    .filter((d) => fs.existsSync(path.join(root, d.name, "status.md")))
+    .filter(
+      (d) =>
+        fs.existsSync(path.join(root, d.name, "status.json")) ||
+        fs.existsSync(path.join(root, d.name, "status.md"))
+    )
     .map((d) => d.name);
 }
 

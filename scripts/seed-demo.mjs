@@ -65,6 +65,53 @@ w(
 `
 );
 
+// status.json(정본) — 대시보드는 이걸 우선 읽는다(status.md는 사람용 폴백).
+w(
+  "FE1-1187/status.json",
+  JSON.stringify(
+    {
+      schemaVersion: 1,
+      key: "FE1-1187",
+      kind: "issue",
+      title: "로그인 버튼이 간헐적으로 비활성화되는 문제",
+      type: "버그",
+      jira: "https://wadiz.atlassian.net/browse/FE1-1187",
+      docPath: null,
+      workType: "code",
+      phase: "종료",
+      skill: "dobby-end",
+      k: 1,
+      base: "master",
+      startedAt: "2026-07-12 13:00",
+      updatedAt: "2026-07-12 14:40",
+      current: "종료 완료 — 워크트리 제거, 브랜치 보존",
+      agents: [
+        { slug: "impl", issue: "FE1-1187", branch: "bugfix/FE1-1187", state: "완료", round: 2, updatedAt: "2026-07-12 14:10" },
+      ],
+      progress: [
+        { phase: "착수·분석", skill: "dobby-start", state: "완료", artifact: "analysis.md", updatedAt: "2026-07-12 13:00" },
+        { phase: "구현", skill: "dobby-impl", state: "완료", artifact: "implementation.md", updatedAt: "2026-07-12 13:40" },
+        { phase: "검증", skill: "dobby-test", state: "완료", artifact: "test-runs/20260712-141500/", updatedAt: "2026-07-12 14:20" },
+        { phase: "종료", skill: "dobby-end", state: "완료", artifact: "summary.md", updatedAt: "2026-07-12 14:40" },
+      ],
+      testHistory: [
+        { round: 1, startedAt: "2026-07-12 14:15", state: "완료", pass: 3, fail: 0, skip: 1, folder: "test-runs/20260712-141500/" },
+      ],
+      worktrees: [
+        { repo: "wadiz-frontend", branch: "bugfix/FE1-1187", path: "~/work/dobby-workspace/subtree/wadiz-frontend-FE1-1187" },
+      ],
+      deliverables: [],
+      resolution: {
+        at: "2026-07-12 14:30",
+        evidence: "리뷰 클린(round-2) · 테스트 성공3/실패0/skip1 · 통합 브랜치 bugfix/FE1-1187",
+        note: "추가 수정 여지 없음",
+      },
+    },
+    null,
+    2
+  ) + "\n"
+);
+
 w(
   "FE1-1187/analysis.md",
   `# FE1-1187 분석

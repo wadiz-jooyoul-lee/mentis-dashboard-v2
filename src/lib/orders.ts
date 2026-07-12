@@ -8,12 +8,93 @@ import path from "node:path";
 import { getMetaDir, orderDir, listOrderKeys, readFileSafe } from "@/lib/config";
 import {
   parseOrderStatus,
+  phaseKey,
   type OrderStatus,
   type PhaseKey,
 } from "@/lib/parseOrderStatus";
 import { getEpic, type EpicDetail } from "@/lib/orchestration";
-import type { Orchestration } from "@/lib/parseOrchestration";
+import { normAgentState, type Orchestration } from "@/lib/parseOrchestration";
 import { getReportRuns, type ReportRun } from "@/lib/issues";
+
+/**
+ * status.json(정본)을 OrderStatus로 매핑한다. 없거나 파싱 실패면 null → status.md 폴백.
+ * 규격: mentis-plugins/plugins/go-dobby/reference/status-schema.md
+ */
+function statusFromJson(key: string, dir: string): OrderStatus | null {
+  const raw = readFileSafe(path.join(dir, "status.json"));
+  if (!raw) return null;
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const s = (v: unknown) => (v == null ? "" : String(v));
+  const sOrNull = (v: unknown) => (v == null || v === "" ? null : String(v));
+  const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v) || null);
+  const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v : []);
+  const phaseRaw = sOrNull(j.phase) ?? sOrNull(j.current);
+  const wt = s(j.workType);
+  const res = j.resolution as Record<string, unknown> | null | undefined;
+  return {
+    meta: {
+      key,
+      type: sOrNull(j.type),
+      title: sOrNull(j.title),
+      jira: sOrNull(j.jira),
+      docPath: sOrNull(j.docPath),
+    },
+    phaseRaw,
+    phase: phaseKey(phaseRaw),
+    skill: sOrNull(j.skill),
+    updatedAt: sOrNull(j.updatedAt),
+    k: num(j.k),
+    workTypeHint: wt === "code" ? "code" : wt === "nonsource" ? "nonsource" : null,
+    agents: arr(j.agents).map((a) => ({
+      agent: s(a.slug ?? a.agent),
+      issue: s(a.issue),
+      branch: s(a.branch),
+      state: normAgentState(s(a.state)),
+      round: s(a.round),
+      updatedAt: s(a.updatedAt),
+    })),
+    progress: arr(j.progress).map((p) => ({
+      phase: s(p.phase),
+      skill: s(p.skill),
+      state: s(p.state),
+      artifact: s(p.artifact),
+      updatedAt: s(p.updatedAt),
+    })),
+    testHistory: arr(j.testHistory).map((t) => ({
+      round: s(t.round),
+      startedAt: s(t.startedAt),
+      state: s(t.state),
+      countsRaw: `${s(t.pass) || 0}/${s(t.fail) || 0}/${s(t.skip) || 0}`,
+      pass: num(t.pass),
+      fail: num(t.fail),
+      skip: num(t.skip),
+      folder: s(t.folder),
+    })),
+    worktrees: arr(j.worktrees).map((w) => ({
+      repo: s(w.repo),
+      branch: s(w.branch),
+      path: s(w.path),
+    })),
+    resolution: res
+      ? { at: sOrNull(res.at), evidence: sOrNull(res.evidence), note: sOrNull(res.note) }
+      : null,
+    raw,
+  };
+}
+
+/** status.json(정본) 우선, 없으면 status.md 파싱(폴백). */
+function loadStatus(key: string): OrderStatus | null {
+  const dir = orderDir(key);
+  const j = statusFromJson(key, dir);
+  if (j) return j;
+  const md = readFileSafe(path.join(dir, "status.md"));
+  return md ? parseOrderStatus(md, key) : null;
+}
 
 export type WorkType = "code" | "nonsource" | null;
 
@@ -137,9 +218,9 @@ function toSummary(key: string, status: OrderStatus): OrderSummary {
 export function listOrders(): OrderSummary[] {
   const orders: OrderSummary[] = [];
   for (const key of listOrderKeys()) {
-    const md = readFileSafe(path.join(orderDir(key), "status.md"));
-    if (!md) continue;
-    orders.push(toSummary(key, parseOrderStatus(md, key)));
+    const st = loadStatus(key);
+    if (!st) continue;
+    orders.push(toSummary(key, st));
   }
   orders.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
   return orders;
@@ -148,9 +229,8 @@ export function listOrders(): OrderSummary[] {
 /** 오더 상세. 폴더 전체를 파싱한다(탭에서 필요한 산출물 포함). */
 export function getOrder(key: string): OrderDetail | null {
   const dir = orderDir(key);
-  const md = readFileSafe(path.join(dir, "status.md"));
-  if (!md) return null;
-  const status = parseOrderStatus(md, key);
+  const status = loadStatus(key); // status.json 우선, 없으면 status.md
+  if (!status) return null;
   return {
     ...toSummary(key, status),
     status,
