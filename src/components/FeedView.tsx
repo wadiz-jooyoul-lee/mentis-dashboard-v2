@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { FeedItem } from "@/lib/jobs";
 
 function feedPrefix(kind: FeedItem["kind"]): string {
@@ -36,8 +37,25 @@ export default function FeedView({
   feed: FeedItem[];
   height?: number | string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 열 때 최하단(최신)으로.
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  // 새 로그가 붙을 때: 이미 하단 근처면 계속 따라간다(위로 스크롤 중이면 방해 안 함).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [feed]);
+
   return (
     <div
+      ref={ref}
       style={{
         height,
         overflow: "auto",
