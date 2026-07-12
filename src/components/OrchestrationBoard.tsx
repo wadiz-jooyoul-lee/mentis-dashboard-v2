@@ -151,10 +151,13 @@ function AgentCard({
 }) {
   const router = useRouter();
   const stale = isStale(a);
-  const clickable = !!changeSlug;
+  // 로그 유무와 무관하게 모든 에이전트 카드를 클릭 가능 → 변경 페이지의 해당 에이전트 섹션으로.
+  const clickable = !!a.agent && a.agent !== "-";
+  const anchor = a.agent.trim().replace(/\s+/g, "-");
   const goToChanges = clickable
-    ? () => router.push(`/orchestration/${epicKey}/changes#agent-${changeSlug}`)
+    ? () => router.push(`/orchestration/${epicKey}/changes#agent-${anchor}`)
     : undefined;
+  void changeSlug;
   return (
     <Card
       size="small"
