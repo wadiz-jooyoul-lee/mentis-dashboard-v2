@@ -1,0 +1,213 @@
+/** work-dobby orchestration.md 파싱 (순수 함수). */
+import { findTable, columnIndex } from "@/lib/md";
+
+/** 상태는 자유 문자열(스킬이 새 값을 써도 사라지지 않게). 알려진 값은 정규화. */
+export type AgentState = string;
+
+export type AgentRow = {
+  agent: string;
+  issue: string;
+  branch: string;
+  state: AgentState;
+  round: string;
+  updatedAt: string;
+};
+
+export type ScopeRow = { area: string; owner: string; reason: string };
+export type EventRow = { time: string; text: string };
+
+export type Orchestration = {
+  epicKey: string;
+  mode: string | null;
+  agents: AgentRow[];
+  scope: ScopeRow[];
+  conflicts: string;
+  events: EventRow[];
+  /** 제목·에이전트 상태·이벤트 로그를 뺀 나머지 본문(상단 요약·범위배분·공유계약·충돌 등) */
+  restMarkdown: string;
+};
+
+const at = (row: string[], i: number) => (i >= 0 && i < row.length ? row[i] : "");
+
+/**
+ * 정식 상태 흐름 순서(칸반 고정 열). agent-start "에이전트 상태 값(정식)" 기준.
+ * 서브: 대기→분석중→구현중→리뷰중→수정중→재통합대기→완료
+ * 리뷰: 대기→진행중→완료 (진행중은 구현중 옆에 배치)
+ * 그 외(정의 밖) 값은 뒤에 붙어 사라지지 않는다.
+ */
+export const STATE_ORDER: string[] = [
+  "대기",
+  "분석중",
+  "구현중",
+  "진행중",
+  "리뷰중",
+  "수정중",
+  "재통합대기",
+  "완료",
+];
+
+function normAgentState(v: string): AgentState {
+  const s = v.replace(/\*/g, "").trim();
+  const base = s.split(/[(（]/)[0].trim(); // "수정중(round-3)" → "수정중"
+  if (s.includes("분석완료")) return "분석완료"; // "완료" 검사보다 먼저
+  if (s.includes("완료")) return "완료";
+  if (s.includes("재통합")) return "재통합대기"; // "대기" 검사보다 먼저
+  if (s.includes("수정") || s.includes("반영")) return "수정중";
+  if (s.includes("리뷰")) return "리뷰중";
+  if (s.includes("구현")) return "구현중";
+  if (s.includes("분석")) return "분석중";
+  if (s.includes("진행")) return "진행중";
+  if (s.includes("대기")) return "대기";
+  return base || "미상"; // 모르는 값도 라벨 그대로(사라지지 않게)
+}
+
+/** 데이터에 실제 존재하는 상태들을 흐름 순서대로 정렬(모르는 값은 뒤). */
+export function orderStates(states: string[]): string[] {
+  const uniq = Array.from(new Set(states));
+  const known = STATE_ORDER.filter((s) => uniq.includes(s));
+  const extra = uniq.filter((s) => !STATE_ORDER.includes(s));
+  return [...known, ...extra];
+}
+
+/** "## heading" 아래 다음 "## " 전까지의 본문을 반환. */
+function sectionBody(md: string, headingKeyword: string): string {
+  const lines = md.split("\n");
+  let i = lines.findIndex(
+    (l) => /^##\s/.test(l) && l.replace(/[#*]/g, "").includes(headingKeyword)
+  );
+  if (i < 0) return "";
+  const out: string[] = [];
+  for (let j = i + 1; j < lines.length; j++) {
+    if (/^##\s/.test(lines[j])) break;
+    out.push(lines[j]);
+  }
+  return out.join("\n").trim();
+}
+
+/** GFM 표가 헤딩/문단 바로 뒤에 붙어 있으면 표로 인식되도록 앞에 빈 줄을 넣는다. */
+function ensureTableSpacing(lines: string[]): string[] {
+  const res: string[] = [];
+  const isRow = (l: string) => /^\s*\|/.test(l);
+  for (const l of lines) {
+    const prev = res[res.length - 1];
+    if (isRow(l) && prev !== undefined && prev.trim() !== "" && !isRow(prev)) {
+      res.push("");
+    }
+    res.push(l);
+  }
+  return res;
+}
+
+/** 제목(H1)·"에이전트 상태"·"이벤트 로그" 섹션을 뺀 나머지 마크다운. */
+function extractRest(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let skipSection = false;
+  for (const line of lines) {
+    if (/^#\s/.test(line)) continue; // H1 제목 제거(상단에 별도 표시)
+    if (/^##\s/.test(line)) {
+      const h = line.replace(/[#*]/g, "").trim();
+      skipSection = h.includes("에이전트 상태") || h.includes("이벤트 로그");
+      if (!skipSection) out.push(line);
+      continue;
+    }
+    if (!skipSection) out.push(line);
+  }
+  return ensureTableSpacing(out).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function parseOrchestration(md: string): Orchestration {
+  const lines = md.split("\n");
+  const titleLine = lines.find((l) => /^#\s/.test(l)) ?? "";
+  const epicKey = (titleLine.match(/^#\s+([A-Za-z0-9-]+)/)?.[1] ?? "").trim();
+
+  // 에이전트 상태 표
+  const agents: AgentRow[] = [];
+  const aT = findTable(md, "에이전트", "상태");
+  if (aT) {
+    const iAgent = columnIndex(aT.headers, "에이전트");
+    const iIssue = columnIndex(aT.headers, "이슈");
+    const iBranch = columnIndex(aT.headers, "브랜치");
+    const iState = columnIndex(aT.headers, "상태");
+    const iRound = columnIndex(aT.headers, "라운드");
+    const iUpd = columnIndex(aT.headers, "갱신");
+    for (const r of aT.rows) {
+      agents.push({
+        agent: at(r, iAgent),
+        issue: at(r, iIssue),
+        branch: at(r, iBranch),
+        state: normAgentState(at(r, iState)),
+        round: at(r, iRound),
+        updatedAt: at(r, iUpd),
+      });
+    }
+  }
+
+  // 범위 배분 표
+  const scope: ScopeRow[] = [];
+  const sT = findTable(md, "영역", "담당");
+  if (sT) {
+    const iArea = columnIndex(sT.headers, "영역", "파일");
+    const iOwner = columnIndex(sT.headers, "담당");
+    const iReason = columnIndex(sT.headers, "근거");
+    for (const r of sT.rows) {
+      scope.push({
+        area: at(r, iArea),
+        owner: at(r, iOwner),
+        reason: at(r, iReason),
+      });
+    }
+  }
+
+  // 실행 모드: "## 실행 모드: 병렬 …" 형태 또는 섹션 본문
+  let mode: string | null = null;
+  const modeHeading = lines.find(
+    (l) => /^##\s/.test(l) && l.includes("실행 모드")
+  );
+  if (modeHeading) {
+    const after = modeHeading.split(/실행 모드\s*[:：]?/)[1]?.trim();
+    mode = after || sectionBody(md, "실행 모드").split("\n")[0] || null;
+  }
+
+  const conflicts = sectionBody(md, "충돌");
+
+  // 이벤트 로그: "- {일시} {내용}"
+  const events: EventRow[] = [];
+  for (const line of sectionBody(md, "이벤트 로그").split("\n")) {
+    const m = line.match(
+      /^-\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)\s*(.*)$/
+    );
+    if (m) events.push({ time: m[1].trim(), text: m[2].trim() });
+  }
+  events.reverse(); // 최신 먼저
+
+  return {
+    epicKey: epicKey || "",
+    mode,
+    agents,
+    scope,
+    conflicts,
+    events,
+    restMarkdown: extractRest(md),
+  };
+}
+
+const STATE_COLOR: Record<string, string> = {
+  대기: "#bfbfbf",
+  분석중: "cyan",
+  분석완료: "geekblue",
+  구현중: "blue",
+  진행중: "geekblue",
+  리뷰중: "gold",
+  수정중: "orange",
+  재통합대기: "purple",
+  완료: "green",
+};
+
+/** 상태 → Badge 색(프리셋/헥스) + 라벨 */
+export function agentStateBadge(state: AgentState): {
+  color: string;
+  text: string;
+} {
+  return { color: STATE_COLOR[state] ?? "#d9d9d9", text: state || "-" };
+}
