@@ -12,6 +12,7 @@ import {
   type PhaseKey,
 } from "@/lib/parseOrderStatus";
 import { getEpic, type EpicDetail } from "@/lib/orchestration";
+import type { Orchestration } from "@/lib/parseOrchestration";
 import { getReportRuns, type ReportRun } from "@/lib/issues";
 
 export type WorkType = "code" | "nonsource" | null;
@@ -50,6 +51,25 @@ export type OrderDetail = OrderSummary & {
   /** K≥2 오케스트레이션 상세(K=1이면 null) */
   epic: EpicDetail | null;
 };
+
+/**
+ * K=1이라 orchestration.md가 없을 때, status.md의 에이전트 표(보통 1행)로
+ * 최소 오케스트레이션을 합성한다. → K=1/K≥2 모두 "에이전트" 탭 칸반이 일관되게 보인다.
+ * (계약·리뷰·이벤트는 비어 있어 보드가 칸반+요약만 깔끔하게 렌더된다.)
+ */
+function synthEpic(key: string, status: OrderStatus): EpicDetail | null {
+  if (status.agents.length === 0) return null;
+  const orchestration: Orchestration = {
+    epicKey: key,
+    mode: null,
+    agents: status.agents,
+    scope: [],
+    conflicts: "",
+    events: [],
+    restMarkdown: "",
+  };
+  return { epicKey: key, orchestration, contracts: [], reviews: [], agentWorks: [] };
+}
 
 /** implementation.md / produce.md 존재로 work-type 추론. */
 function inferWorkType(key: string): WorkType {
@@ -110,7 +130,8 @@ export function getOrder(key: string): OrderDetail | null {
     testPlanMd: readFileSafe(path.join(dir, "test-plan.md")),
     summaryMd: readFileSafe(path.join(dir, "summary.md")),
     runs: getReportRuns(key),
-    epic: getEpic(key),
+    // K≥2면 실제 오케스트레이션, K=1이면 status.md 에이전트로 합성(칸반 일관성)
+    epic: getEpic(key) ?? synthEpic(key, status),
   };
 }
 

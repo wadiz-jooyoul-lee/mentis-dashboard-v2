@@ -134,26 +134,6 @@ export default function OrderDetail({
         )}
       </Descriptions>
 
-      {status.agents.length > 0 && (
-        <Card size="small" title="에이전트">
-          <Table
-            rowKey={(r) => r.agent + r.branch}
-            size="small"
-            pagination={false}
-            scroll={{ x: "max-content" }}
-            dataSource={status.agents}
-            columns={[
-              { title: "슬러그", dataIndex: "agent" },
-              { title: "이슈/작업", dataIndex: "issue" },
-              { title: "브랜치", dataIndex: "branch", render: (v: string) => (v ? <Text code>{v}</Text> : "—") },
-              { title: "상태", dataIndex: "state" },
-              { title: "라운드", dataIndex: "round" },
-              { title: "갱신", dataIndex: "updatedAt" },
-            ]}
-          />
-        </Card>
-      )}
-
       {status.progress.length > 0 && (
         <Card size="small" title="단계별 진행">
           <Table

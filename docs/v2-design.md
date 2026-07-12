@@ -176,7 +176,7 @@ getMetrics(): Metric[]                 // 허브 지표 (phase별 카운트 등)
 - **상세는 단일 라우트 `/orders/[key]` + 클라이언트 탭**. 서버 페이지가 `getOrder(key)`를 **한 번** 로드해 `OrderDetail`에 넘기고, 탭 전환은 클라이언트에서(재파싱 없음). v1처럼 `/[key]`와 `/[key]/changes`가 각각 `getEpic`을 중복 호출하던 문제 제거.
   - 탭 상태는 URL 쿼리(`?tab=changes`)로 동기화해 딥링크·새로고침 보존. 변경 탭의 에이전트 앵커(`#agent-{slug}`)도 유지.
 - **`[key]` 페이지에 `ISSUE_KEY_RE|TASK` 검증 + `notFound()`** — v1의 path traversal 결함(P1)을 v2에서 원천 차단.
-- **조건부 탭**: work-type=비소스면 검증 탭 숨김·"구현"→"산출" 라벨, K=1이면 에이전트 탭 숨김(status.md 에이전트 1행으로 충분).
+- **조건부 탭**: work-type=비소스면 검증 탭 숨김·"구현"→"산출" 라벨. **에이전트 칸반 탭은 K와 무관하게 에이전트가 1명 이상이면 표시**(K=1은 status.md 에이전트 표로 최소 오케스트레이션을 합성해 칸반 일관성 유지, K≥2는 orchestration.md). 에이전트 데이터가 아예 없으면 탭 생략.
 
 ---
 
