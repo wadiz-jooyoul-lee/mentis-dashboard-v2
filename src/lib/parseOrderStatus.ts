@@ -50,6 +50,17 @@ export function phaseKey(raw: string | null): PhaseKey {
   return "unknown";
 }
 
+/**
+ * 배지에 넣을 짧은 단계 라벨.
+ * 짧은 enum(구현중·해결·리뷰중…)은 그대로, 긴 자유 문장이면 정규화 버킷(리뷰 등)으로.
+ */
+export function phaseText(phaseRaw: string | null, phase: PhaseKey): string {
+  const r = (phaseRaw ?? "").trim();
+  if (r && r.length <= 10) return r;
+  if (phase !== "unknown") return phase;
+  return r ? (r.length > 24 ? r.slice(0, 24) + "…" : r) : "-";
+}
+
 export type BadgeStatus = "success" | "processing" | "warning" | "error" | "default";
 
 /** 현재 단계 → antd Badge status. */
@@ -120,6 +131,8 @@ export type OrderStatus = {
   updatedAt: string | null;
   /** 팬아웃 K */
   k: number | null;
+  /** work-type 힌트(status.md에 명시된 경우). 파일 추론이 우선. */
+  workTypeHint: "code" | "nonsource" | null;
   agents: AgentRow[];
   progress: PhaseProgressRow[];
   testHistory: TestHistoryRow[];
@@ -144,24 +157,64 @@ function sectionBody(md: string, heading: RegExp): string {
   return out.join("\n").trim();
 }
 
+/**
+ * 상단 "| 항목 | 값 |" 메타 표를 라벨→값 맵으로 만든다.
+ * (실제 skill이 ## 이슈/작업·## 팬아웃 대신 이 표를 쓰는 포맷 대응)
+ */
+function kvTable(md: string): Map<string, string> {
+  const m = new Map<string, string>();
+  const t = findTable(md, "항목", "필드", "속성");
+  if (!t) return m;
+  const li = Math.max(0, columnIndex(t.headers, "항목", "필드", "속성"));
+  const vi = (() => {
+    const i = columnIndex(t.headers, "값", "내용", "value");
+    return i >= 0 ? i : t.headers.length > 1 ? 1 : 0;
+  })();
+  for (const r of t.rows) {
+    const label = at(r, li).replace(/\*/g, "").trim();
+    const val = at(r, vi).replace(/^`|`$/g, "").trim();
+    if (label) m.set(label, val);
+  }
+  return m;
+}
+
+/** 맵에서 키워드 포함 라벨의 값을 찾는다. */
+function kvGet(kv: Map<string, string>, ...keys: string[]): string | null {
+  for (const [label, val] of kv) {
+    if (keys.some((k) => label.includes(k))) return val || null;
+  }
+  return null;
+}
+
 const KNOWN_TYPES = /^(버그|기능|작업|개선|태스크|스토리|에픽|하위작업|bug|feature|task|story|epic|subtask)$/i;
 
 /**
  * "## 이슈/작업"에서 키·타입·제목·링크를 뽑는다.
  * 스펙 형태 "- 키 · 타입 · 제목 · URL"(라벨 유무 모두)과 볼드 라벨 형태 둘 다 대응.
  */
-function parseIssueMeta(md: string, fallbackKey: string): OrderMeta {
+function parseIssueMeta(
+  md: string,
+  fallbackKey: string,
+  kv: Map<string, string>
+): OrderMeta {
   const section = sectionBody(md, /^이슈|작업/);
   const src = section || md;
 
-  // Jira URL / 문서 경로
-  const urlMatch = src.match(/https?:\/\/\S*\/browse\/[A-Za-z0-9-]+/);
+  // Jira URL(browse) — 없으면 상단표 "대상"의 URL도 후보
+  const target = kvGet(kv, "대상", "문서", "target");
+  const urlMatch =
+    src.match(/https?:\/\/\S*\/browse\/[A-Za-z0-9-]+/) ||
+    (target ?? "").match(/https?:\/\/\S*\/browse\/[A-Za-z0-9-]+/);
   const jira = urlMatch ? urlMatch[0] : null;
   const isTask = /^TASK-/.test(fallbackKey);
 
-  // 1) 볼드 라벨 우선
-  let title = field(src, "제목") ?? fieldLine(src, "제목") ?? null;
-  let type = field(src, "타입") ?? null;
+  // 1) 볼드 라벨 → 상단표(항목/값) → 자유 불릿 순
+  let title =
+    field(src, "제목") ??
+    fieldLine(src, "제목") ??
+    kvGet(kv, "제목", "초점", "주제") ??
+    null;
+  let type = field(src, "타입") ?? kvGet(kv, "타입", "유형") ?? null;
 
   // 2) 라벨 없는 "·" 구분 불릿 처리
   if (!title || !type) {
@@ -184,10 +237,11 @@ function parseIssueMeta(md: string, fallbackKey: string): OrderMeta {
     }
   }
 
-  // 3) H1 폴백("# {키} 상태")은 제목이 아님 → 무시
+  // 3) 문서 전용(TASK)의 대상 경로/URL: 라벨 → 상단표 "대상" → 자유 불릿
   const docPath = isTask
     ? field(src, "문서") ??
       fieldLine(src, "문서") ??
+      target ??
       (section.match(/(?:^|·)\s*([~./][^\s·|]+)/)?.[1] ?? null)
     : null;
 
@@ -297,19 +351,43 @@ function parseResolution(md: string): ResolutionInfo | null {
 }
 
 export function parseOrderStatus(md: string, key: string): OrderStatus {
-  const phaseRaw = field(md, "단계") ?? null;
+  const kv = kvTable(md);
+
+  // 현재 단계: **단계**: 라벨 → 상단표 → "## 현재 단계" 자유 문장 순.
+  const phaseRaw =
+    field(md, "단계") ??
+    kvGet(kv, "단계") ??
+    (sectionBody(md, /현재 단계/)
+      .split("\n")
+      .map((l) => l.replace(/^[-*]\s*/, "").trim())
+      .find(Boolean) ?? null);
+
+  // 팬아웃 K: **에이전트 수(K)** → 상단표 "팬아웃 K"/"에이전트 수".
+  const kText =
+    md.match(/에이전트 수\(K\)\*\*\s*[:：]?\s*(\d+)/)?.[1] ??
+    (kvGet(kv, "팬아웃", "에이전트 수", "K)") ?? "").match(/\d+/)?.[0] ??
+    null;
+
+  // work-type 힌트: 상단표 "work-type"/"작업 유형".
+  const wtRaw = kvGet(kv, "work-type", "worktype", "작업 유형", "유형") ?? "";
+  const workTypeHint: "code" | "nonsource" | null = /비소스|non.?source|문서|리서치|분석/i.test(wtRaw)
+    ? "nonsource"
+    : /code|코드|소스/i.test(wtRaw)
+    ? "code"
+    : null;
+
   return {
-    meta: parseIssueMeta(md, key),
+    meta: parseIssueMeta(md, key, kv),
     phaseRaw,
     phase: phaseKey(phaseRaw),
-    skill: field(md, "담당 스킬") ?? null,
+    skill: field(md, "담당 스킬") ?? kvGet(kv, "담당 스킬", "스킬") ?? null,
     updatedAt:
       field(md, "갱신") ??
-      (md.match(/\*\*갱신\*\*\s*[:：]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]+)/)?.[1] ?? null),
-    k: (() => {
-      const m = md.match(/에이전트 수\(K\)\*\*\s*[:：]?\s*(\d+)/);
-      return m ? Number(m[1]) : null;
-    })(),
+      (md.match(/\*\*갱신\*\*\s*[:：]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]+)/)?.[1] ??
+        kvGet(kv, "갱신", "업데이트") ??
+        null),
+    k: kText ? Number(kText) : null,
+    workTypeHint,
     agents: parseAgents(md),
     progress: parseProgress(md),
     testHistory: parseTestHistory(md),

@@ -7,7 +7,7 @@ import Link from "next/link";
 import type { ColumnsType } from "antd/es/table";
 import DateFoldedTable from "@/components/DateFoldedTable";
 import { jiraUrl } from "@/lib/jira";
-import { phaseBadge } from "@/lib/parseOrderStatus";
+import { phaseBadge, phaseText } from "@/lib/parseOrderStatus";
 import type { OrderSummary } from "@/lib/orders";
 
 const { Title, Text, Paragraph } = Typography;
@@ -73,7 +73,7 @@ export default function OrderList({
     {
       title: "단계",
       dataIndex: "phase",
-      render: (_, o) => <Badge status={phaseBadge(o.phase)} text={o.phaseRaw ?? o.phase} />,
+      render: (_, o) => <Badge status={phaseBadge(o.phase)} text={phaseText(o.phaseRaw, o.phase)} />,
     },
     {
       title: "K",

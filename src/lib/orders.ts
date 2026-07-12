@@ -46,11 +46,30 @@ export type OrderDetail = OrderSummary & {
   produceMd: string | null;
   testPlanMd: string | null;
   summaryMd: string | null;
+  /** 비소스 산출물(deliverables/ 안의 md, produce.md 제외) */
+  deliverables: { name: string; content: string }[];
   /** 테스트 회차(전체, 최신순) */
   runs: ReportRun[];
   /** K≥2 오케스트레이션 상세(K=1이면 null) */
   epic: EpicDetail | null;
 };
+
+/** deliverables/ 안의 md 파일들을 읽는다(produce.md는 제외 — 요약으로 따로 표시). */
+function readDeliverables(key: string): { name: string; content: string }[] {
+  const dir = path.join(orderDir(key), "deliverables");
+  if (!fs.existsSync(dir)) return [];
+  const out: { name: string; content: string }[] = [];
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.toLowerCase().endsWith(".md") || f === "produce.md") continue;
+      const c = readFileSafe(path.join(dir, f));
+      if (c != null) out.push({ name: f, content: c });
+    }
+  } catch {
+    /* skip */
+  }
+  return out;
+}
 
 /**
  * K=1이라 orchestration.md가 없을 때, status.md의 에이전트 표(보통 1행)로
@@ -72,11 +91,13 @@ function synthEpic(key: string, status: OrderStatus): EpicDetail | null {
 }
 
 /** implementation.md / produce.md 존재로 work-type 추론. */
-function inferWorkType(key: string): WorkType {
+/** work-type: produce.md/implementation.md 파일 추론 우선, 없으면 deliverables/·status.md 힌트. */
+function inferWorkType(key: string, status: OrderStatus): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
-  return null;
+  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
+  return status.workTypeHint;
 }
 
 function toSummary(key: string, status: OrderStatus): OrderSummary {
@@ -92,7 +113,7 @@ function toSummary(key: string, status: OrderStatus): OrderSummary {
     phaseRaw: status.phaseRaw,
     skill: status.skill,
     k: status.k,
-    workType: inferWorkType(key),
+    workType: inferWorkType(key, status),
     agentCount: status.agents.length,
     latestTest: latest
       ? { state: latest.state, pass: latest.pass, fail: latest.fail, skip: latest.skip }
@@ -126,9 +147,13 @@ export function getOrder(key: string): OrderDetail | null {
     status,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
-    produceMd: readFileSafe(path.join(dir, "produce.md")),
+    // produce.md는 루트 또는 deliverables/ 안(실제 skill 포맷) 모두 대응
+    produceMd:
+      readFileSafe(path.join(dir, "produce.md")) ??
+      readFileSafe(path.join(dir, "deliverables", "produce.md")),
     testPlanMd: readFileSafe(path.join(dir, "test-plan.md")),
     summaryMd: readFileSafe(path.join(dir, "summary.md")),
+    deliverables: readDeliverables(key),
     runs: getReportRuns(key),
     // K≥2면 실제 오케스트레이션, K=1이면 status.md 에이전트로 합성(칸반 일관성)
     epic: getEpic(key) ?? synthEpic(key, status),

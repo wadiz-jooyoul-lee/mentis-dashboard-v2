@@ -26,7 +26,7 @@ import IssueReport from "@/components/IssueReport";
 import OrchestrationBoard from "@/components/OrchestrationBoard";
 import OrchestrationChanges from "@/components/OrchestrationChanges";
 import JobConsole from "@/components/JobConsole";
-import { PHASE_ORDER, phaseBadge, type PhaseKey } from "@/lib/parseOrderStatus";
+import { PHASE_ORDER, phaseBadge, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import type { OrderDetail as Detail } from "@/lib/orders";
 import type { JobStatus } from "@/lib/jobs";
 import "./markdown.css";
@@ -107,6 +107,11 @@ export default function OrderDetail({
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <Card size="small">
         <PhaseTimeline phase={status.phase} />
+        {status.phaseRaw && status.phaseRaw.trim().length > 10 && (
+          <Paragraph type="secondary" style={{ margin: "12px 0 0" }}>
+            현재 단계: {status.phaseRaw}
+          </Paragraph>
+        )}
       </Card>
 
       <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered>
@@ -184,7 +189,18 @@ export default function OrderDetail({
     {
       key: "impl",
       label: isNonsource ? "산출" : "구현",
-      children: <Md>{isNonsource ? order.produceMd : order.implementationMd}</Md>,
+      children: isNonsource ? (
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Md>{order.produceMd}</Md>
+          {order.deliverables.map((d) => (
+            <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
+              <Md>{d.content}</Md>
+            </Card>
+          ))}
+        </Space>
+      ) : (
+        <Md>{order.implementationMd}</Md>
+      ),
     },
     ...(!isNonsource
       ? [
@@ -242,7 +258,7 @@ export default function OrderDetail({
         <Title level={3} style={{ margin: 0 }}>
           {order.key}
         </Title>
-        <Badge status={phaseBadge(status.phase)} text={status.phaseRaw ?? status.phase} />
+        <Badge status={phaseBadge(status.phase)} text={phaseText(status.phaseRaw, status.phase)} />
         {status.k != null && <Tag color={status.k >= 2 ? "blue" : "default"}>K={status.k}</Tag>}
         {wt && <Tag color={wt.color}>{wt.label}</Tag>}
         {order.kind === "task" && <Tag>문서</Tag>}
