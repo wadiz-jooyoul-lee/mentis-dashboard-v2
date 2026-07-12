@@ -587,13 +587,20 @@ export default function OrchestrationBoard({
         </div>
       )}
 
-      {/* 검증 (test-runs) — v1 이슈 테스트 리포트 그대로 */}
-      {epic!.runs.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <Title level={4}>검증</Title>
+      {/* 검증 (test-runs) — 회차 없어도 영역은 표시 */}
+      <div style={{ marginTop: 20 }}>
+        <Title level={4}>검증</Title>
+        {epic!.runs.length > 0 ? (
           <IssueReport issueKey={epicKey} runs={epic!.runs} embedded />
-        </div>
-      )}
+        ) : (
+          <Card size="small">
+            <Text type="secondary">
+              아직 테스트 회차가 없습니다 — code 오더에서 <Text code>dobby-test</Text> 실행 시
+              <Text code> test-runs/</Text>에 회차가 쌓이고 여기 리포트가 표시됩니다.
+            </Text>
+          </Card>
+        )}
+      </div>
 
       {/* 종료 서머리 (summary.md) */}
       {epic!.summaryMd && (

@@ -1,6 +1,6 @@
 import { listEpics } from "@/lib/orchestration";
 import { getMetaDir } from "@/lib/issues";
-import { listJobs } from "@/lib/jobs";
+import { listJobs, listArchivedJobs } from "@/lib/jobs";
 import OrchestrationList from "@/components/OrchestrationList";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +15,12 @@ export default function OrchestrationPage({
   if (type === "code" || type === "nonsource") {
     epics = epics.filter((e) => e.workType === type);
   }
-  return <OrchestrationList epics={epics} sourceDir={getMetaDir()} initialJobs={listJobs()} />;
+  return (
+    <OrchestrationList
+      epics={epics}
+      sourceDir={getMetaDir()}
+      initialJobs={listJobs()}
+      initialArchived={listArchivedJobs()}
+    />
+  );
 }

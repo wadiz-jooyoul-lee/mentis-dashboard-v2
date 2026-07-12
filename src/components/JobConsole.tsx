@@ -1,135 +1,189 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Breadcrumb, Space, Typography, Button, Badge, Alert } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Space, Button, Badge, Typography, Input, Tag, message } from "antd";
 import {
   StopOutlined,
   RedoOutlined,
   InboxOutlined,
-  LinkOutlined,
+  ReloadOutlined,
+  PlayCircleOutlined,
+  SendOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import FeedView from "@/components/FeedView";
-import type { FeedItem } from "@/lib/jobs";
-import { jiraUrl } from "@/lib/jira";
+import type { JobStatus, JobState } from "@/lib/jobs";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+const { TextArea } = Input;
 
-type Status = {
-  state?: "none" | "running" | "done" | "failed";
-  startedAt?: number;
-  feed?: FeedItem[];
-  sessionId?: string | null;
+const BADGE: Record<Exclude<JobState, "none">, { status: "processing" | "success" | "error" | "default"; text: string }> = {
+  running: { status: "processing", text: "실행 중" },
+  done: { status: "success", text: "완료" },
+  failed: { status: "error", text: "실패" },
+  stopped: { status: "default", text: "정지됨" },
 };
 
-export default function JobConsole({ issueKey }: { issueKey: string }) {
-  const router = useRouter();
-  const [s, setS] = useState<Status | null>(null);
-  const [error, setError] = useState<string | null>(null);
+type Running = Exclude<JobStatus, { state: "none" }>;
+
+export default function JobConsole({
+  orderKey,
+  initial,
+  height = 320,
+  onChange,
+}: {
+  orderKey: string;
+  initial?: JobStatus;
+  height?: number | string;
+  onChange?: () => void;
+}) {
+  const [s, setS] = useState<JobStatus>(initial ?? { state: "none" });
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const injecting = useRef(false);
+
+  const pending = s.state === "none" ? null : (s as Running).pending;
+  const sessionId = s.state === "none" ? null : (s as Running).sessionId;
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(
-        `/api/issue-start?key=${encodeURIComponent(issueKey)}`,
-        { cache: "no-store" }
-      );
+      const r = await fetch(`/api/orders?key=${encodeURIComponent(orderKey)}`, { cache: "no-store" });
       setS(await r.json());
     } catch {
       /* 무시 */
     }
-  }, [issueKey]);
+  }, [orderKey]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!initial) refresh();
+  }, [initial, refresh]);
 
+  // 실행 중이거나 예약이 걸려 있으면 폴링(예약 있으면 종료 감지를 위해 더 자주)
   useEffect(() => {
-    if (s?.state !== "running") return;
-    const id = setInterval(refresh, 2000);
-    return () => clearInterval(id);
-  }, [s?.state, refresh]);
+    const active = s.state === "running" || (!!pending && !!sessionId);
+    if (!active) return;
+    const iv = pending ? 1000 : 2000;
+    timer.current = setInterval(refresh, iv);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
+  }, [s.state, pending, sessionId, refresh]);
 
-  async function stop() {
-    await fetch(`/api/issue-start?key=${encodeURIComponent(issueKey)}`, {
-      method: "DELETE",
-    });
-    setTimeout(refresh, 800);
-  }
-  async function resume() {
+  // 예약 자동 주입: 실행이 끝났고(pending+세션 존재) → 즉시 이어서 넣는다.
+  useEffect(() => {
+    if (s.state === "none" || s.state === "running") return;
+    if (pending && sessionId && !injecting.current) {
+      injecting.current = true;
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: orderKey, applyPending: true }),
+      })
+        .then(() => {
+          message.success("예약한 피드백을 이어서 전달했습니다");
+          return refresh();
+        })
+        .catch(() => {})
+        .finally(() => {
+          injecting.current = false;
+          onChange?.();
+        });
+    }
+  }, [s.state, pending, sessionId, orderKey, refresh, onChange]);
+
+  const post = (body: object) =>
+    fetch("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  const act = async (fn: () => Promise<Response>, ok: string) => {
     setBusy(true);
-    const r = await fetch("/api/issue-start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: issueKey, resume: true }),
-    });
-    if (!r.ok) setError("재개에 실패했습니다.");
-    setBusy(false);
-    refresh();
-  }
-  async function archive() {
-    const r = await fetch(
-      `/api/issue-start?key=${encodeURIComponent(issueKey)}&action=archive`,
-      { method: "DELETE" }
-    );
-    if (r.ok) router.push("/orchestration");
-    else setError("보관에 실패했습니다.");
-  }
+    try {
+      const r = await fn();
+      const b = await r.json().catch(() => ({}));
+      if (r.ok) {
+        message.success(ok);
+        await refresh();
+        onChange?.();
+      } else {
+        message.error(b?.error ?? "실패");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const state = s?.state ?? "none";
-  const elapsed =
-    s?.startedAt != null
-      ? `${Math.max(0, Math.round((Date.now() - s.startedAt) / 1000))}초`
-      : null;
+  const stop = () => act(() => fetch(`/api/orders?key=${encodeURIComponent(orderKey)}`, { method: "DELETE" }), "정지 요청됨");
+  const start = () => act(() => post({ key: orderKey }), "실행 시작");
+  const archive = () => act(() => fetch(`/api/orders?key=${encodeURIComponent(orderKey)}&action=archive`, { method: "DELETE" }), "보관됨");
+
+  // 피드백: 실행 중이면 예약(다음 턴 자동 주입), 아니면 즉시 이어서 전송.
+  const sendNow = () => {
+    if (!msg.trim()) return;
+    if (!sessionId) return message.error("세션이 아직 없어 전달할 수 없습니다");
+    act(() => post({ key: orderKey, resume: true, message: msg }), "이어서 전달").then(() => setMsg(""));
+  };
+  const queue = () => {
+    if (!msg.trim()) return;
+    act(() => post({ key: orderKey, queue: true, message: msg }), "예약됨 (다음 턴에 자동 전달)").then(() => setMsg(""));
+  };
+  const cancelQueue = () => act(() => post({ key: orderKey, unqueue: true }), "예약 취소");
+
+  const running = s.state === "running";
+  const badge = s.state === "none" ? null : BADGE[s.state];
+  const canResume = (s.state === "failed" || s.state === "stopped") && !!sessionId;
 
   return (
-    <div>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orchestration">오케스트레이션</Link> },
-          { title: `콘솔: ${issueKey}` },
-        ]}
-        style={{ marginBottom: 12 }}
-      />
-      <Space align="center" size={12} wrap style={{ marginBottom: 12 }}>
-        <Title level={3} style={{ margin: 0 }}>
-          {issueKey}
-        </Title>
-        {state === "running" && <Badge status="processing" text="실행 중" />}
-        {state === "done" && <Badge status="success" text="완료" />}
-        {state === "failed" && <Badge status="error" text="정지/실패" />}
-        {state === "none" && <Badge status="default" text="기록 없음" />}
-        {elapsed && <Text type="secondary">경과 {elapsed}</Text>}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(issueKey)}
-          target="_blank"
-        >
-          Jira
-        </Button>
-        {state === "running" && (
-          <Button danger icon={<StopOutlined />} onClick={stop}>
-            정지
+    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space wrap>
+        {badge ? <Badge status={badge.status} text={badge.text} /> : <Text type="secondary">잡 없음</Text>}
+        <Button size="small" icon={<ReloadOutlined />} onClick={refresh} disabled={busy}>새로고침</Button>
+        {running && <Button size="small" danger icon={<StopOutlined />} onClick={stop} loading={busy}>정지</Button>}
+        {!running && (
+          <Button size="small" type="primary" ghost icon={<PlayCircleOutlined />} onClick={start} loading={busy}>
+            {s.state === "none" ? "실행" : "새로 실행"}
           </Button>
         )}
-        {state === "failed" && s?.sessionId && (
-          <Button icon={<RedoOutlined />} loading={busy} onClick={resume}>
-            이어서 진행
-          </Button>
-        )}
-        {state !== "running" && state !== "none" && (
-          <Button icon={<InboxOutlined />} onClick={archive}>
-            보관
-          </Button>
+        {canResume && <Button size="small" icon={<RedoOutlined />} onClick={() => act(() => post({ key: orderKey, resume: true }), "이어서")} loading={busy}>이어서</Button>}
+        {(s.state === "done" || s.state === "failed" || s.state === "stopped") && (
+          <Button size="small" icon={<InboxOutlined />} onClick={archive} loading={busy}>보관</Button>
         )}
       </Space>
-      {error && (
-        <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />
+
+      {pending && (
+        <Tag icon={<ClockCircleOutlined />} color="processing" closable onClose={cancelQueue}>
+          예약된 피드백: {pending.length > 40 ? pending.slice(0, 40) + "…" : pending}
+        </Tag>
       )}
-      <FeedView feed={s?.feed ?? []} height="calc(100vh - 240px)" />
-    </div>
+
+      <FeedView feed={s.state === "none" ? [] : s.feed} height={height} />
+
+      {/* 피드백 입력 — 실행 중이면 예약, 아니면 즉시 이어서 */}
+      {s.state !== "none" && (
+        <Space.Compact style={{ width: "100%" }}>
+          <TextArea
+            placeholder={
+              running
+                ? "실행 중 — 여기 입력해 두면 이번 턴이 끝나는 즉시 자동으로 전달됩니다 (예약)"
+                : "이어서 지시할 피드백을 입력 (⌘/Ctrl+Enter 전송)"
+            }
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            onPressEnter={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                running ? queue() : sendNow();
+              }
+            }}
+            autoSize={{ minRows: 1, maxRows: 4 }}
+            disabled={busy}
+          />
+          {running ? (
+            <Button icon={<ClockCircleOutlined />} onClick={queue} loading={busy} disabled={!msg.trim()}>예약</Button>
+          ) : (
+            <Button type="primary" icon={<SendOutlined />} onClick={sendNow} loading={busy} disabled={!msg.trim() || !sessionId}>전송</Button>
+          )}
+        </Space.Compact>
+      )}
+    </Space>
   );
 }

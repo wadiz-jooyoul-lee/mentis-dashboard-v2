@@ -8,7 +8,7 @@ import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
-import OrderLaunchPanel from "@/components/OrderLaunchPanel";
+import OrderLauncher from "@/components/OrderLauncher";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -40,10 +40,12 @@ export default function OrchestrationList({
   epics,
   sourceDir,
   initialJobs = [],
+  initialArchived = [],
 }: {
   epics: EpicSummary[];
   sourceDir: string;
   initialJobs?: JobWithKey[];
+  initialArchived?: JobWithKey[];
 }) {
   const router = useRouter();
 
@@ -140,7 +142,7 @@ export default function OrchestrationList({
         오케스트레이션 보드
       </Title>
 
-      <OrderLaunchPanel initialJobs={initialJobs} />
+      <OrderLauncher initialJobs={initialJobs} initialArchived={initialArchived} />
 
       <Text type="secondary">읽는 경로: {sourceDir}</Text>
       <div style={{ marginTop: 16 }}>
