@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start -p 7253",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:seed": "node scripts/seed-demo.mjs",
+    "demo:clean": "rm -rf .demo-meta",
+    "demo": "node scripts/seed-demo.mjs && DOBBY_META_PATH=\"$PWD/.demo-meta\" next dev -p 7253"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
