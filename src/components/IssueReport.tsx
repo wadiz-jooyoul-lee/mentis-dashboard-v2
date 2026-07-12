@@ -264,29 +264,31 @@ export default function IssueReport({
           style={{ marginBottom: 12 }}
         />
       )}
-      <Space align="center" style={{ marginBottom: 8 }} size={12} wrap>
-        <Title level={2} style={{ margin: 0 }}>
-          {issueKey}
-        </Title>
-        {badge && (
-          <Badge
-            status={badge.status}
-            text={
-              inProgress && status?.total != null
-                ? `${badge.text} (${status.done ?? 0}/${status.total})`
-                : badge.text
-            }
-          />
-        )}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(issueKey)}
-          target="_blank"
-        >
-          Jira에서 열기
-        </Button>
-      </Space>
+      {!embedded && (
+        <Space align="center" style={{ marginBottom: 8 }} size={12} wrap>
+          <Title level={2} style={{ margin: 0 }}>
+            {issueKey}
+          </Title>
+          {badge && (
+            <Badge
+              status={badge.status}
+              text={
+                inProgress && status?.total != null
+                  ? `${badge.text} (${status.done ?? 0}/${status.total})`
+                  : badge.text
+              }
+            />
+          )}
+          <Button
+            type="link"
+            icon={<LinkOutlined />}
+            href={jiraUrl(issueKey)}
+            target="_blank"
+          >
+            Jira에서 열기
+          </Button>
+        </Space>
+      )}
 
       {selected ? (
         <>

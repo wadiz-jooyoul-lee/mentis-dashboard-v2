@@ -6,7 +6,8 @@
     "dev": "next dev -p 7253",
     "build": "next build",
     "start": "next start -p 7253",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",

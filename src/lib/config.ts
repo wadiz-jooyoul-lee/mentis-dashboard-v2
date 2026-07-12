@@ -11,7 +11,7 @@ import { ORDER_KEY_RE, isOrderKey } from "@/lib/keys";
 export { ORDER_KEY_RE, isOrderKey };
 
 /** 경로 문자열의 `~`·`$HOME`을 홈 디렉터리로 확장한다. */
-export function expandPath(v: string): string {
+function expandPath(v: string): string {
   let s = v.trim().replace(/\$\{?HOME\}?/g, os.homedir());
   if (s.startsWith("~")) s = path.join(os.homedir(), s.slice(1));
   return s;
@@ -58,11 +58,6 @@ export function getMetaDir(): string {
   const fromConf = readConfigEnv("DOBBY_META_PATH");
   if (fromConf) return fromConf;
   return path.join(getWorkspaceDir(), "meta");
-}
-
-/** 워크트리 루트($DOBBY_WORKSPACE/subtree). */
-export function getSubtreeDir(): string {
-  return path.join(getWorkspaceDir(), "subtree");
 }
 
 /** 원본 소스 저장소들이 있는 루트($DOBBY_REPOS_ROOT). */
