@@ -347,6 +347,8 @@ function allJobKeys(): string[] {
 function listJobsBy(archived: boolean): JobWithKey[] {
   const jobs: JobWithKey[] = [];
   for (const key of allJobKeys()) {
+    // explain(구현 내용 생성) 잡은 오더 런처가 아니라 해당 이슈의 구현 내용 페이지에서 보여준다.
+    if (key.startsWith("explain-")) continue;
     const m = readMeta(key);
     if (!m) continue;
     if ((m.archived === true) !== archived) continue;

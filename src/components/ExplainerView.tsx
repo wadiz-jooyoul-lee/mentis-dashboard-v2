@@ -1,13 +1,44 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Breadcrumb, Typography, Empty, Button } from "antd";
+import { Breadcrumb, Typography, Empty, Button, Collapse, Badge } from "antd";
 import Link from "next/link";
 import FeedView from "@/components/FeedView";
 import MarkdownDoc from "@/components/MarkdownDoc";
-import type { FeedItem } from "@/lib/jobs";
+import type { FeedItem, JobState } from "@/lib/jobs";
 
 const { Title, Paragraph } = Typography;
+
+type ExplainJob = { state: JobState; feed: FeedItem[] };
+
+/** 이미 생성된 구현 내용 아래에 그 생성 잡(=explain-{키})의 기록을 접어서 보여준다. */
+function JobRecord({ job }: { job: ExplainJob }) {
+  const badge =
+    job.state === "running"
+      ? { status: "processing" as const, text: "생성 중" }
+      : job.state === "done"
+      ? { status: "success" as const, text: "생성 완료" }
+      : job.state === "failed"
+      ? { status: "error" as const, text: "실패" }
+      : { status: "default" as const, text: job.state };
+  return (
+    <Collapse
+      style={{ marginTop: 24 }}
+      items={[
+        {
+          key: "log",
+          label: (
+            <span>
+              구현 내용 생성 기록{" "}
+              <Badge status={badge.status} text={badge.text} style={{ marginLeft: 8 }} />
+            </span>
+          ),
+          children: <FeedView feed={job.feed} height={360} alwaysBottom />,
+        },
+      ]}
+    />
+  );
+}
 
 /** explainer.md가 없을 때: /dobby-explain 생성 실행 + 진행 표시(완료 시 새로고침). */
 function GenerateExplainer({ epicKey }: { epicKey: string }) {
@@ -86,9 +117,11 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
 export default function ExplainerView({
   epicKey,
   md,
+  job = null,
 }: {
   epicKey: string;
   md: string | null;
+  job?: ExplainJob | null;
 }) {
   return (
     <div>
@@ -101,7 +134,14 @@ export default function ExplainerView({
           { title: "구현 내용" },
         ]}
       />
-      {!md ? <GenerateExplainer epicKey={epicKey} /> : <MarkdownDoc md={md} />}
+      {!md ? (
+        <GenerateExplainer epicKey={epicKey} />
+      ) : (
+        <>
+          <MarkdownDoc md={md} />
+          {job && <JobRecord job={job} />}
+        </>
+      )}
     </div>
   );
 }
