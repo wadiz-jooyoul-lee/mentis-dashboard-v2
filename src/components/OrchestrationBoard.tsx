@@ -21,7 +21,7 @@ import {
   Empty,
   Alert,
 } from "antd";
-import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined } from "@ant-design/icons";
+import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
 import IssueReport from "@/components/IssueReport";
 import { dobbyColor } from "@/lib/dobby";
@@ -324,6 +324,11 @@ export default function OrchestrationBoard({
         <Link href={`/orchestration/console/${epicKey}`}>
           <Button type="link" icon={<CodeOutlined />}>
             콘솔
+          </Button>
+        </Link>
+        <Link href={`/orchestration/${epicKey}/explain`}>
+          <Button type="link" icon={<ReadOutlined />}>
+            구현 내용
           </Button>
         </Link>
       </Space>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   startOrder,
+  startExplain,
   resumeOrder,
   stopOrder,
   archiveJob,
@@ -25,6 +26,13 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const jobId = String(body?.key ?? "").trim();
+
+  // 구현 내용(explainer.md) 생성: /dobby-explain {키}
+  if (body?.explain) {
+    const r = startExplain(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
 
   // 잡 조작(예약/이어서/복원/자동주입)은 잡 id로.
   const isJobOp =

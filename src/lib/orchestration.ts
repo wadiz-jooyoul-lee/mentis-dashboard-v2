@@ -262,6 +262,8 @@ export type EpicDetail = {
   runs: ReportRun[];
   /** 대시보드가 띄운 잡(run.log)이 있는지 — 실시간 콘솔 가용 여부. */
   hasJob: boolean;
+  /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
+  explainerMd: string | null;
 };
 
 /** test-runs/{시각}/result.md 회차들(최신순). */
@@ -391,6 +393,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     deliverables: readDeliverables(epicKey),
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
+    explainerMd: readFileSafe(path.join(dir, "explainer.md")),
   };
 }
 

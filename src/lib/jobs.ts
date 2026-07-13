@@ -175,6 +175,16 @@ export function startOrder(target: string): { ok: boolean; reason?: string; jobI
   return { ok: true, jobId };
 }
 
+/** 구현 내용(explainer.md) 생성: `/dobby-explain {키}`를 백그라운드로 실행. 잡 id는 `explain-{키}`. */
+export function startExplain(key: string): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `explain-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-explain ${k}`], false);
+  return { ok: true, jobId };
+}
+
 /** 정지: 실행 중인 프로세스(그룹)를 종료한다. */
 export function stopOrder(key: string): { ok: boolean; reason?: string } {
   const m = readMeta(key);
