@@ -12,7 +12,8 @@ import {
   ClockCircleOutlined,
 } from "@ant-design/icons";
 import FeedView from "@/components/FeedView";
-import type { JobStatus, JobState } from "@/lib/jobs";
+import type { JobState } from "@/lib/jobs";
+import type { ConsoleStatus } from "@/lib/transcript";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -24,55 +25,77 @@ const BADGE: Record<Exclude<JobState, "none">, { status: "processing" | "success
   stopped: { status: "default", text: "정지됨" },
 };
 
-type Running = Exclude<JobStatus, { state: "none" }>;
+type Running = Exclude<ConsoleStatus, { state: "none" }>;
 
 export default function JobConsole({
   orderKey,
+  source,
+  agent,
+  phase,
   initial,
   height = 320,
   onChange,
 }: {
   orderKey: string;
-  initial?: JobStatus;
+  /** "session" 이면 부모 세션 기록(읽기전용). 기본(미지정)은 실시간 run.log. */
+  source?: "session";
+  /** 서브에이전트 콘솔이면 그 슬러그/id (지정 시 기록 재생·추적, 읽기전용) */
+  agent?: string;
+  phase?: string;
+  initial?: ConsoleStatus;
   height?: number | string;
   onChange?: () => void;
 }) {
-  const [s, setS] = useState<JobStatus>(initial ?? { state: "none" });
+  const [s, setS] = useState<ConsoleStatus>(initial ?? { state: "none" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const injecting = useRef(false);
 
-  const pending = s.state === "none" ? null : (s as Running).pending;
-  const sessionId = s.state === "none" ? null : (s as Running).sessionId;
+  const nn = s.state !== "none" ? (s as Running) : null;
+  const pending = nn?.pending ?? null;
+  const sessionId = nn?.sessionId ?? null;
+  const mode = nn?.mode ?? "job";
+  const controllable = nn ? nn.controllable ?? true : true;
+  const live = nn?.live ?? s.state === "running";
+
+  const query = new URLSearchParams({ key: orderKey });
+  if (agent) query.set("agent", agent);
+  if (phase) query.set("phase", phase);
+  if (source) query.set("source", source);
+  const qs = query.toString();
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`/api/orders?key=${encodeURIComponent(orderKey)}`, { cache: "no-store" });
+      const r = await fetch(`/api/orders?${qs}`, { cache: "no-store" });
       setS(await r.json());
     } catch {
       /* 무시 */
     }
-  }, [orderKey]);
+  }, [qs]);
 
   useEffect(() => {
     if (!initial) refresh();
   }, [initial, refresh]);
 
-  // 실행 중이거나 예약이 걸려 있으면 폴링(예약 있으면 종료 감지를 위해 더 자주)
+  // 폴링: 이 콘솔이 열려 있는 동안만(언마운트 시 해제).
+  //  - 제어형(잡): 실행 중이거나 예약 대기 중일 때
+  //  - 기록형(서브/세션): 파일이 아직 커지는 중(추적)일 때만. 유휴(재생)면 멈춘다.
   useEffect(() => {
-    const active = s.state === "running" || (!!pending && !!sessionId);
+    const active = controllable
+      ? s.state === "running" || (!!pending && !!sessionId)
+      : mode === "transcript" && live;
     if (!active) return;
-    const iv = pending ? 1000 : 2000;
+    const iv = controllable ? (pending ? 1000 : 2000) : 2500;
     timer.current = setInterval(refresh, iv);
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, [s.state, pending, sessionId, refresh]);
+  }, [controllable, s.state, mode, live, pending, sessionId, refresh]);
 
-  // 예약 자동 주입: 실행이 끝났고(pending+세션 존재) → 즉시 이어서 넣는다.
+  // 예약 자동 주입(제어형 잡만): 실행이 끝났고 예약+세션이 있으면 즉시 이어서.
   useEffect(() => {
-    if (s.state === "none" || s.state === "running") return;
+    if (!controllable || s.state === "none" || s.state === "running") return;
     if (pending && sessionId && !injecting.current) {
       injecting.current = true;
       fetch("/api/orders", {
@@ -90,7 +113,7 @@ export default function JobConsole({
           onChange?.();
         });
     }
-  }, [s.state, pending, sessionId, orderKey, refresh, onChange]);
+  }, [controllable, s.state, pending, sessionId, orderKey, refresh, onChange]);
 
   const post = (body: object) =>
     fetch("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -116,7 +139,6 @@ export default function JobConsole({
   const start = () => act(() => post({ key: orderKey }), "실행 시작");
   const archive = () => act(() => fetch(`/api/orders?key=${encodeURIComponent(orderKey)}&action=archive`, { method: "DELETE" }), "보관됨");
 
-  // 피드백: 실행 중이면 예약(다음 턴 자동 주입), 아니면 즉시 이어서 전송.
   const sendNow = () => {
     if (!msg.trim()) return;
     if (!sessionId) return message.error("세션이 아직 없어 전달할 수 없습니다");
@@ -129,36 +151,49 @@ export default function JobConsole({
   const cancelQueue = () => act(() => post({ key: orderKey, unqueue: true }), "예약 취소");
 
   const running = s.state === "running";
-  const badge = s.state === "none" ? null : BADGE[s.state];
-  const canResume = (s.state === "failed" || s.state === "stopped") && !!sessionId;
+  const canResume = controllable && (s.state === "failed" || s.state === "stopped") && !!sessionId;
+
+  // 배지: 기록형이면 추적중/재생, 제어형이면 실행중/완료/…
+  const badge =
+    s.state === "none"
+      ? mode === "transcript"
+        ? { status: "default" as const, text: "로그 없음" }
+        : null
+      : mode === "transcript"
+      ? live
+        ? { status: "processing" as const, text: "추적 중" }
+        : { status: "default" as const, text: "재생" }
+      : BADGE[s.state];
 
   return (
     <Space direction="vertical" size={10} style={{ width: "100%" }}>
       <Space wrap>
         {badge ? <Badge status={badge.status} text={badge.text} /> : <Text type="secondary">잡 없음</Text>}
+        {nn?.label && <Tag>{nn.label}</Tag>}
+        {!controllable && <Text type="secondary" style={{ fontSize: 12 }}>읽기 전용</Text>}
         <Button size="small" icon={<ReloadOutlined />} onClick={refresh} disabled={busy}>새로고침</Button>
-        {running && <Button size="small" danger icon={<StopOutlined />} onClick={stop} loading={busy}>정지</Button>}
-        {!running && (
+        {controllable && running && <Button size="small" danger icon={<StopOutlined />} onClick={stop} loading={busy}>정지</Button>}
+        {controllable && !running && (
           <Button size="small" type="primary" ghost icon={<PlayCircleOutlined />} onClick={start} loading={busy}>
             {s.state === "none" ? "실행" : "새로 실행"}
           </Button>
         )}
         {canResume && <Button size="small" icon={<RedoOutlined />} onClick={() => act(() => post({ key: orderKey, resume: true }), "이어서")} loading={busy}>이어서</Button>}
-        {(s.state === "done" || s.state === "failed" || s.state === "stopped") && (
+        {controllable && (s.state === "done" || s.state === "failed" || s.state === "stopped") && (
           <Button size="small" icon={<InboxOutlined />} onClick={archive} loading={busy}>보관</Button>
         )}
       </Space>
 
-      {pending && (
+      {controllable && pending && (
         <Tag icon={<ClockCircleOutlined />} color="processing" closable onClose={cancelQueue}>
           예약된 피드백: {pending.length > 40 ? pending.slice(0, 40) + "…" : pending}
         </Tag>
       )}
 
-      <FeedView feed={s.state === "none" ? [] : s.feed} height={height} />
+      <FeedView feed={s.state === "none" ? [] : s.feed} height={height} alwaysBottom={mode === "transcript"} />
 
-      {/* 피드백 입력 — 실행 중이면 예약, 아니면 즉시 이어서 */}
-      {s.state !== "none" && (
+      {/* 피드백 입력 — 제어형(대시보드 실행 잡)에서만. 기록형은 읽기전용. */}
+      {controllable && s.state !== "none" && (
         <Space.Compact style={{ width: "100%" }}>
           <TextArea
             placeholder={

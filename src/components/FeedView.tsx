@@ -33,25 +33,31 @@ function feedColor(kind: FeedItem["kind"]): string | undefined {
 export default function FeedView({
   feed,
   height = 260,
+  alwaysBottom = false,
 }: {
   feed: FeedItem[];
   height?: number | string;
+  /** true면 갱신마다 항상 최하단(기록 콘솔). false면 하단 근처일 때만 따라감(실시간). */
+  alwaysBottom?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const seeded = useRef(false);
 
-  // 열 때 최하단(최신)으로.
+  // 첫 내용 로드 시엔 항상 최하단. 이후엔 alwaysBottom(기록)이거나 하단 근처면 따라간다.
+  // 탭 전환·비동기 로드 후 레이아웃이 늦게 확정되는 경우까지 잡으려 다음 프레임에 한 번 더.
   useEffect(() => {
     const el = ref.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
-
-  // 새 로그가 붙을 때: 이미 하단 근처면 계속 따라간다(위로 스크롤 중이면 방해 안 함).
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    if (!el || feed.length === 0) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [feed]);
+    const stick = alwaysBottom || !seeded.current || nearBottom;
+    seeded.current = true;
+    if (!stick) return;
+    el.scrollTop = el.scrollHeight;
+    const id = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [feed, alwaysBottom]);
 
   return (
     <div

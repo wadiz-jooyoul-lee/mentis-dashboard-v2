@@ -123,9 +123,10 @@ export function parseOrchestration(md: string): Orchestration {
 
   // 에이전트 상태 표
   const agents: AgentRow[] = [];
-  const aT = findTable(md, "에이전트", "상태");
+  const aT = findTable(md, "에이전트", "상태", "슬러그");
   if (aT) {
-    const iAgent = columnIndex(aT.headers, "에이전트");
+    // 실제 go-dobby orchestration.md는 이름 컬럼을 "슬러그"로 쓰기도 한다 → 둘 다 인식.
+    const iAgent = columnIndex(aT.headers, "에이전트", "슬러그");
     const iIssue = columnIndex(aT.headers, "이슈");
     const iBranch = columnIndex(aT.headers, "브랜치");
     const iState = columnIndex(aT.headers, "상태");
