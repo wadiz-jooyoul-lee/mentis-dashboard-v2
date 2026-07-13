@@ -185,6 +185,37 @@ export function startExplain(key: string): { ok: boolean; reason?: string; jobId
   return { ok: true, jobId };
 }
 
+/** 잡 run.log의 마지막 result 텍스트(실패 원인 표시용). 없으면 null. */
+export function jobResultText(key: string): string | null {
+  try {
+    const log = fs.readFileSync(path.join(jobDir(key), "run.log"), "utf8");
+    let last: string | null = null;
+    for (const line of log.split("\n")) {
+      const s = line.trim();
+      if (!s) continue;
+      try {
+        const ev = JSON.parse(s) as { type?: string; result?: unknown };
+        if (ev.type === "result" && typeof ev.result === "string") last = ev.result;
+      } catch {
+        /* skip */
+      }
+    }
+    return last ? last.slice(0, 200) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 아바타 소감(재미기능) 생성: `/avatar-quips {키}`를 백그라운드로 실행. 잡 id는 `quips-{키}`. */
+export function startQuips(key: string): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `quips-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/avatar-quips ${k}`], false);
+  return { ok: true, jobId };
+}
+
 /** 정지: 실행 중인 프로세스(그룹)를 종료한다. */
 export function stopOrder(key: string): { ok: boolean; reason?: string } {
   const m = readMeta(key);
@@ -347,8 +378,8 @@ function allJobKeys(): string[] {
 function listJobsBy(archived: boolean): JobWithKey[] {
   const jobs: JobWithKey[] = [];
   for (const key of allJobKeys()) {
-    // explain(구현 내용 생성) 잡은 오더 런처가 아니라 해당 이슈의 구현 내용 페이지에서 보여준다.
-    if (key.startsWith("explain-")) continue;
+    // explain(구현 내용 생성)·quips(아바타 소감) 잡은 오더 런처에 노출하지 않는다(부가 기능).
+    if (key.startsWith("explain-") || key.startsWith("quips-")) continue;
     const m = readMeta(key);
     if (!m) continue;
     if ((m.archived === true) !== archived) continue;

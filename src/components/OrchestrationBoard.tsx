@@ -22,10 +22,11 @@ import {
   Alert,
 } from "antd";
 import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
-import DobbyIcon, { dobbyExpression } from "@/components/DobbyIcon";
-import BtsAvatar from "@/components/BtsAvatar";
-import Fromis9Avatar from "@/components/Fromis9Avatar";
+import DobbyIcon from "@/components/DobbyIcon";
+import GroupAvatar from "@/components/GroupAvatar";
+import QuipsControl from "@/components/QuipsControl";
 import IssueReport from "@/components/IssueReport";
+import type { QuipsFile, Quip } from "@/lib/quips";
 import { dobbyColor } from "@/lib/dobby";
 import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
@@ -121,18 +122,12 @@ function eventItem(e: EventRow) {
   };
 }
 
-/** 배정된 그룹 아바타를 그린다(bts/fromis=오리지널 SVG, dobby=도비 아이콘). */
-function AgentAvatar({ a, avatar }: { a: AgentRow; avatar?: AssignedAvatar }) {
-  if (avatar?.group === "bts" && avatar.member) return <BtsAvatar member={avatar.member} size={34} state={a.state} />;
-  if (avatar?.group === "fromis" && avatar.member) return <Fromis9Avatar member={avatar.member} size={34} state={a.state} />;
-  return <DobbyIcon size={34} expression={dobbyExpression(a.state)} color={dobbyColor(a.agent)} />;
-}
-
 function AgentCard({
   a,
   epicKey,
   changeSlug,
   avatar,
+  quip,
 }: {
   a: AgentRow;
   epicKey: string;
@@ -140,6 +135,8 @@ function AgentCard({
   changeSlug?: string;
   /** 배정된 그룹 아바타 */
   avatar?: AssignedAvatar;
+  /** 이 에이전트의 board 소감(있으면 호버 말풍선) */
+  quip?: Quip | null;
 }) {
   const router = useRouter();
   const stale = isStale(a);
@@ -163,7 +160,7 @@ function AgentCard({
     >
       <Space direction="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <AgentAvatar a={a} avatar={avatar} />
+          <GroupAvatar slug={a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
             <Tag
               color={roleColor(a.agent)}
@@ -217,9 +214,11 @@ function AgentCard({
 export default function OrchestrationBoard({
   epicKey,
   epic,
+  quips,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  quips?: QuipsFile | null;
 }) {
   const o = epic?.orchestration ?? null;
 
@@ -322,6 +321,7 @@ export default function OrchestrationBoard({
             구현 내용
           </Button>
         </Link>
+        <QuipsControl epicKey={epicKey} />
       </Space>
     </div>
   );
@@ -434,6 +434,7 @@ export default function OrchestrationBoard({
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
                     avatar={avatarMap.get(a.agent)}
+                    quip={quips?.board?.[a.agent]}
                   />
                 ))}
               </div>
@@ -521,10 +522,12 @@ export default function OrchestrationBoard({
               key: g.agent,
               label: (
                 <Space size={8} align="center">
-                  <DobbyIcon
+                  <GroupAvatar
+                    slug={g.agent}
+                    avatar={avatarMap.get(g.agent)}
+                    state={o?.agents.find((x) => x.agent === g.agent)?.state}
                     size={24}
-                    expression="curious"
-                    color={dobbyColor(roleBySlug.get(g.agent) ?? g.agent)}
+                    quip={quips?.reviews?.[g.agent]}
                   />
                   <Text strong>{roleBySlug.get(g.agent) ?? g.agent}</Text>
                   <Tag>{g.reviews.length}개 라운드</Tag>

@@ -10,8 +10,11 @@ import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
 import JobConsole from "@/components/JobConsole";
-import DobbyIcon from "@/components/DobbyIcon";
+import GroupAvatar from "@/components/GroupAvatar";
+import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
+import { assignOrderAvatars } from "@/lib/avatarAssign";
+import type { QuipsFile } from "@/lib/quips";
 import "./markdown.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -135,11 +138,14 @@ function WorkBody({ w }: { w: AgentWork }) {
 export default function OrchestrationChanges({
   epicKey,
   epic,
+  quips,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  quips?: QuipsFile | null;
 }) {
   const agents: AgentRow[] = epic?.orchestration?.agents ?? [];
+  const avatarMap = assignOrderAvatars(epicKey, agents.map((a) => a.agent));
   const works = epic?.agentWorks ?? [];
   const contracts = epic?.contracts ?? [];
 
@@ -184,9 +190,12 @@ export default function OrchestrationChanges({
           ]}
           style={{ marginBottom: 8 }}
         />
-        <Title level={2} style={{ margin: 0 }}>
-          에이전트 상세 — {epicKey}
-        </Title>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Title level={2} style={{ margin: 0 }}>
+            에이전트 상세 — {epicKey}
+          </Title>
+          <QuipsControl epicKey={epicKey} />
+        </div>
       </div>
       <Paragraph type="secondary" style={{ marginTop: 12 }}>
         각 에이전트의 상태와 작업 내역입니다. 대화 로그(agent-logs.json)가 있으면 수정 파일·커밋·diff·요약을, 없으면 상태·계약을 보여줍니다.
@@ -224,7 +233,7 @@ export default function OrchestrationChanges({
                 <Card
                   title={
                     <Space size={8} align="center" wrap>
-                      <DobbyIcon size={26} expression="curious" color={dobbyColor(a.agent)} />
+                      <GroupAvatar slug={a.agent} avatar={avatarMap.get(a.agent)} state={a.state} size={26} quip={quips?.changes?.[a.agent]} />
                       <Text strong style={{ fontSize: 16 }}>
                         {a.agent}
                       </Text>

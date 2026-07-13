@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   startOrder,
   startExplain,
+  startQuips,
   resumeOrder,
   stopOrder,
   archiveJob,
@@ -11,9 +12,13 @@ import {
   setPending,
   clearPending,
   applyPending,
+  getJobStatus,
+  jobResultText,
   JOB_ID_RE,
 } from "@/lib/jobs";
 import { getConsole } from "@/lib/transcript";
+import { readQuips, orderSignature } from "@/lib/quips";
+import { ORDER_KEY_RE } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +35,13 @@ export async function POST(req: NextRequest) {
   // 구현 내용(explainer.md) 생성: /dobby-explain {키}
   if (body?.explain) {
     const r = startExplain(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 아바타 소감(재미기능) 생성: /avatar-quips {키}
+  if (body?.quips) {
+    const r = startQuips(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
@@ -92,6 +104,30 @@ export async function DELETE(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
+
+  // 아바타 소감 상태: ?quips={오더키} → 파일 유무·서명·최신여부·잡 상태
+  const quipsKey = (sp.get("quips") ?? "").trim();
+  if (quipsKey) {
+    if (!ORDER_KEY_RE.test(quipsKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    const f = readQuips(quipsKey);
+    const currentSig = orderSignature(quipsKey);
+    const job = getJobStatus(`quips-${quipsKey}`);
+    const stale = !f || f.sig !== currentSig;
+    // 잡이 끝났는데(성공/실패) 최신 파일이 없으면 실패로 보고 원인(잡 result)을 함께 준다.
+    const failedNoResult =
+      (job.state === "failed" || job.state === "done" || job.state === "stopped") && stale;
+    return NextResponse.json({
+      hasFile: !!f,
+      fileSig: f?.sig ?? null,
+      currentSig,
+      stale,
+      jobState: job.state,
+      reason: failedNoResult ? jobResultText(`quips-${quipsKey}`) : null,
+    });
+  }
+
   const key = (sp.get("key") ?? "").trim();
   if (!key) {
     return NextResponse.json({ jobs: listJobs(), archived: listArchivedJobs() });
