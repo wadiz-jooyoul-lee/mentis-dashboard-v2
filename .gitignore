@@ -37,3 +37,6 @@ next-env.d.ts
 
 # demo fixture 데이터(스크립트로 재생성)
 /.demo-meta
+
+# oh-my-claudecode 로컬 상태
+/.omc
