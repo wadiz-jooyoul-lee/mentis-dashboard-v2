@@ -160,7 +160,8 @@ export function parseOrchestration(md: string): Orchestration {
     }
   }
 
-  // 실행 모드: "## 실행 모드: 병렬 …" 형태 또는 섹션 본문
+  // 실행 모드: "## 실행 모드: 병렬 …" 헤딩 형태 또는 불릿 필드 형태
+  // ("- **실행 모드**: A (대화형)" / "- 실행 모드: A(대화형)") 모두 수용(스킬 드리프트 방어).
   let mode: string | null = null;
   const modeHeading = lines.find(
     (l) => /^##\s/.test(l) && l.includes("실행 모드")
@@ -168,6 +169,10 @@ export function parseOrchestration(md: string): Orchestration {
   if (modeHeading) {
     const after = modeHeading.split(/실행 모드\s*[:：]?/)[1]?.trim();
     mode = after || sectionBody(md, "실행 모드").split("\n")[0] || null;
+  }
+  if (!mode) {
+    const m = md.match(/^\s*[-*]?\s*\*{0,2}실행 모드\*{0,2}\s*[:：]\s*(.+)$/m);
+    if (m) mode = m[1].trim().replace(/^`|`$/g, "") || null;
   }
 
   const conflicts = sectionBody(md, "충돌");

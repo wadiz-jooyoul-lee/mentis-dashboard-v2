@@ -10,7 +10,7 @@ import path from "node:path";
 import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
-import { parseOrderStatus } from "@/lib/parseOrderStatus";
+import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import type { Metric } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
@@ -113,6 +113,9 @@ export type EpicSummary = {
   /** go-dobby 확장: 개발/비개발 구분 + 제목 */
   workType: WorkType;
   title: string | null;
+  /** status.md 현재 단계(정규화 버킷) + 짧은 라벨 — 에이전트 표가 아직 없는 착수 직후 표시용 */
+  phase: PhaseKey;
+  phaseLabel: string;
 };
 
 function summarize(key: string, o: Orchestration | null, statusMd: string | null): EpicSummary {
@@ -131,6 +134,8 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     lastActivity: (times.length ? times[times.length - 1] : null) ?? st?.updatedAt ?? null,
     workType: workTypeOf(key, statusMd),
     title: st?.meta.title ?? null,
+    phase: st?.phase ?? "unknown",
+    phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
   };
 }
 
