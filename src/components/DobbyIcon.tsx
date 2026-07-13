@@ -59,6 +59,7 @@ export default function DobbyIcon({
       fill="none"
       aria-hidden
       role="img"
+      style={{ flexShrink: 0 }}
     >
       {/* 귀 */}
       <path

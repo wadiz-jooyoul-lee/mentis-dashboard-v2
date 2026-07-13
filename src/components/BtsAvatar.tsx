@@ -217,7 +217,7 @@ export default function BtsAvatar({ member, size = 56 }: { member: string; size?
   if (!cfg) return null;
   const bg = `bg-${member}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`${member} 아바타`}>
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`${member} 아바타`} style={{ flexShrink: 0 }}>
       <defs>
         <radialGradient id={bg} cx="50%" cy="38%" r="70%">
           <stop offset="0%" stopColor={shade(cfg.color, 0.5)} />

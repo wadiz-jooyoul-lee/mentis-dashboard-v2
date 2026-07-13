@@ -23,8 +23,11 @@ import {
 } from "antd";
 import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
+import BtsAvatar from "@/components/BtsAvatar";
+import Fromis9Avatar from "@/components/Fromis9Avatar";
 import IssueReport from "@/components/IssueReport";
 import { dobbyColor } from "@/lib/dobby";
+import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
@@ -139,15 +142,25 @@ function eventItem(e: EventRow) {
   };
 }
 
+/** 배정된 그룹 아바타를 그린다(bts/fromis=오리지널 SVG, dobby=도비 아이콘). */
+function AgentAvatar({ a, avatar }: { a: AgentRow; avatar?: AssignedAvatar }) {
+  if (avatar?.group === "bts" && avatar.member) return <BtsAvatar member={avatar.member} size={34} />;
+  if (avatar?.group === "fromis" && avatar.member) return <Fromis9Avatar member={avatar.member} size={34} />;
+  return <DobbyIcon size={34} expression={dobbyExpression(a.state)} color={dobbyColor(a.agent)} />;
+}
+
 function AgentCard({
   a,
   epicKey,
   changeSlug,
+  avatar,
 }: {
   a: AgentRow;
   epicKey: string;
   /** 이 에이전트의 변경 기록 slug(있으면 카드 클릭 시 해당 섹션으로 이동) */
   changeSlug?: string;
+  /** 배정된 그룹 아바타 */
+  avatar?: AssignedAvatar;
 }) {
   const router = useRouter();
   const stale = isStale(a);
@@ -171,11 +184,7 @@ function AgentCard({
     >
       <Space direction="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <DobbyIcon
-            size={34}
-            expression={dobbyExpression(a.state)}
-            color={dobbyColor(a.agent)}
-          />
+          <AgentAvatar a={a} avatar={avatar} />
           {a.agent && (
             <Tag
               color={roleColor(a.agent)}
@@ -234,6 +243,9 @@ export default function OrchestrationBoard({
   epic: EpicDetail | null;
 }) {
   const o = epic?.orchestration ?? null;
+
+  // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
+  const avatarMap = assignOrderAvatars(epicKey, (o?.agents ?? []).map((a) => a.agent));
 
   // 리뷰/계약 slug → 한국어 역할명(계약 헤딩에서, "계약" 접미 제거)
   const roleBySlug = new Map(
@@ -442,6 +454,7 @@ export default function OrchestrationBoard({
                     a={a}
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
+                    avatar={avatarMap.get(a.agent)}
                   />
                 ))}
               </div>
