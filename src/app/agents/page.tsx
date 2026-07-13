@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Breadcrumb, Card, Col, Row, Typography, Tag, Space } from "antd";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
 import BtsAvatar, { btsColor } from "@/components/BtsAvatar";
+import Fromis9Avatar, { fromisColor } from "@/components/Fromis9Avatar";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Paragraph, Text } = Typography;
@@ -17,8 +18,8 @@ type Agent = {
   realName?: string;
   birth?: string;
   position?: string;
-  // true면 도비 아이콘 대신 이름(멤버)에 맞는 BTS 오리지널 아바타를 그린다.
-  bts?: boolean;
+  // 지정 시 도비 아이콘 대신 이름(멤버)에 맞는 그룹 오리지널 아바타를 그린다.
+  avatar?: "bts" | "fromis";
 };
 
 // hue가 골고루 퍼지도록 선정(20~336). 성격·좋아하는 것은 재미로 붙인 소개용.
@@ -39,23 +40,37 @@ const AGENTS: Agent[] = [
 
 // 방탄소년단(BTS) 멤버 — 실제 프로필(본명·생년월일·포지션) 기반. 성격 한 줄은 대표 특징에서 뽑았다.
 const BTS: Agent[] = [
-  { name: "RM", bts: true, realName: "김남준", birth: "1994-09-12", position: "리더 · 메인래퍼", expression: "thinking", personality: "팀을 이끄는 명석한 지휘자. 다만 손대는 건 곧잘 부숴서 '파괴신'이라 불린다.", likes: "논리적으로 딱 맞는 구조" },
-  { name: "진", bts: true, realName: "김석진", birth: "1992-12-04", position: "서브보컬 · 비주얼", expression: "happy", personality: "‘월드와이드 핸섬’ 비주얼 담당 맏형. 나이는 제일 많은데 장난기도 제일 많다.", likes: "빵 터지는 아재개그" },
-  { name: "슈가", bts: true, realName: "민윤기", birth: "1993-03-09", position: "리드래퍼 · 프로듀서", expression: "resting", personality: "곡을 짓는 리드래퍼 겸 프로듀서(Agust D). 무심한 듯해도 속은 누구보다 따뜻하다.", likes: "완성도 높은 트랙" },
-  { name: "제이홉", bts: true, realName: "정호석", birth: "1994-02-18", position: "메인댄서 · 댄스캡틴", expression: "happy", personality: "‘희망’ 그 자체인 메인댄서 겸 댄스캡틴. 어디서든 긍정 에너지를 뿜는다.", likes: "완벽하게 맞는 군무" },
-  { name: "지민", bts: true, realName: "박지민", birth: "1995-10-13", position: "메인댄서 · 리드보컬", expression: "curious", personality: "부드러운 춤과 고음을 지닌 메인댄서·리드보컬. 무대에 진심인 섬세한 완벽주의자.", likes: "관객이 숨죽이는 무대" },
-  { name: "뷔", bts: true, realName: "김태형", birth: "1995-12-30", position: "서브보컬 · 비주얼", expression: "thinking", personality: "깊은 저음과 비주얼의 서브보컬. 사진과 연기를 사랑하는 자유로운 예술가.", likes: "감성 가득한 사진 한 컷" },
-  { name: "정국", bts: true, realName: "전정국", birth: "1997-09-01", position: "메인보컬 · 센터 · 막내", expression: "happy", personality: "노래·춤·랩·운동까지 다 잘하는 ‘황금막내’. 팀의 센터이자 막내.", likes: "새로 도전하는 모든 것" },
+  { name: "RM", avatar: "bts", realName: "김남준", birth: "1994-09-12", position: "리더 · 메인래퍼", expression: "thinking", personality: "팀을 이끄는 명석한 지휘자. 다만 손대는 건 곧잘 부숴서 '파괴신'이라 불린다.", likes: "논리적으로 딱 맞는 구조" },
+  { name: "진", avatar: "bts", realName: "김석진", birth: "1992-12-04", position: "서브보컬 · 비주얼", expression: "happy", personality: "‘월드와이드 핸섬’ 비주얼 담당 맏형. 나이는 제일 많은데 장난기도 제일 많다.", likes: "빵 터지는 아재개그" },
+  { name: "슈가", avatar: "bts", realName: "민윤기", birth: "1993-03-09", position: "리드래퍼 · 프로듀서", expression: "resting", personality: "곡을 짓는 리드래퍼 겸 프로듀서(Agust D). 무심한 듯해도 속은 누구보다 따뜻하다.", likes: "완성도 높은 트랙" },
+  { name: "제이홉", avatar: "bts", realName: "정호석", birth: "1994-02-18", position: "메인댄서 · 댄스캡틴", expression: "happy", personality: "‘희망’ 그 자체인 메인댄서 겸 댄스캡틴. 어디서든 긍정 에너지를 뿜는다.", likes: "완벽하게 맞는 군무" },
+  { name: "지민", avatar: "bts", realName: "박지민", birth: "1995-10-13", position: "메인댄서 · 리드보컬", expression: "curious", personality: "부드러운 춤과 고음을 지닌 메인댄서·리드보컬. 무대에 진심인 섬세한 완벽주의자.", likes: "관객이 숨죽이는 무대" },
+  { name: "뷔", avatar: "bts", realName: "김태형", birth: "1995-12-30", position: "서브보컬 · 비주얼", expression: "thinking", personality: "깊은 저음과 비주얼의 서브보컬. 사진과 연기를 사랑하는 자유로운 예술가.", likes: "감성 가득한 사진 한 컷" },
+  { name: "정국", avatar: "bts", realName: "전정국", birth: "1997-09-01", position: "메인보컬 · 센터 · 막내", expression: "happy", personality: "노래·춤·랩·운동까지 다 잘하는 ‘황금막내’. 팀의 센터이자 막내.", likes: "새로 도전하는 모든 것" },
+];
+
+// 프로미스나인(fromis_9) 현재 멤버 5인 — 본명·생년월일·포지션은 실제 프로필(사실),
+// 성격 한 줄·좋아하는 것은 대표 특징을 재미로 각색.
+const FROMIS: Agent[] = [
+  { name: "송하영", avatar: "fromis", realName: "송하영", birth: "1997-09-29", position: "부캡틴 · 메인보컬 · 메인댄서", expression: "happy", personality: "노래와 춤을 모두 이끄는 든든한 부캡틴. 무대 장악력이 남다르다.", likes: "합이 딱 맞는 무대" },
+  { name: "박지원", avatar: "fromis", realName: "박지원", birth: "1998-03-20", position: "메인보컬", expression: "happy", personality: "청아한 음색의 메인보컬. 고음도 흔들림 없이 안정적으로 뽑아낸다.", likes: "라이브에서 시원하게 터지는 고음" },
+  { name: "이채영", avatar: "fromis", realName: "이채영", birth: "2000-05-14", position: "메인댄서 · 리드래퍼 · 보컬", expression: "happy", personality: "춤과 랩을 오가는 만능 퍼포머. 에너지가 넘쳐 무대를 뜨겁게 만든다.", likes: "관객 떼창" },
+  { name: "이나경", avatar: "fromis", realName: "이나경", birth: "2000-06-01", position: "리드댄서 · 비주얼 · 보컬", expression: "happy", personality: "청량한 비주얼과 고운 춤선의 소유자. 팀의 분위기 메이커.", likes: "카메라 앞 자연스러운 미소" },
+  { name: "백지헌", avatar: "fromis", realName: "백지헌", birth: "2003-04-17", position: "보컬 · 막내", expression: "happy", personality: "그룹의 막내이자 사랑스러운 보컬. 씩씩한 에너지로 팀을 밝힌다.", likes: "칭찬 한마디" },
 ];
 
 function AgentCard({ a }: { a: Agent }) {
-  // BTS 멤버는 시그니처 색 + 오리지널 아바타, 그 외 도비 에이전트는 해시 색 + 도비 아이콘.
-  const color = (a.bts && btsColor(a.name)) || dobbyColor(a.name);
+  // 그룹 멤버는 시그니처 색 + 오리지널 아바타, 그 외 도비 에이전트는 해시 색 + 도비 아이콘.
+  const sig =
+    a.avatar === "bts" ? btsColor(a.name) : a.avatar === "fromis" ? fromisColor(a.name) : null;
+  const color = sig || dobbyColor(a.name);
   return (
     <Card style={{ height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {a.bts ? (
+        {a.avatar === "bts" ? (
           <BtsAvatar member={a.name} size={56} />
+        ) : a.avatar === "fromis" ? (
+          <Fromis9Avatar member={a.name} size={56} />
         ) : (
           <DobbyIcon size={56} expression={a.expression} color={color} />
         )}
@@ -122,6 +137,21 @@ export default function AgentsPage() {
 
       <Row gutter={[16, 16]}>
         {BTS.map((a) => (
+          <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
+            <AgentCard a={a} />
+          </Col>
+        ))}
+      </Row>
+
+      <Title level={3} style={{ marginTop: 40 }}>
+        프로미스나인 (fromis_9)
+      </Title>
+      <Paragraph type="secondary">
+        재미로 추가한 프로미스나인 현재 멤버 에이전트. 본명·생년월일·포지션은 실제 프로필을, 성격 한 줄은 대표 특징을 담았습니다.
+      </Paragraph>
+
+      <Row gutter={[16, 16]}>
+        {FROMIS.map((a) => (
           <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
             <AgentCard a={a} />
           </Col>
