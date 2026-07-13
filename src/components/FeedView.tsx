@@ -1,51 +1,92 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { FeedItem } from "@/lib/jobs";
 
-const COLOR: Record<FeedItem["kind"], string> = {
-  system: "#8c8c8c",
-  text: "#d9d9d9",
-  tool: "#69c0ff",
-  result: "#95de64",
-};
-const PREFIX: Record<FeedItem["kind"], string> = {
-  system: "•",
-  text: "",
-  tool: "$",
-  result: "",
-};
+function feedPrefix(kind: FeedItem["kind"]): string {
+  switch (kind) {
+    case "tool":
+      return "⚙️";
+    case "result":
+      return "";
+    case "system":
+      return "•";
+    default:
+      return "💬";
+  }
+}
 
+function feedColor(kind: FeedItem["kind"]): string | undefined {
+  switch (kind) {
+    case "tool":
+      return "#6cb6ff";
+    case "result":
+      return "#7ee787";
+    case "system":
+      return "#8b949e";
+    default:
+      return undefined;
+  }
+}
+
+/** 잡 실행 로그(콘솔)를 터미널 스타일로 렌더한다. */
 export default function FeedView({
   feed,
   height = 260,
+  alwaysBottom = false,
 }: {
   feed: FeedItem[];
   height?: number | string;
+  /** true면 갱신마다 항상 최하단(기록 콘솔). false면 하단 근처일 때만 따라감(실시간). */
+  alwaysBottom?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const seeded = useRef(false);
+
+  // 첫 내용 로드 시엔 항상 최하단. 이후엔 alwaysBottom(기록)이거나 하단 근처면 따라간다.
+  // 탭 전환·비동기 로드 후 레이아웃이 늦게 확정되는 경우까지 잡으려 다음 프레임에 한 번 더.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || feed.length === 0) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    const stick = alwaysBottom || !seeded.current || nearBottom;
+    seeded.current = true;
+    if (!stick) return;
+    el.scrollTop = el.scrollHeight;
+    const id = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [feed, alwaysBottom]);
+
   return (
     <div
+      ref={ref}
       style={{
-        background: "#141414",
-        color: "#d9d9d9",
+        height,
+        overflow: "auto",
+        background: "#0b0f14",
+        color: "#d6dee8",
         borderRadius: 6,
         padding: 12,
-        height,
-        overflowY: "auto",
-        fontFamily:
-          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        fontSize: 12.5,
-        lineHeight: 1.6,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 1.7,
       }}
     >
       {feed.length === 0 ? (
-        <span style={{ color: "#595959" }}>아직 출력이 없습니다…</span>
+        <span style={{ opacity: 0.6 }}>진행 로그 대기 중…</span>
       ) : (
         feed.map((f, i) => (
-          <div key={i} style={{ color: COLOR[f.kind] }}>
-            {PREFIX[f.kind] ? <span style={{ opacity: 0.6 }}>{PREFIX[f.kind]} </span> : null}
-            {f.text}
+          <div
+            key={i}
+            style={{
+              color: feedColor(f.kind),
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {feedPrefix(f.kind)} {f.text}
           </div>
         ))
       )}

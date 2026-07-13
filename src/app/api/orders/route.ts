@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   startOrder,
+  startExplain,
   resumeOrder,
   stopOrder,
   archiveJob,
   unarchiveJob,
-  getJobStatus,
   listJobs,
   listArchivedJobs,
   setPending,
@@ -13,6 +13,7 @@ import {
   applyPending,
   JOB_ID_RE,
 } from "@/lib/jobs";
+import { getConsole } from "@/lib/transcript";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +26,13 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const jobId = String(body?.key ?? "").trim();
+
+  // 구현 내용(explainer.md) 생성: /dobby-explain {키}
+  if (body?.explain) {
+    const r = startExplain(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
 
   // 잡 조작(예약/이어서/복원/자동주입)은 잡 id로.
   const isJobOp =
@@ -78,14 +86,21 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-/** 조회. key 있으면 단건, 없으면 활성+보관 목록. */
+/**
+ * 조회. key 없으면 활성+보관 목록.
+ * key 있으면 통합 콘솔: agent 지정 시 서브에이전트 기록, 아니면 잡 실시간→없으면 세션 기록.
+ */
 export async function GET(req: NextRequest) {
-  const key = (req.nextUrl.searchParams.get("key") ?? "").trim();
+  const sp = req.nextUrl.searchParams;
+  const key = (sp.get("key") ?? "").trim();
   if (!key) {
     return NextResponse.json({ jobs: listJobs(), archived: listArchivedJobs() });
   }
   if (!JOB_ID_RE.test(key)) {
     return NextResponse.json({ state: "none" });
   }
-  return NextResponse.json(getJobStatus(key));
+  const agent = sp.get("agent")?.trim() || undefined;
+  const phase = sp.get("phase")?.trim() || undefined;
+  const source = sp.get("source") === "session" ? "session" : undefined;
+  return NextResponse.json(getConsole(key, { source, agent, phase }));
 }

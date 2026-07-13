@@ -1,16 +1,13 @@
-import Hub from "@/components/Hub";
-import { getMetrics, listOrders } from "@/lib/orders";
+import SectionGrid from "@/components/SectionGrid";
+import { sections } from "@/lib/sections";
+import { orchestrationMetricsFor } from "@/lib/orchestration";
 
 export const dynamic = "force-dynamic";
 
-function todayYmd(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export default function Home() {
-  const metrics = getMetrics(todayYmd());
-  const orderCount = listOrders().length;
-  return <Hub metrics={metrics} orderCount={orderCount} />;
+  const stats = {
+    "orch-code": orchestrationMetricsFor("code"),
+    "orch-nonsource": orchestrationMetricsFor("nonsource"),
+  };
+  return <SectionGrid sections={sections} stats={stats} />;
 }

@@ -1,14 +1,66 @@
-/**
- * go-dobby 테스트 실행(회차) 리더. (서버 전용, node I/O)
- * 회차: `$DOBBY_META/{키}/test-runs/{YYYYMMDD-HHMMSS}/result.md` (dobby-test, 덮어쓰지 않음).
- * ReportRun 타입·getReportRuns 시그니처는 기존 IssueReport 컴포넌트가 그대로 쓴다.
- */
 import fs from "node:fs";
 import path from "node:path";
-import { getMetaDir, orderDir } from "@/lib/config";
+import os from "node:os";
+
+/** 경로 문자열의 `~`·`$HOME`을 홈 디렉터리로 확장한다. */
+function expandPath(v: string): string {
+  let s = v.trim().replace(/\$\{?HOME\}?/g, os.homedir());
+  if (s.startsWith("~")) s = path.join(os.homedir(), s.slice(1));
+  return s;
+}
+
+/** go-dobby 설정 파일(~/.config/go-dobby/config.env)에서 변수 값을 읽는다. */
+function readConfigEnv(name: string): string | undefined {
+  try {
+    const conf = path.join(os.homedir(), ".config", "go-dobby", "config.env");
+    const txt = fs.readFileSync(conf, "utf8");
+    for (const line of txt.split("\n")) {
+      const m = line.match(
+        new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=\\s*(.*)$`)
+      );
+      if (m) return expandPath(m[1].replace(/^["']|["']$/g, ""));
+    }
+  } catch {
+    /* 파일 없음 → undefined */
+  }
+  return undefined;
+}
+
+/** 설정 해석: 환경변수 → config.env → 기본값 순. */
+function resolveConfig(envName: string, fallback: string): string {
+  const fromEnv = process.env[envName];
+  if (fromEnv && fromEnv.trim()) return expandPath(fromEnv);
+  return readConfigEnv(envName) ?? fallback;
+}
+
+/** 작업 루트($ORCHESTRATION_WORKSPACE). 하위에 subtree/ 와 meta/ 가 있다. */
+export function getWorkspaceDir(): string {
+  return resolveConfig(
+    "ORCHESTRATION_WORKSPACE",
+    path.join(os.homedir(), "work", "dobby-workspace")
+  );
+}
+
+/**
+ * 메타 루트. go-dobby 오더 폴더({키}/)와 잡 로그(.mentis-jobs/)가 여기 있다.
+ * ORCHESTRATION_META_PATH가 있으면 그 경로, 없으면 $ORCHESTRATION_WORKSPACE/meta (스킬 규약과 동일).
+ * (ORCHESTRATION_META_DIR은 레거시 별칭으로 계속 인정)
+ */
+export function getMetaDir(): string {
+  const explicit = process.env.ORCHESTRATION_META_PATH || process.env.ORCHESTRATION_META_DIR;
+  if (explicit && explicit.trim()) return expandPath(explicit);
+  const fromConf = readConfigEnv("ORCHESTRATION_META_PATH");
+  if (fromConf) return fromConf;
+  return path.join(getWorkspaceDir(), "meta");
+}
+
+/** 원본 소스 저장소들이 있는 루트($ORCHESTRATION_REPOS_ROOT). */
+export function getReposRoot(): string {
+  return resolveConfig("ORCHESTRATION_REPOS_ROOT", path.join(os.homedir(), "work"));
+}
 
 export type ReportRun = {
-  /** 회차 식별자(시각 폴더명) */
+  /** 회차 식별자(시각 폴더명 또는 "legacy") */
   id: string;
   /** 표시용 라벨(사람이 읽는 일시) */
   label: string;
@@ -19,88 +71,3 @@ export type ReportRun = {
   /** 정렬용 epoch(ms) */
   sortKey: number;
 };
-
-/**
- * 시각 폴더명을 파싱한다(형식 관대하게).
- * 지원: 20260708-084455 / 2026-07-08_142338 / 2026-07-08-142338 등.
- */
-function parseRunTimestamp(folder: string): { label: string; epoch: number } | null {
-  const m = folder.match(/(\d{4})-?(\d{2})-?(\d{2})[-_ ]?(\d{2}):?(\d{2}):?(\d{2})/);
-  if (!m) return null;
-  const [, y, mo, d, h, mi, s] = m;
-  const epoch = new Date(
-    Number(y),
-    Number(mo) - 1,
-    Number(d),
-    Number(h),
-    Number(mi),
-    Number(s)
-  ).getTime();
-  return { label: `${y}-${mo}-${d} ${h}:${mi}:${s}`, epoch };
-}
-
-/** 폴더 안의 md 파일들(하위 1단계까지). */
-function markdownIn(dir: string): string[] {
-  const out: string[] = [];
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    const p = path.join(dir, e.name);
-    if (e.isFile() && e.name.toLowerCase().endsWith(".md")) out.push(p);
-    else if (e.isDirectory()) {
-      try {
-        for (const f of fs.readdirSync(p))
-          if (f.toLowerCase().endsWith(".md")) out.push(path.join(p, f));
-      } catch {
-        /* skip */
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * 이슈/작업의 모든 테스트 회차를 최신순으로 읽는다.
- * `$DOBBY_META/{키}/test-runs/{시각}/result.md` 우선, 없으면 그 폴더의 첫 md.
- * 결과가 없으면 빈 배열.
- */
-export function getReportRuns(key: string): ReportRun[] {
-  const root = getMetaDir();
-  const runsDir = path.join(orderDir(key), "test-runs");
-  if (!fs.existsSync(runsDir)) return [];
-
-  const runs: ReportRun[] = [];
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(runsDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const runDir = path.join(runsDir, entry.name);
-    const mds = markdownIn(runDir);
-    const md = mds.find((f) => /result/i.test(path.basename(f))) ?? mds[0];
-    if (!md) continue;
-    const ts = parseRunTimestamp(entry.name);
-    let content = "";
-    try {
-      content = fs.readFileSync(md, "utf8");
-    } catch {
-      continue;
-    }
-    runs.push({
-      id: entry.name,
-      label: ts ? ts.label : entry.name,
-      file: path.relative(root, md),
-      content,
-      sortKey: ts ? ts.epoch : 0,
-    });
-  }
-  runs.sort((a, b) => b.sortKey - a.sortKey);
-  return runs;
-}

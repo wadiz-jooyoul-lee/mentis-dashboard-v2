@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Collapse, Table, Empty, Typography } from "antd";
 import type { TableProps } from "antd";
 
@@ -61,6 +62,14 @@ export default function DateFoldedTable<T extends object>({
     return b.localeCompare(a); // 최신 날짜 먼저
   });
 
+  // 오늘 그룹만 기본 펼침(없으면 최신). new Date()는 클라이언트에서만 평가해 hydration 불일치 방지.
+  const [active, setActive] = useState<string[]>([]);
+  useEffect(() => {
+    const today = ymd(new Date());
+    setActive(keys.includes(today) ? [today] : keys.length ? [keys[0]] : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys.join(",")]);
+
   const panels = keys.map((k) => ({
     key: k,
     label: (
@@ -89,5 +98,11 @@ export default function DateFoldedTable<T extends object>({
     ),
   }));
 
-  return <Collapse defaultActiveKey={[keys[0]]} items={panels} />;
+  return (
+    <Collapse
+      activeKey={active}
+      onChange={(k) => setActive(Array.isArray(k) ? k : [k])}
+      items={panels}
+    />
+  );
 }

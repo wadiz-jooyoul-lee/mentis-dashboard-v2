@@ -1,13 +1,14 @@
 /**
  * go-dobby 잡 실행(헤드리스 claude spawn). (서버 전용, node I/O)
  * 대시보드에서 `/dobby-order {키}`를 백그라운드로 띄우고 진행 로그를 읽는다.
- * 로그·메타: `$DOBBY_META/.mentis-jobs/{키}/`.
+ * 로그·메타: `$ORCHESTRATION_META/.mentis-jobs/{키}/`.
  */
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
-import { getMetaDir, getWorkspaceDir, getReposRoot, ORDER_KEY_RE } from "@/lib/config";
+import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
+import { ORDER_KEY_RE } from "@/lib/keys";
 
 export { ORDER_KEY_RE };
 
@@ -171,6 +172,16 @@ export function startOrder(target: string): { ok: boolean; reason?: string; jobI
   const jobId = deriveJobId(t);
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
   spawnClaude(jobId, ["-p", `/dobby-order ${t}`], false);
+  return { ok: true, jobId };
+}
+
+/** 구현 내용(explainer.md) 생성: `/dobby-explain {키}`를 백그라운드로 실행. 잡 id는 `explain-{키}`. */
+export function startExplain(key: string): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `explain-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-explain ${k}`], false);
   return { ok: true, jobId };
 }
 

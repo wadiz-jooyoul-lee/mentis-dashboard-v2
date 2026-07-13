@@ -21,8 +21,9 @@ import {
   Empty,
   Alert,
 } from "antd";
-import { LinkOutlined, WarningOutlined, FileTextOutlined } from "@ant-design/icons";
+import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
+import IssueReport from "@/components/IssueReport";
 import { dobbyColor } from "@/lib/dobby";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
@@ -142,28 +143,26 @@ function AgentCard({
   a,
   epicKey,
   changeSlug,
-  onOpen,
 }: {
   a: AgentRow;
   epicKey: string;
   /** 이 에이전트의 변경 기록 slug(있으면 카드 클릭 시 해당 섹션으로 이동) */
   changeSlug?: string;
-  /** 클릭 시 작업 내역 열기(제공되면 이 핸들러 우선, 라우팅 대신 Drawer 등) */
-  onOpen?: () => void;
 }) {
   const router = useRouter();
   const stale = isStale(a);
-  const clickable = !!onOpen || !!changeSlug;
-  const handleClick =
-    onOpen ??
-    (changeSlug
-      ? () => router.push(`/orders/${epicKey}?tab=changes#agent-${changeSlug}`)
-      : undefined);
+  // 로그 유무와 무관하게 모든 에이전트 카드를 클릭 가능 → 변경 페이지의 해당 에이전트 섹션으로.
+  const clickable = !!a.agent && a.agent !== "-";
+  const anchor = a.agent.trim().replace(/\s+/g, "-");
+  const goToChanges = clickable
+    ? () => router.push(`/orchestration/${epicKey}/changes#agent-${anchor}`)
+    : undefined;
+  void changeSlug;
   return (
     <Card
       size="small"
       hoverable={clickable}
-      onClick={handleClick}
+      onClick={goToChanges}
       style={{
         marginBottom: 8,
         borderColor: stale ? "#ffccc7" : undefined,
@@ -188,7 +187,7 @@ function AgentCard({
         </Space>
         {a.issue && a.issue !== "-" && (
           <Link
-            href={`/orders/${a.issue}`}
+            href={`/orchestration/${a.issue}`}
             onClick={(e) => e.stopPropagation()}
           >
             <Text strong>{a.issue}</Text>
@@ -230,15 +229,9 @@ function AgentCard({
 export default function OrchestrationBoard({
   epicKey,
   epic,
-  embedded,
-  onAgentClick,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
-  /** 오더 상세 탭 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
-  embedded?: boolean;
-  /** 에이전트 카드 클릭 핸들러(제공 시 카드가 항상 클릭 가능, Drawer 등으로 작업 내역 표시) */
-  onAgentClick?: (payload: { slug?: string; agent: AgentRow }) => void;
 }) {
   const o = epic?.orchestration ?? null;
 
@@ -264,8 +257,21 @@ export default function OrchestrationBoard({
   };
   const hasChanges = changeSlugs.size > 0;
 
-  const header = embedded ? null : (
-    <div>
+  const header = (
+    <div
+      style={{
+        position: "sticky",
+        top: 64,
+        zIndex: 90,
+        background: "#fff",
+        // 뷰포트 전체 너비로 풀블리드 + 상단 콘텐츠 패딩(24) 상쇄해 헤더에 붙임
+        marginLeft: "calc(-50vw + 50%)",
+        marginRight: "calc(-50vw + 50%)",
+        marginTop: -24,
+        padding: "12px 24px",
+        borderBottom: "1px solid #f0f0f0",
+      }}
+    >
       <div
         style={{
           display: "flex",
@@ -277,7 +283,7 @@ export default function OrchestrationBoard({
         <Breadcrumb
           items={[
             { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orders">오더</Link> },
+            { title: <Link href="/orchestration">오케스트레이션</Link> },
             { title: epicKey },
           ]}
         />
@@ -309,12 +315,22 @@ export default function OrchestrationBoard({
           Jira에서 열기
         </Button>
         {hasChanges && (
-          <Link href={`/orders/${epicKey}?tab=changes`}>
+          <Link href={`/orchestration/${epicKey}/changes`}>
             <Button type="link" icon={<FileTextOutlined />}>
               코드 변경
             </Button>
           </Link>
         )}
+        <Link href={`/orchestration/console/${epicKey}`}>
+          <Button type="link" icon={<CodeOutlined />}>
+            콘솔
+          </Button>
+        </Link>
+        <Link href={`/orchestration/${epicKey}/explain`}>
+          <Button type="link" icon={<ReadOutlined />}>
+            구현 내용
+          </Button>
+        </Link>
       </Space>
     </div>
   );
@@ -426,11 +442,6 @@ export default function OrchestrationBoard({
                     a={a}
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
-                    onOpen={
-                      onAgentClick
-                        ? () => onAgentClick({ slug: changeSlugFor(a.agent), agent: a })
-                        : undefined
-                    }
                   />
                 ))}
               </div>
@@ -546,6 +557,86 @@ export default function OrchestrationBoard({
               ),
             }))}
           />
+        </div>
+      )}
+
+      {/* 분석 (analysis.md) — v1 착수 상세처럼 */}
+      {epic!.analysisMd && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>분석</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{epic!.analysisMd}</ReactMarkdown>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 구현 / 산출 */}
+      {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>{epic!.workType === "nonsource" ? "산출" : "구현"}</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) ?? ""}
+              </ReactMarkdown>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 산출물 (deliverables/) */}
+      {epic!.deliverables.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>산출물</Title>
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            {epic!.deliverables.map((d) => (
+              <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
+                {d.kind === "md" ? (
+                  <div className="markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{d.content}</ReactMarkdown>
+                  </div>
+                ) : d.kind === "html" ? (
+                  <iframe
+                    title={d.name}
+                    srcDoc={d.content}
+                    sandbox=""
+                    style={{ width: "100%", height: 520, border: "1px solid #f0f0f0", borderRadius: 6 }}
+                  />
+                ) : (
+                  <Text type="secondary">미리보기를 지원하지 않는 파일입니다.</Text>
+                )}
+              </Card>
+            ))}
+          </Space>
+        </div>
+      )}
+
+      {/* 검증 (test-runs) — 회차 없어도 영역은 표시 */}
+      <div style={{ marginTop: 20 }}>
+        <Title level={4}>검증</Title>
+        {epic!.runs.length > 0 ? (
+          <IssueReport issueKey={epicKey} runs={epic!.runs} embedded />
+        ) : (
+          <Card size="small">
+            <Text type="secondary">
+              아직 테스트 회차가 없습니다 — code 오더에서 <Text code>dobby-test</Text> 실행 시
+              <Text code> test-runs/</Text>에 회차가 쌓이고 여기 리포트가 표시됩니다.
+            </Text>
+          </Card>
+        )}
+      </div>
+
+      {/* 종료 서머리 (summary.md) */}
+      {epic!.summaryMd && (
+        <div style={{ marginTop: 20 }}>
+          <Title level={4}>종료 서머리</Title>
+          <Card size="small">
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{epic!.summaryMd}</ReactMarkdown>
+            </div>
+          </Card>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 // 데모용 go-dobby 메타 fixture를 격리 디렉터리에 생성한다.
-// 실제 $DOBBY_META를 건드리지 않으므로 `npm run dev`(실데이터)는 깨끗하게 유지된다.
+// 실제 $ORCHESTRATION_META를 건드리지 않으므로 `npm run dev`(실데이터)는 깨끗하게 유지된다.
 // 사용: node scripts/seed-demo.mjs  (대상: $DEMO_META 또는 ./.demo-meta)
 import fs from "node:fs";
 import path from "node:path";
@@ -453,4 +453,4 @@ w(
 );
 
 console.log(`데모 fixture 생성 완료: ${ROOT}`);
-console.log("실행:  DOBBY_META_PATH=\"" + ROOT + "\" npm run dev   (또는 npm run demo)");
+console.log("실행:  ORCHESTRATION_META_PATH=\"" + ROOT + "\" npm run dev   (또는 npm run demo)");
