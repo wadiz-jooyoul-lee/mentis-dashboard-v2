@@ -171,13 +171,17 @@ export function parseOrchestration(md: string): Orchestration {
 
   const conflicts = sectionBody(md, "충돌");
 
-  // 이벤트 로그: "- {일시} {내용}"
+  // 이벤트 로그: "- {일시} {내용}". 날짜는 필수, 시각(HH:MM[:SS])은 선택 —
+  // 시각 없이 날짜만 있는 이벤트도 수용한다(스킬 드리프트·외부 데이터 방어).
   const events: EventRow[] = [];
   for (const line of sectionBody(md, "이벤트 로그").split("\n")) {
     const m = line.match(
-      /^-\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)\s*(.*)$/
+      /^-\s*(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}(?::\d{2})?))?\s*(.*)$/
     );
-    if (m) events.push({ time: m[1].trim(), text: m[2].trim() });
+    if (m) {
+      const time = m[2] ? `${m[1]} ${m[2]}` : m[1];
+      events.push({ time, text: m[3].trim() });
+    }
   }
   events.reverse(); // 최신 먼저
 
