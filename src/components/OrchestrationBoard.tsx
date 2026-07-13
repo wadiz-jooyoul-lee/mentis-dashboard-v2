@@ -22,7 +22,7 @@ import {
   Alert,
 } from "antd";
 import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
-import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
+import DobbyIcon, { dobbyExpression } from "@/components/DobbyIcon";
 import BtsAvatar from "@/components/BtsAvatar";
 import Fromis9Avatar from "@/components/Fromis9Avatar";
 import IssueReport from "@/components/IssueReport";
@@ -70,27 +70,6 @@ function roleColor(name: string): string {
 }
 
 /** 에이전트 상태 → 도비 표정. */
-function dobbyExpression(state: string): DobbyExpression {
-  switch (state) {
-    case "대기":
-    case "재통합대기":
-      return "resting";
-    case "완료":
-      return "happy";
-    case "분석중":
-    case "분석완료":
-      return "thinking";
-    case "구현중":
-    case "진행중":
-    case "수정중":
-      return "tired";
-    case "리뷰중":
-      return "curious";
-    default:
-      return "neutral";
-  }
-}
-
 /** 이벤트를 시(hour) 단위로 묶는다. 입력은 최신 먼저 정렬 가정(순서 유지). */
 function groupByHour(events: EventRow[]): { hour: string; events: EventRow[] }[] {
   const groups: { hour: string; events: EventRow[] }[] = [];
@@ -144,8 +123,8 @@ function eventItem(e: EventRow) {
 
 /** 배정된 그룹 아바타를 그린다(bts/fromis=오리지널 SVG, dobby=도비 아이콘). */
 function AgentAvatar({ a, avatar }: { a: AgentRow; avatar?: AssignedAvatar }) {
-  if (avatar?.group === "bts" && avatar.member) return <BtsAvatar member={avatar.member} size={34} />;
-  if (avatar?.group === "fromis" && avatar.member) return <Fromis9Avatar member={avatar.member} size={34} />;
+  if (avatar?.group === "bts" && avatar.member) return <BtsAvatar member={avatar.member} size={34} state={a.state} />;
+  if (avatar?.group === "fromis" && avatar.member) return <Fromis9Avatar member={avatar.member} size={34} state={a.state} />;
   return <DobbyIcon size={34} expression={dobbyExpression(a.state)} color={dobbyColor(a.agent)} />;
 }
 

@@ -1,8 +1,10 @@
 // BTS 멤버 에이전트용 오리지널 SVG 아바타. 실제 사진 미사용 — 각 멤버의
 // 시그니처(얼굴형·헤어 실루엣/컬러·눈매·소품)만 모티프로 한 스타일 일러스트다.
 
+import { stateFace } from "@/lib/avatarExpression";
+
 type Eyes = "calm" | "bright" | "sleepy" | "happy" | "soft" | "droopy" | "round";
-type Mouth = "neutral" | "smile" | "flat" | "bigSmile" | "softSmile" | "gentle" | "grin";
+type Mouth = "neutral" | "smile" | "flat" | "bigSmile" | "softSmile" | "gentle" | "grin" | "gasp";
 type Hair = "short" | "neat" | "flat" | "swoop" | "soft" | "parted" | "messy";
 type Face = "oval" | "round" | "long" | "angular" | "heart" | "slim" | "diamond";
 
@@ -164,14 +166,25 @@ function Eyes({ eyes, hairColor }: { eyes: Eyes; hairColor: string }) {
   }
 }
 
-function Brows({ hairColor }: { hairColor: string }) {
+function Brows({ hairColor, mod }: { hairColor: string; mod?: "worry" | "focus" }) {
   const c = shade(hairColor, -0.15);
+  const [l, r] =
+    mod === "worry"
+      ? ["M34,35.5 Q39,33.5 44,32.5", "M66,35.5 Q61,33.5 56,32.5"] // 안쪽 올라감(걱정)
+      : mod === "focus"
+      ? ["M34,33 Q39,34.8 44,36", "M66,33 Q61,34.8 56,36"] // 안쪽 내려감(찡그림)
+      : ["M34,35 Q39,33 44,34.6", "M56,34.6 Q61,33 66,35"]; // 기본
   return (
     <g stroke={c} strokeWidth="1.8" strokeLinecap="round" fill="none">
-      <path d="M34,35 Q39,33 44,34.6" />
-      <path d="M56,34.6 Q61,33 66,35" />
+      <path d={l} />
+      <path d={r} />
     </g>
   );
+}
+
+/** 헐레벌떡 상태의 땀방울(오른쪽 관자놀이). */
+function SweatDrop() {
+  return <path d="M70,30 Q73,34.5 70,36.5 Q67,34.5 70,30 Z" fill="#7EC8F2" stroke="#4FA8E0" strokeWidth="0.6" />;
 }
 
 function MouthShape({ mouth }: { mouth: Mouth }) {
@@ -197,6 +210,8 @@ function MouthShape({ mouth }: { mouth: Mouth }) {
       );
     case "grin":
       return <path d="M42,55 Q50,63 58,55 Z" fill="#fff" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />;
+    case "gasp":
+      return <ellipse cx="50" cy="56.5" rx="3" ry="3.8" fill="#7D3B3B" stroke={stroke} strokeWidth="1" />;
   }
 }
 
@@ -212,9 +227,21 @@ function Glasses() {
   );
 }
 
-export default function BtsAvatar({ member, size = 56 }: { member: string; size?: number }) {
+export default function BtsAvatar({
+  member,
+  size = 56,
+  state,
+}: {
+  member: string;
+  size?: number;
+  /** 있으면 해당 상태의 표정으로 오버라이드(대기·수정중·구현중). 없으면 멤버 기본 표정. */
+  state?: string;
+}) {
   const cfg = BTS_AVATARS[member];
   if (!cfg) return null;
+  const f = stateFace(state);
+  const eyes = f?.eyes ?? cfg.eyes;
+  const mouth = f?.mouth ?? cfg.mouth;
   const bg = `bg-${member}`;
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`${member} 아바타`} style={{ flexShrink: 0 }}>
@@ -235,12 +262,13 @@ export default function BtsAvatar({ member, size = 56 }: { member: string; size?
       <FaceShape face={cfg.face} />
       {/* 헤어 */}
       <Hair hair={cfg.hair} color={cfg.hairColor} />
-      <Brows hairColor={cfg.hairColor} />
-      <Eyes eyes={cfg.eyes} hairColor={cfg.hairColor} />
+      <Brows hairColor={cfg.hairColor} mod={f?.brow} />
+      <Eyes eyes={eyes} hairColor={cfg.hairColor} />
       {/* 코 */}
       <path d="M50,45 L48,50 Q50,51.5 52,50" fill="none" stroke={SKIN_SHADE} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <MouthShape mouth={cfg.mouth} />
+      <MouthShape mouth={mouth} />
       {cfg.glasses && <Glasses />}
+      {f?.sweat && <SweatDrop />}
     </svg>
   );
 }

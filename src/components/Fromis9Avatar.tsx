@@ -2,8 +2,10 @@
 // 걸그룹 특성상 긴머리 표현을 위해 뒷머리(얼굴 뒤)+앞머리(얼굴 앞) 2레이어로 그린다.
 // svg-avatar 스킬의 레이어/정수리/구분 규칙을 따른다.
 
+import { stateFace } from "@/lib/avatarExpression";
+
 type Eyes = "calm" | "bright" | "sleepy" | "happy" | "soft" | "droopy" | "round";
-type Mouth = "neutral" | "smile" | "flat" | "bigSmile" | "softSmile" | "gentle" | "grin";
+type Mouth = "neutral" | "smile" | "flat" | "bigSmile" | "softSmile" | "gentle" | "grin" | "gasp";
 type Style = "longStraight" | "longWavy" | "bangsLong" | "ponytail" | "bob";
 type Face = "oval" | "round" | "long" | "angular" | "heart" | "slim" | "diamond";
 
@@ -146,12 +148,48 @@ function MouthShape({ mouth }: { mouth: Mouth }) {
       );
     case "grin":
       return <path d="M43,55 Q50,62 57,55 Z" fill="#fff" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />;
+    case "gasp":
+      return <ellipse cx="50" cy="56.5" rx="3" ry="3.8" fill="#8A4550" stroke={stroke} strokeWidth="1" />;
   }
 }
 
-export default function Fromis9Avatar({ member, size = 56 }: { member: string; size?: number }) {
+/** 헐레벌떡 상태의 땀방울(오른쪽 관자놀이). */
+function SweatDrop() {
+  return <path d="M70,30 Q73,34.5 70,36.5 Q67,34.5 70,30 Z" fill="#7EC8F2" stroke="#4FA8E0" strokeWidth="0.6" />;
+}
+
+// 눈썹(상태에 따라 걱정/찡그림).
+function Brows({ hairColor, mod }: { hairColor: string; mod?: "worry" | "focus" }) {
+  const c = shade(hairColor, -0.12);
+  const [l, r] =
+    mod === "worry"
+      ? ["M34,35.5 Q39,33.5 44,32.5", "M66,35.5 Q61,33.5 56,32.5"]
+      : mod === "focus"
+      ? ["M34,33 Q39,34.8 44,36", "M66,33 Q61,34.8 56,36"]
+      : ["M34,35 Q39,33 44,34.6", "M56,34.6 Q61,33 66,35"];
+  return (
+    <g stroke={c} strokeWidth="1.7" strokeLinecap="round" fill="none">
+      <path d={l} />
+      <path d={r} />
+    </g>
+  );
+}
+
+export default function Fromis9Avatar({
+  member,
+  size = 56,
+  state,
+}: {
+  member: string;
+  size?: number;
+  /** 있으면 해당 상태의 표정으로 오버라이드(대기·수정중·구현중). 없으면 멤버 기본 표정. */
+  state?: string;
+}) {
   const cfg = FROMIS_AVATARS[member];
   if (!cfg) return null;
+  const f = stateFace(state);
+  const eyes = f?.eyes ?? cfg.eyes;
+  const mouth = f?.mouth ?? cfg.mouth;
   const bg = `fbg-${member}`;
   const hc = cfg.hairColor;
   return (
@@ -177,14 +215,12 @@ export default function Fromis9Avatar({ member, size = 56 }: { member: string; s
       <path d={FRONT[cfg.style]} fill={hc} />
       <path d={cfg.style === "ponytail" ? "M34,22 Q50,15 66,22" : "M32,21 Q50,14 68,21"} stroke={shade(hc, 0.3)} strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.85" />
       {/* 눈썹 */}
-      <g stroke={shade(hc, -0.12)} strokeWidth="1.7" strokeLinecap="round" fill="none">
-        <path d="M34,35 Q39,33 44,34.6" />
-        <path d="M56,34.6 Q61,33 66,35" />
-      </g>
-      <Eyes eyes={cfg.eyes} hairColor={hc} />
+      <Brows hairColor={hc} mod={f?.brow} />
+      <Eyes eyes={eyes} hairColor={hc} />
       {/* 코 */}
       <path d="M50,45 L48.5,50 Q50,51.3 51.5,50" fill="none" stroke={SKIN_SHADE} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-      <MouthShape mouth={cfg.mouth} />
+      <MouthShape mouth={mouth} />
+      {f?.sweat && <SweatDrop />}
     </svg>
   );
 }
