@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { Breadcrumb, Typography, Empty, Button } from "antd";
 import Link from "next/link";
 import FeedView from "@/components/FeedView";
+import MarkdownDoc from "@/components/MarkdownDoc";
 import type { FeedItem } from "@/lib/jobs";
 
 const { Title, Paragraph } = Typography;
@@ -84,48 +83,6 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
   );
 }
 
-// mermaid는 무거워서(≈3MB) 이 페이지에서만 동적 로드. 클라이언트 전용.
-let mermaidP: Promise<typeof import("mermaid").default> | null = null;
-function loadMermaid() {
-  if (!mermaidP) {
-    mermaidP = import("mermaid").then((m) => {
-      m.default.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
-      return m.default;
-    });
-  }
-  return mermaidP;
-}
-
-let mmSeq = 0;
-function Mermaid({ chart }: { chart: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const mermaid = await loadMermaid();
-        const id = `mmd-${++mmSeq}`;
-        const { svg } = await mermaid.render(id, chart);
-        if (alive && ref.current) ref.current.innerHTML = svg;
-      } catch (e) {
-        if (alive) setErr(String(e));
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [chart]);
-  if (err) {
-    return (
-      <pre style={{ background: "#fff1f0", padding: 12, borderRadius: 6, overflowX: "auto" }}>
-        {chart}
-      </pre>
-    );
-  }
-  return <div ref={ref} style={{ textAlign: "center", overflowX: "auto", margin: "12px 0" }} />;
-}
-
 export default function ExplainerView({
   epicKey,
   md,
@@ -144,29 +101,7 @@ export default function ExplainerView({
           { title: "구현 내용" },
         ]}
       />
-      {!md ? (
-        <GenerateExplainer epicKey={epicKey} />
-      ) : (
-        <div className="markdown-body">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              code(props) {
-                const { className, children } = props as {
-                  className?: string;
-                  children?: React.ReactNode;
-                };
-                if (/language-mermaid/.test(className ?? "")) {
-                  return <Mermaid chart={String(children).replace(/\n$/, "")} />;
-                }
-                return <code className={className}>{children}</code>;
-              },
-            }}
-          >
-            {md}
-          </ReactMarkdown>
-        </div>
-      )}
+      {!md ? <GenerateExplainer epicKey={epicKey} /> : <MarkdownDoc md={md} />}
     </div>
   );
 }
