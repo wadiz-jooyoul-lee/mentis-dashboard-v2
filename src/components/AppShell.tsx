@@ -16,6 +16,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          position: "sticky",
+          top: 0,
+          zIndex: 100,
+          width: "100%",
         }}
       >
         <Link

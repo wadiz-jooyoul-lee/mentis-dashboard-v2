@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Table, Tag, Typography, Empty, Space, Progress } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Progress, Collapse } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
 import OrderLauncher from "@/components/OrderLauncher";
+import DateFoldedTable from "@/components/DateFoldedTable";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -142,25 +143,29 @@ export default function OrchestrationList({
         오케스트레이션 보드
       </Title>
 
-      <OrderLauncher initialJobs={initialJobs} initialArchived={initialArchived} />
+      <Collapse
+        ghost
+        items={[
+          {
+            key: "launcher",
+            label: "오더 실행",
+            children: (
+              <OrderLauncher initialJobs={initialJobs} initialArchived={initialArchived} />
+            ),
+          },
+        ]}
+      />
 
       <Text type="secondary">읽는 경로: {sourceDir}</Text>
       <div style={{ marginTop: 16 }}>
-        {epics.length === 0 ? (
-          <Empty description="work-dobby 에픽이 없습니다" />
-        ) : (
-          <Table<EpicSummary>
-            rowKey="epicKey"
-            columns={columns}
-            dataSource={epics}
-            pagination={false}
-            scroll={{ x: "max-content" }}
-            onRow={(record) => ({
-              onClick: () => router.push(`/orchestration/${record.epicKey}`),
-              style: { cursor: "pointer" },
-            })}
-          />
-        )}
+        <DateFoldedTable<EpicSummary>
+          items={epics}
+          dateOf={(r) => r.lastActivity}
+          columns={columns}
+          rowKey="epicKey"
+          onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
+          emptyText="진행 중인 오더가 없습니다"
+        />
       </div>
     </div>
   );

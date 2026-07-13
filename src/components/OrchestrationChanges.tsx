@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions } from "antd";
+import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Alert } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
 import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
+import JobConsole from "@/components/JobConsole";
 import DobbyIcon from "@/components/DobbyIcon";
 import { dobbyColor } from "@/lib/dobby";
 import "./markdown.css";
@@ -161,19 +162,33 @@ export default function OrchestrationChanges({
 
   return (
     <div>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orchestration">오케스트레이션</Link> },
-          { title: <Link href={`/orchestration/${epicKey}`}>{epicKey}</Link> },
-          { title: "에이전트 상세" },
-        ]}
-        style={{ marginBottom: 12 }}
-      />
-      <Title level={2} style={{ marginTop: 0 }}>
-        에이전트 상세 — {epicKey}
-      </Title>
-      <Paragraph type="secondary">
+      <div
+        style={{
+          position: "sticky",
+          top: 64,
+          zIndex: 90,
+          background: "#fff",
+          marginLeft: "calc(-50vw + 50%)",
+          marginRight: "calc(-50vw + 50%)",
+          marginTop: -24,
+          padding: "12px 24px",
+          borderBottom: "1px solid #f0f0f0",
+        }}
+      >
+        <Breadcrumb
+          items={[
+            { title: <Link href="/">홈</Link> },
+            { title: <Link href="/orchestration">오케스트레이션</Link> },
+            { title: <Link href={`/orchestration/${epicKey}`}>{epicKey}</Link> },
+            { title: "에이전트 상세" },
+          ]}
+          style={{ marginBottom: 8 }}
+        />
+        <Title level={2} style={{ margin: 0 }}>
+          에이전트 상세 — {epicKey}
+        </Title>
+      </div>
+      <Paragraph type="secondary" style={{ marginTop: 12 }}>
         각 에이전트의 상태와 작업 내역입니다. 대화 로그(agent-logs.json)가 있으면 수정 파일·커밋·diff·요약을, 없으면 상태·계약을 보여줍니다.
       </Paragraph>
 
@@ -248,10 +263,61 @@ export default function OrchestrationChanges({
                       )}
                     </Space>
                   )}
+                  <Collapse
+                    ghost
+                    destroyOnHidden
+                    style={{ marginTop: 12 }}
+                    items={[
+                      {
+                        key: "live",
+                        label: "실시간 콘솔",
+                        children: epic?.hasJob ? (
+                          <JobConsole orderKey={epicKey} height={300} />
+                        ) : (
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="실시간 콘솔 없음"
+                            description="이 오더는 대시보드 실행 패널로 띄운 것이 아니라 실시간 로그(run.log)가 없습니다. 아래 ‘기록 콘솔’에서 지난 실행 기록을 확인하세요."
+                          />
+                        ),
+                      },
+                      {
+                        key: "rec",
+                        label: "기록 콘솔",
+                        children: <JobConsole orderKey={epicKey} agent={a.agent} height={300} />,
+                      },
+                    ]}
+                  />
                 </Card>
               </div>
             );
           })}
+          {(() => {
+            const matched = new Set<string>();
+            for (const a of agents) {
+              const w = workFor(a.agent);
+              if (w) matched.add(w.slug);
+            }
+            const extra = works.filter(
+              (w) => !matched.has(w.slug) && (w.diffs.length > 0 || w.commits.length > 0)
+            );
+            if (extra.length === 0) return null;
+            return (
+              <>
+                <Title level={4} style={{ marginTop: 24 }}>
+                  그 외 코드 변경 로그
+                </Title>
+                {extra.map((w, i) => (
+                  <div key={`extra-${w.slug}-${i}`} style={{ marginBottom: 20 }}>
+                    <Card title={<Text strong>{w.slug}</Text>}>
+                      <WorkBody w={w} />
+                    </Card>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
         </>
       )}
     </div>

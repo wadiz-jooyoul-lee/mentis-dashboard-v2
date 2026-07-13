@@ -298,8 +298,12 @@ export function getConsole(key: string, opts: ConsoleOpts = {}): ConsoleStatus {
   const { source, agent, phase } = opts;
   if (agent) {
     const e = resolveAgent(key, agent, phase);
-    if (!e) return { state: "none" };
-    return transcriptView(e.path, `서브 기록: ${e.slug}${e.phase ? " · " + e.phase : ""}`);
+    if (e) return transcriptView(e.path, `서브 기록: ${e.slug}${e.phase ? " · " + e.phase : ""}`);
+    // 보드 에이전트 슬러그가 콘솔 로그 id와 안 맞을 때(레거시 자동탐색 등)
+    // → 오케스트레이터 세션 기록으로 폴백해 빈 화면 대신 전체 기록을 보여준다.
+    const sess = resolveParentSession(key);
+    if (sess) return transcriptView(sess, "오케스트레이터 기록(세션)");
+    return { state: "none" };
   }
   if (source === "session") {
     const sess = resolveParentSession(key);

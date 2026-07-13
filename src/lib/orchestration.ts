@@ -11,6 +11,7 @@ import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
 import { parseOrderStatus } from "@/lib/parseOrderStatus";
+import { listConsoleAgents } from "@/lib/transcript";
 import type { Metric } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
@@ -180,7 +181,13 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
     return empty;
   }
   const metaRoot = getMetaDir();
-  const isMeta = (p: string) => p.startsWith(metaRoot);
+  // 메타(진행 기록) 경로는 코드 변경이 아니므로 제외한다.
+  // 현재 v2 메타 루트뿐 아니라, 알려진 메타 루트 이름(orchestration-meta·dobby-meta)과
+  // v1 work-dobby 분리 트리(.issue-start/.issue-test/.issue-end/.agent-start)까지 잡는다.
+  const isMeta = (p: string) =>
+    p.startsWith(metaRoot) ||
+    /\/(orchestration-meta|dobby-meta)\//.test(p) ||
+    /\/\.(issue-start|issue-test|issue-end|agent-start)\//.test(p);
   const fileSet = new Set<string>();
   const diffMap = new Map<string, EditHunk[]>();
   const commits: string[] = [];
@@ -205,17 +212,17 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
         const input = (b as { input?: Record<string, unknown> }).input ?? {};
         if (name === "Edit" || name === "Write" || name === "NotebookEdit") {
           const fp = input.file_path;
-          if (typeof fp === "string") {
+          // 메타 파일($ORCHESTRATION_META 하위: status.md·implementation.md 등)은
+          // 코드 구현이 아니라 진행 기록이므로 파일 목록·diff 모두에서 제외한다.
+          if (typeof fp === "string" && !isMeta(fp)) {
             fileSet.add(fp);
-            if (!isMeta(fp)) {
-              const hunk: EditHunk =
-                name === "Write"
-                  ? { old: "", new: String(input.content ?? "") }
-                  : { old: String(input.old_string ?? ""), new: String(input.new_string ?? "") };
-              const arr = diffMap.get(fp) ?? [];
-              arr.push(hunk);
-              diffMap.set(fp, arr);
-            }
+            const hunk: EditHunk =
+              name === "Write"
+                ? { old: "", new: String(input.content ?? "") }
+                : { old: String(input.old_string ?? ""), new: String(input.new_string ?? "") };
+            const arr = diffMap.get(fp) ?? [];
+            arr.push(hunk);
+            diffMap.set(fp, arr);
           }
         } else if (name === "Bash") {
           const cmd = input.command;
@@ -253,6 +260,8 @@ export type EpicDetail = {
   summaryMd: string | null;
   deliverables: Deliverable[];
   runs: ReportRun[];
+  /** 대시보드가 띄운 잡(run.log)이 있는지 — 실시간 콘솔 가용 여부. */
+  hasJob: boolean;
 };
 
 /** test-runs/{시각}/result.md 회차들(최신순). */
@@ -341,19 +350,26 @@ export function getEpic(epicKey: string): EpicDetail | null {
   }
   reviews.sort((a, b) => b.round - a.round || a.slug.localeCompare(b.slug));
 
+  // 코드 변경(로그 기반): agent-logs.json(문자열/단계별 객체) 우선, 없으면 projects 자동탐색.
+  // listConsoleAgents가 두 경우를 모두 평탄화(id=슬러그[::단계])해 주므로, 같은 슬러그의
+  // 여러 단계(analysis/impl 등)를 하나로 합쳐 구현 diff·커밋이 드러나게 한다.
   const agentWorks: AgentWork[] = [];
-  const logsJson = readFileSafe(path.join(dir, "agent-logs.json"));
-  if (logsJson) {
-    let map: Record<string, string> = {};
-    try {
-      map = JSON.parse(logsJson);
-    } catch {
-      map = {};
+  {
+    const bySlug = new Map<string, AgentWork>();
+    for (const ca of listConsoleAgents(epicKey)) {
+      const parsed = parseAgentLog(ca.path);
+      const cur = bySlug.get(ca.slug);
+      if (cur) {
+        cur.files = Array.from(new Set([...cur.files, ...parsed.files]));
+        cur.diffs.push(...parsed.diffs);
+        cur.commits.push(...parsed.commits);
+        cur.found = cur.found || parsed.found;
+        if (parsed.diffs.length && parsed.summary) cur.summary = parsed.summary;
+      } else {
+        bySlug.set(ca.slug, { slug: ca.slug, ...parsed });
+      }
     }
-    for (const [slug, logPath] of Object.entries(map)) {
-      if (typeof logPath !== "string") continue;
-      agentWorks.push({ slug, ...parseAgentLog(logPath) });
-    }
+    agentWorks.push(...bySlug.values());
   }
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
@@ -374,6 +390,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     summaryMd: readFileSafe(path.join(dir, "summary.md")),
     deliverables: readDeliverables(epicKey),
     runs: readRuns(epicKey),
+    hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
   };
 }
 

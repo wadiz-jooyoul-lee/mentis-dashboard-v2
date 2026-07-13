@@ -258,7 +258,20 @@ export default function OrchestrationBoard({
   const hasChanges = changeSlugs.size > 0;
 
   const header = (
-    <div>
+    <div
+      style={{
+        position: "sticky",
+        top: 64,
+        zIndex: 90,
+        background: "#fff",
+        // 뷰포트 전체 너비로 풀블리드 + 상단 콘텐츠 패딩(24) 상쇄해 헤더에 붙임
+        marginLeft: "calc(-50vw + 50%)",
+        marginRight: "calc(-50vw + 50%)",
+        marginTop: -24,
+        padding: "12px 24px",
+        borderBottom: "1px solid #f0f0f0",
+      }}
+    >
       <div
         style={{
           display: "flex",
