@@ -117,7 +117,8 @@ export default function AgentsPage() {
         에이전트 소개
       </Title>
       <Paragraph type="secondary">
-        work-dobby가 부리는 도비 에이전트들. 이름마다 고유한 색과 표정을 가집니다.
+        work-dobby가 부리는 도비 에이전트들. 이름마다 고유한 색과 표정을 가집니다.{" "}
+        <Link href="/avatars">그룹 아바타 상태별 표정 보기 →</Link>
       </Paragraph>
 
       <Row gutter={[16, 16]}>
