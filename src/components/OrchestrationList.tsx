@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Progress, Collapse } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Progress, Collapse, Badge } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
+import { phaseBadge } from "@/lib/parseOrderStatus";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
@@ -14,7 +15,8 @@ import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
 
-function distribution(c: EpicSummary["counts"]) {
+function distribution(r: EpicSummary) {
+  const c = r.counts;
   const items: Array<[string, number, string]> = [
     ["대기", c.대기, "default"],
     ["구현중", c.구현중, "blue"],
@@ -23,6 +25,14 @@ function distribution(c: EpicSummary["counts"]) {
     ["재통합대기", c.재통합대기, "purple"],
     ["완료", c.완료, "green"],
   ];
+  // 에이전트 표가 아직 없는 착수 직후: 상태 분포 대신 status.md 현재 단계를 보여준다.
+  if (c.total === 0) {
+    return r.phaseLabel && r.phaseLabel !== "-" ? (
+      <Badge status={phaseBadge(r.phase)} text={r.phaseLabel} />
+    ) : (
+      <Text type="secondary">-</Text>
+    );
+  }
   return (
     <Space size={4} wrap>
       {items
@@ -32,7 +42,6 @@ function distribution(c: EpicSummary["counts"]) {
             {label} {n}
           </Tag>
         ))}
-      {c.total === 0 && <Text type="secondary">-</Text>}
     </Space>
   );
 }
@@ -71,12 +80,40 @@ export default function OrchestrationList({
       ),
     },
     {
+      title: "제목",
+      dataIndex: "title",
+      key: "title",
+      width: 300,
+      // 고정 너비에서 최대 2줄까지만, 넘치면 말줄임. hover 시 전체 제목 툴팁.
+      render: (t: string | null) =>
+        t ? (
+          <span
+            title={t}
+            style={{
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              wordBreak: "break-word",
+            }}
+          >
+            {t}
+          </span>
+        ) : (
+          <Text type="secondary">-</Text>
+        ),
+    },
+    {
       title: "실행 모드",
       dataIndex: "mode",
       key: "mode",
-      // 상세 설명은 떼고 앞 키워드(병렬/순차)만 간결히 표시
-      render: (m: string | null) =>
-        m ? <Tag>{m.split(/[\s(（]/)[0]}</Tag> : "-",
+      // 짧은 모드(예: "A (대화형)")는 그대로, 긴 설명만 앞 키워드로 축약
+      render: (m: string | null) => {
+        if (!m) return "-";
+        const t = m.trim();
+        const short = t.length <= 12 ? t : t.split(/[\s(（]/)[0];
+        return <Tag>{short}</Tag>;
+      },
     },
     {
       title: "에이전트",
@@ -87,7 +124,7 @@ export default function OrchestrationList({
     {
       title: "상태 분포",
       key: "counts",
-      render: (_: unknown, r: EpicSummary) => distribution(r.counts),
+      render: (_: unknown, r: EpicSummary) => distribution(r),
     },
     {
       title: "진행률",
