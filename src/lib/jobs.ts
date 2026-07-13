@@ -1,7 +1,7 @@
 /**
  * go-dobby 잡 실행(헤드리스 claude spawn). (서버 전용, node I/O)
  * 대시보드에서 `/dobby-order {키}`를 백그라운드로 띄우고 진행 로그를 읽는다.
- * 로그·메타: `$DOBBY_META/.mentis-jobs/{키}/`.
+ * 로그·메타: `$ORCHESTRATION_META/.mentis-jobs/{키}/`.
  */
 import fs from "node:fs";
 import path from "node:path";

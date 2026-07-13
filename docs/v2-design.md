@@ -12,23 +12,23 @@
 | | work-dobby (v1이 읽는 것) | go-dobby (v2가 읽을 것) |
 |---|---|---|
 | 진입 | issue-start(단독) vs i-order(오케스트레이션) **2경로** | `dobby-order` **단일 진입점** |
-| 폴더 | `$META/.issue-start/{키}/`, `.issue-test/{키}/`, `.issue-end/{키}/`, `.agent-start/{에픽}/` **4트리** | `$DOBBY_META/{키}/` **이슈당 폴더 1개** |
+| 폴더 | `$META/.issue-start/{키}/`, `.issue-test/{키}/`, `.issue-end/{키}/`, `.agent-start/{에픽}/` **4트리** | `$ORCHESTRATION_META/{키}/` **이슈당 폴더 1개** |
 | 인덱스 | 트리마다 별도 `status.md`/`summary.md`/`orchestration.md` | **단일 `status.md`** 하나가 전 단계 인덱스 |
 | 단독 vs 다중 | 별개 개념(개별 이슈 vs 에픽) | **팬아웃 K**로 통합 — K=1은 "에이전트 1명 오케스트레이션" |
 | 작업 종류 | 코드 전제 | **work-type**: `code` / `비소스`(문서·리서치) |
 | 종료 | issue-end(해결+정리 혼재) | `dobby-resolve`(해결 표시) + `dobby-end`(정리) 분리 |
 | 문서 전용 | 없음 | `TASK-{slug}` 작업 키 지원 |
 
-**핵심 결론**: v1의 5개 화면 영역(issue-start / issue-test / issue-end / lifecycle / orchestration)은 v2에서 **하나의 엔티티 "오더(Order)"**로 수렴한다. 오더 = `$DOBBY_META/{키}/` 하나. K=1이든 K≥2든, code든 비소스든 같은 엔티티이며 K/work-type/현재 단계가 속성일 뿐이다. → 대시보드는 근본적으로 **"오더 목록 + 오더 상세"** 두 축으로 단순해진다.
+**핵심 결론**: v1의 5개 화면 영역(issue-start / issue-test / issue-end / lifecycle / orchestration)은 v2에서 **하나의 엔티티 "오더(Order)"**로 수렴한다. 오더 = `$ORCHESTRATION_META/{키}/` 하나. K=1이든 K≥2든, code든 비소스든 같은 엔티티이며 K/work-type/현재 단계가 속성일 뿐이다. → 대시보드는 근본적으로 **"오더 목록 + 오더 상세"** 두 축으로 단순해진다.
 
 ---
 
 ## 2. go-dobby 폴더/파일 스키마 (파서가 읽을 대상)
 
-경로는 모두 `$DOBBY_META = ${DOBBY_META_PATH:-$DOBBY_WORKSPACE/meta}` 기준. 워크트리는 `$DOBBY_WORKSPACE/subtree/{repo}-{키}`.
+경로는 모두 `$ORCHESTRATION_META = ${ORCHESTRATION_META_PATH:-$ORCHESTRATION_WORKSPACE/meta}` 기준. 워크트리는 `$ORCHESTRATION_WORKSPACE/subtree/{repo}-{키}`.
 
 ```
-$DOBBY_META/{키}/
+$ORCHESTRATION_META/{키}/
 ├── status.md            # ★ 단일 진행 인덱스 (dobby-start 생성, 모든 스킬이 갱신)
 ├── analysis.md          # 착수·분석·수정 설계 (dobby-start) — 자유형 산문
 ├── implementation.md    # 구현 요약 + (K=1) ## 리뷰 (dobby-impl, code)
@@ -96,8 +96,8 @@ $DOBBY_META/{키}/
 
 - v1의 경로 리졸버(`expandPath`·`readConfigEnv`·`resolveConfig`·`getWorkspaceDir`·`getMetaDir`·`getReposRoot`)를 **`config.ts`로 이동**해 재사용.
 - **삭제**: `getIssueTestDir`·`getStartDir`·`getEndDir`·`getAgentStartDir` (분리 트리 소멸).
-- v2는 `$DOBBY_META` 하나만 쓴다. 오더 목록 = `readdir($DOBBY_META)` 후 **키 패턴 필터**(`^[A-Za-z][A-Za-z0-9]*-\d+$` 또는 `^TASK-`), 잡 폴더(`.mentis-jobs`)·숨김 폴더 제외.
-- `ISSUE_START_DIR` 등 개별 env 제거, `DOBBY_META_PATH`/`DOBBY_WORKSPACE`만. `config.md`가 아직 `.issue-*` 레이아웃을 설명하는 점은 **plugins 쪽 문서 버그로 별도 보고**(코드는 스펙 §5 기준).
+- v2는 `$ORCHESTRATION_META` 하나만 쓴다. 오더 목록 = `readdir($ORCHESTRATION_META)` 후 **키 패턴 필터**(`^[A-Za-z][A-Za-z0-9]*-\d+$` 또는 `^TASK-`), 잡 폴더(`.mentis-jobs`)·숨김 폴더 제외.
+- `ISSUE_START_DIR` 등 개별 env 제거, `ORCHESTRATION_META_PATH`/`ORCHESTRATION_WORKSPACE`만. `config.md`가 아직 `.issue-*` 레이아웃을 설명하는 점은 **plugins 쪽 문서 버그로 별도 보고**(코드는 스펙 §5 기준).
 
 ### 4.2 단일 리더 `orders.ts` (v1의 issues/lifecycle/orchestration 통합)
 
@@ -152,11 +152,13 @@ getMetrics(): Metric[]                 // 허브 지표 (phase별 카운트 등)
 | free-form(analysis/impl/produce/test-plan) | 마크다운 통째 렌더 + `## 리뷰`만 분리 | 파서 불필요 |
 
 - v1의 `parseStart.ts`·`parseEnd.ts`의 상태/워크트리 로직은 신규 `parseStatus.ts`로 흡수 후 폐기.
-- `orchestration.ts`의 `parseAgentLog` 재사용하되 **`isMeta` 필터를 `$DOBBY_META/{키}/` 패턴으로 수정**(현재 `/.issue-start/`·`/.agent-start/` 하드코딩은 v2에서 무의미).
+- `orchestration.ts`의 `parseAgentLog` 재사용하되 **`isMeta` 필터를 `$ORCHESTRATION_META/{키}/` 패턴으로 수정**(현재 `/.issue-start/`·`/.agent-start/` 하드코딩은 v2에서 무의미).
 
 ---
 
 ## 5. 라우트 / 내비게이션 재설계  — 확정: 단일 라우트 + 탭
+
+> ⚠️ **구현 divergence (feature/brand-new)**: 아래 "단일 라우트 `/orders/[key]` + 클라이언트 탭" 설계는 초기 계획이며, 실제 구현은 **v1식 멀티페이지(`/orchestration/[key]`, `/orchestration/[key]/changes`, `/orchestration/console/[key]`)로 되돌렸습니다**(탭/Drawer 제거). 현재 실제 라우트는 [`README.md`](../README.md#화면)가 정본입니다. 이 절은 설계 배경 기록으로 남깁니다.
 
 ```
 /                         허브 — 오더 전체 지표(단계별 분포·오늘 활동·K 분포)
@@ -197,7 +199,7 @@ getMetrics(): Metric[]                 // 허브 지표 (phase별 카운트 등)
 
 ## 7. jobs.ts (잡 실행) — ✅ 2차 구현 완료
 
-- `lib/jobs.ts`: `claude -p "/dobby-order {키}"`를 detached spawn(`bypassPermissions`·stream-json). 잡 폴더 `$DOBBY_META/.mentis-jobs/{키}/`. `--resume` 재개, archive/unarchive.
+- `lib/jobs.ts`: `claude -p "/dobby-order {키}"`를 detached spawn(`bypassPermissions`·stream-json). 잡 폴더 `$ORCHESTRATION_META/.mentis-jobs/{키}/`. `--resume` 재개, archive/unarchive.
 - **PID 안전성 보강**: `isRunning`은 `process.kill(pid,0)` + `ps -o command=`로 **claude 명령 대조**(재사용 PID 오인 방지). `stopOrder`는 실행 확인 후에만 프로세스 그룹(`-pid`) SIGTERM하고 `stoppedAt` 기록 → `getJobStatus`가 `stopped`/`failed`/`done` 구분.
 - `app/api/orders/route.ts`: POST(실행/재개/복원)·DELETE(정지/보관)·GET(상태/목록). 키 검증(`ORDER_KEY_RE`, 대소문자 보존 → TASK 키 안전).
 - 컴포넌트: `FeedView`(로그), `JobConsole`(단건 라이브 콘솔: 실행/정지/재개/보관), `OrderLauncher`(`/orders` 상단 실행 패널). 상세엔 "실행" 탭.
@@ -223,10 +225,10 @@ getMetrics(): Metric[]                 // 허브 지표 (phase별 카운트 등)
 
 ## 9. 리스크 / 열린 항목
 
-1. **스키마 갭**: `## 테스트 실행 이력` 컬럼은 스펙 §6에 있으나 스킬 본문엔 미기재, `orchestration.md`/`agent-logs.json`은 어디에도 컬럼 미정의 → 실제 산출 샘플이 나오면 파서 검증 필요. **현재 `$DOBBY_META`에 go-dobby 실데이터가 있는지 먼저 확인** 권장.
+1. **스키마 갭**: `## 테스트 실행 이력` 컬럼은 스펙 §6에 있으나 스킬 본문엔 미기재, `orchestration.md`/`agent-logs.json`은 어디에도 컬럼 미정의 → 실제 산출 샘플이 나오면 파서 검증 필요. **현재 `$ORCHESTRATION_META`에 go-dobby 실데이터가 있는지 먼저 확인** 권장.
 2. **단계 리터럴 드리프트**(`산출중` 등 템플릿 밖) → prefix/superset 정규화로 흡수.
 3. **config.md 문서 stale**(`.issue-*` 레이아웃 설명) → plugins 리포에 별도 이슈로 보고.
-4. v1과 v2가 같은 `$DOBBY_META`를 볼 수 없음(레이아웃 상이) — 두 대시보드 동시 운영 시 각각의 워크스페이스 필요.
+4. v1과 v2가 같은 `$ORCHESTRATION_META`를 볼 수 없음(레이아웃 상이) — 두 대시보드 동시 운영 시 각각의 워크스페이스 필요.
 5. 비소스(dobby-produce) 오더는 검증 탭이 없고 `deliverables/` 표시가 필요 → 탭 조건부 렌더.
 
 ---

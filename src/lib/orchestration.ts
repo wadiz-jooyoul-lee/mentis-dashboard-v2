@@ -1,6 +1,6 @@
 /**
  * go-dobby 오케스트레이션 리더. (서버 전용, node I/O)
- * go-dobby는 이슈당 폴더 1개(`$DOBBY_META/{키}/`)를 쓴다. 각 키를 하나의 "에픽"으로 본다.
+ * go-dobby는 이슈당 폴더 1개(`$ORCHESTRATION_META/{키}/`)를 쓴다. 각 키를 하나의 "에픽"으로 본다.
  * K≥2면 orchestration.md·agents/·reviews/·agent-logs.json이 있고, K=1이면 status.md의
  * 에이전트 표로 오케스트레이션을 합성한다. 컴포넌트(OrchestrationList/Board/Changes)가
  * 쓰는 EpicSummary/EpicDetail shape은 유지하고 workType만 추가한다.
@@ -32,7 +32,7 @@ function orderDir(key: string): string {
   return path.join(getMetaDir(), key);
 }
 
-/** `$DOBBY_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
+/** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
 function epicKeys(): string[] {
   const root = getMetaDir();
   if (!fs.existsSync(root)) return [];
