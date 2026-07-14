@@ -2,10 +2,12 @@
   "name": "mentis-dashboard-v2",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.10.0",
   "scripts": {
     "dev": "next dev -p 7253",
     "build": "next build",
     "start": "next start -p 7253",
+    "build:start": "next build && next start -p 7253",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "demo:seed": "node scripts/seed-demo.mjs",

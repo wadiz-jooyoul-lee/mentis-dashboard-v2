@@ -59,13 +59,14 @@ $ORCHESTRATION_META/{키}/                # 키 = FE1-1187 (이슈) 또는 TASK-
 ## 설치 & 실행
 
 ```bash
-npm install
-npm run dev          # http://localhost:7253
+pnpm install
+pnpm dev             # http://localhost:7253
 ```
 
 ```bash
-npm run build
-npm run start        # http://localhost:7253
+pnpm build
+pnpm start           # http://localhost:7253
+pnpm build:start     # 빌드 후 곧바로 실행(한 번에)
 ```
 
 ## 데모 (목업 데이터)
@@ -73,13 +74,13 @@ npm run start        # http://localhost:7253
 실제 `$ORCHESTRATION_META`를 건드리지 않고, 격리된 `./.demo-meta`에 예시 오더를 심어 실행합니다.
 
 ```bash
-npm run demo         # .demo-meta에 fixture 생성 후 ORCHESTRATION_META_PATH로 가리켜 dev 실행
-npm run demo:seed    # fixture만 생성
-npm run demo:clean   # .demo-meta 삭제
+pnpm demo            # .demo-meta에 fixture 생성 후 ORCHESTRATION_META_PATH로 가리켜 dev 실행
+pnpm demo:seed       # fixture만 생성
+pnpm demo:clean      # .demo-meta 삭제
 ```
 
 - 데모 데이터: K=1 code(종료)·K≥2(리뷰중, 변경 diff)·비소스(TASK)·최소(착수) 오더 + 잡 로그 예시. 모든 화면을 둘러볼 수 있습니다.
-- `npm run dev`는 **실제** `$ORCHESTRATION_META`를 읽으므로 데모 데이터가 섞이지 않습니다. (`.demo-meta`는 git 무시)
+- `pnpm dev`는 **실제** `$ORCHESTRATION_META`를 읽으므로 데모 데이터가 섞이지 않습니다. (`.demo-meta`는 git 무시)
 
 ## 요구 사항
 
