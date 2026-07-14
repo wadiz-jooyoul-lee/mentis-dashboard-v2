@@ -201,6 +201,18 @@ export function listEpics(): EpicSummary[] {
   return epics;
 }
 
+/**
+ * 각 에이전트의 현재 "작업 지문" = `상태#라운드`(결과물 완료 보정 반영). 슬러그→지문.
+ * 아바타 소감(재미기능)이 "소감 만든 뒤 추가 작업했는지"를 판단하는 근거로 쓴다.
+ */
+export function agentSigs(key: string): Record<string, string> {
+  const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
+  const o = orchestrationOf(key, statusMd);
+  const out: Record<string, string> = {};
+  if (o) for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+  return out;
+}
+
 export type Contract = { slug: string; role: string; raw: string };
 export type ReviewFile = { round: number; slug: string; content: string };
 export type EditHunk = { old: string; new: string };

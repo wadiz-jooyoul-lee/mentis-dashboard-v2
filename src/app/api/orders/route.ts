@@ -17,7 +17,7 @@ import {
   JOB_ID_RE,
 } from "@/lib/jobs";
 import { getConsole } from "@/lib/transcript";
-import { readQuips, orderSignature } from "@/lib/quips";
+import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
 
-  // 아바타 소감(재미기능) 생성: /avatar-quips {키}
+  // 아바타 소감(재미기능) 생성: /avatar-quips {키} [슬러그...]
   if (body?.quips) {
-    const r = startQuips(String(body?.key ?? ""));
+    const slugs = Array.isArray(body?.slugs) ? body.slugs.map(String) : undefined;
+    const r = startQuips(String(body?.key ?? ""), slugs);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
@@ -114,8 +115,10 @@ export async function GET(req: NextRequest) {
     const f = readQuips(quipsKey);
     const currentSig = orderSignature(quipsKey);
     const job = getJobStatus(`quips-${quipsKey}`);
-    const stale = !f || f.sig !== currentSig;
-    // 잡이 끝났는데(성공/실패) 최신 파일이 없으면 실패로 보고 원인(잡 result)을 함께 준다.
+    // 다시 만들 대상(소감 없음 + 추가 작업함). 하나라도 있으면 stale.
+    const slugs = staleSlugs(quipsKey);
+    const stale = slugs.length > 0;
+    // 잡이 끝났는데(성공/실패) 여전히 대상이 남아 있으면 실패로 보고 원인(잡 result)을 함께 준다.
     const failedNoResult =
       (job.state === "failed" || job.state === "done" || job.state === "stopped") && stale;
     return NextResponse.json({
@@ -123,6 +126,7 @@ export async function GET(req: NextRequest) {
       fileSig: f?.sig ?? null,
       currentSig,
       stale,
+      staleSlugs: slugs,
       jobState: job.state,
       reason: failedNoResult ? jobResultText(`quips-${quipsKey}`) : null,
     });

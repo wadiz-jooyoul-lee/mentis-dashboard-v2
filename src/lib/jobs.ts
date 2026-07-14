@@ -206,13 +206,23 @@ export function jobResultText(key: string): string | null {
   }
 }
 
-/** 아바타 소감(재미기능) 생성: `/avatar-quips {키}`를 백그라운드로 실행. 잡 id는 `quips-{키}`. */
-export function startQuips(key: string): { ok: boolean; reason?: string; jobId?: string } {
+/**
+ * 아바타 소감(재미기능) 생성: `/avatar-quips {키} [슬러그...]`를 백그라운드로 실행. 잡 id는 `quips-{키}`.
+ * slugs를 주면 그 에이전트들 소감만 다시 만들어 병합한다(없으면 전체).
+ */
+export function startQuips(
+  key: string,
+  slugs?: string[]
+): { ok: boolean; reason?: string; jobId?: string } {
   const k = key.trim();
   if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
   const jobId = `quips-${k}`;
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
-  spawnClaude(jobId, ["-p", `/avatar-quips ${k}`], false);
+  const safe = (slugs ?? [])
+    .map((s) => String(s).trim())
+    .filter((s) => /^[A-Za-z0-9_-]+$/.test(s));
+  const prompt = `/avatar-quips ${k}${safe.length ? " " + safe.join(" ") : ""}`;
+  spawnClaude(jobId, ["-p", prompt], false);
   return { ok: true, jobId };
 }
 

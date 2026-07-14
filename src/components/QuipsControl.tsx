@@ -71,13 +71,15 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
         const st = await (
           await fetch(`/api/orders?quips=${encodeURIComponent(epicKey)}`, { cache: "no-store" })
         ).json();
+        const targets: string[] = Array.isArray(st.staleSlugs) ? st.staleSlugs : [];
         if (st.jobState === "running") {
           setBusy(true);
-        } else if (manual || st.stale) {
+        } else if (targets.length > 0) {
+          // 소감 없음 + 추가 작업한 에이전트만 다시 생성(병합)
           const r = await fetch("/api/orders", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ quips: true, key: epicKey }),
+            body: JSON.stringify({ quips: true, key: epicKey, slugs: targets }),
           });
           if (r.ok || r.status === 409) {
             setBusy(true);
@@ -86,7 +88,8 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
             return;
           }
         } else {
-          return; // 최신이면 아무것도 안 함
+          if (manual) message.info("소감이 이미 최신이에요");
+          return; // 다시 만들 대상 없음
         }
         polls.current = 0;
         stopPoll();
