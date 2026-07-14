@@ -11,6 +11,8 @@ import { agentSigs } from "@/lib/orchestration";
 export type QuipMood = "happy" | "cheer" | "complain" | "ponder" | "chill" | "tired" | "bored";
 export type Quip = { mood: QuipMood; text: string };
 export type QuipContext = "board" | "changes" | "reviews";
+/** 시간별 소감 한 줄(에이전트 상세 타임라인용). */
+export type QuipEntry = { at: string; state: string; mood: QuipMood; text: string };
 export type QuipsFile = {
   sig?: string;
   generatedAt?: string;
@@ -19,6 +21,8 @@ export type QuipsFile = {
   board?: Record<string, Quip>;
   changes?: Record<string, Quip>;
   reviews?: Record<string, Quip>;
+  /** 슬러그별 시간순 소감 기록(생성 때마다 board 소감 1줄 append). */
+  history?: Record<string, QuipEntry[]>;
 };
 
 function quipsDir(): string {
