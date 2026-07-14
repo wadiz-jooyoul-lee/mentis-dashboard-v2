@@ -11,6 +11,8 @@ export type AgentRow = {
   state: AgentState;
   round: string;
   updatedAt: string;
+  /** 작업 시작 시각(활성 상태 진입). 정체 감지는 이 값 기준. 없거나 날짜만이면 감지 안 함. */
+  startedAt: string;
 };
 
 export type ScopeRow = { area: string; owner: string; reason: string };
@@ -132,6 +134,7 @@ export function parseOrchestration(md: string): Orchestration {
     const iState = columnIndex(aT.headers, "상태");
     const iRound = columnIndex(aT.headers, "라운드");
     const iUpd = columnIndex(aT.headers, "갱신");
+    const iStart = columnIndex(aT.headers, "착수", "시작");
     for (const r of aT.rows) {
       agents.push({
         agent: at(r, iAgent),
@@ -140,6 +143,7 @@ export function parseOrchestration(md: string): Orchestration {
         state: normAgentState(at(r, iState)),
         round: at(r, iRound),
         updatedAt: at(r, iUpd),
+        startedAt: at(r, iStart),
       });
     }
   }

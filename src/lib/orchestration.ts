@@ -120,6 +120,7 @@ function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
       state: completedByDeliverable(key, slug) ? "완료" : "진행중",
       round: "",
       updatedAt: "",
+      startedAt: "",
     });
   }
   return o;

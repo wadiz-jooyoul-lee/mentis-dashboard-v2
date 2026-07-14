@@ -37,20 +37,30 @@ import "./markdown.css";
 
 const { Title, Text } = Typography;
 
-/** 갱신 시각 이후 경과(분). 파싱 실패 시 null. */
+/** 시각 문자열에 시:분이 있나(날짜만이면 false). 날짜만이면 경과를 못 재므로 정체 판정에서 제외. */
+function hasTimeOfDay(v: string | null | undefined): boolean {
+  return !!v && /\d{1,2}:\d{2}/.test(v);
+}
+
+/** 주어진 시각 이후 경과(분). 파싱 실패·시각없음이면 null. */
 function minutesSince(v: string | null | undefined): number | null {
-  if (!v) return null;
-  const d = new Date(v.replace(" ", "T"));
+  if (!hasTimeOfDay(v)) return null;
+  const d = new Date((v as string).replace(" ", "T"));
   if (isNaN(d.getTime())) return null;
   return Math.floor((Date.now() - d.getTime()) / 60000);
 }
 
 // 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·분석완료·재통합대기·완료 제외)
 const ACTIVE_STATES = ["분석중", "구현중", "진행중", "리뷰중", "수정중"];
+const STALE_MIN = 15;
+/**
+ * 정체 의심 = 활성 상태 + "작업 시작(착수) 시각"으로부터 STALE_MIN분 이상 경과.
+ * 착수 시각이 없거나 날짜만이면(시:분 없음) 경과를 못 재므로 판정하지 않는다(오탐 방지).
+ */
 function isStale(a: AgentRow): boolean {
   if (!ACTIVE_STATES.includes(a.state)) return false;
-  const m = minutesSince(a.updatedAt);
-  return m != null && m >= 15;
+  const m = minutesSince(a.startedAt);
+  return m != null && m >= STALE_MIN;
 }
 
 // 역할명 → 고정 색(이름 해시로 팔레트에서 선택)
@@ -194,7 +204,7 @@ function AgentCard({
         </Space>
         {stale && (
           <Tag color="error" icon={<WarningOutlined />}>
-            정체 의심 ({minutesSince(a.updatedAt)}분 무변화)
+            정체 의심 (착수 후 {minutesSince(a.startedAt)}분 경과)
           </Tag>
         )}
         {clickable && (
@@ -396,7 +406,7 @@ export default function OrchestrationBoard({
           style={{ marginBottom: 16 }}
           message={`정체 의심 ${staleAgents.length}건`}
           description={staleAgents
-            .map((a) => `${a.agent}(${a.issue}) ${minutesSince(a.updatedAt)}분`)
+            .map((a) => `${a.agent}(${a.issue}) 착수 후 ${minutesSince(a.startedAt)}분`)
             .join(" · ")}
         />
       )}
