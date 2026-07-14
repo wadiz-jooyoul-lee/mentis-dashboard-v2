@@ -66,18 +66,42 @@ function workTypeOf(key: string, statusMd: string | null): WorkType {
   return null;
 }
 
+/**
+ * 이 슬러그의 산출물(deliverables/{슬러그}.md 또는 폴더)이 있으면 완료로 본다.
+ * 오케스트레이터가 상태표 갱신을 미뤄도(감사·산출 에이전트가 결과물만 남긴 경우)
+ * 대시보드가 결과물을 근거로 완료를 즉시 반영하기 위함. 코드 에이전트는 deliverables를
+ * 만들지 않으므로 이 보정에 걸리지 않는다(잘못된 완료 표시 방지).
+ */
+function completedByDeliverable(key: string, slug: string): boolean {
+  if (!slug || slug === "-") return false;
+  const base = path.join(orderDir(key), "deliverables");
+  try {
+    return fs.existsSync(path.join(base, `${slug}.md`)) || fs.existsSync(path.join(base, slug));
+  } catch {
+    return false;
+  }
+}
+
+/** 상태표가 진행 상태여도, 산출물이 있으면 완료로 보정한다. */
+function applyDeliverableCompletion(key: string, o: Orchestration): Orchestration {
+  o.agents = o.agents.map((a) =>
+    a.state !== "완료" && completedByDeliverable(key, a.agent) ? { ...a, state: "완료" } : a
+  );
+  return o;
+}
+
 /** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. */
 function orchestrationOf(key: string, statusMd: string | null): Orchestration | null {
   const omd = readFileSafe(path.join(orderDir(key), "orchestration.md"));
   if (omd) {
     const o = parseOrchestration(omd);
     if (!o.epicKey) o.epicKey = key;
-    return o;
+    return applyDeliverableCompletion(key, o);
   }
   if (statusMd) {
     const st = parseOrderStatus(statusMd, key);
     if (st.agents.length > 0) {
-      return {
+      return applyDeliverableCompletion(key, {
         epicKey: key,
         mode: null,
         agents: st.agents,
@@ -85,7 +109,7 @@ function orchestrationOf(key: string, statusMd: string | null): Orchestration | 
         conflicts: "",
         events: [],
         restMarkdown: "",
-      };
+      });
     }
   }
   return null;
