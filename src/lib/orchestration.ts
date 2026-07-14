@@ -57,8 +57,11 @@ function epicKeys(): string[] {
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
-  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
+  // 코드 구현 증거(implementation.md)를 deliverables보다 먼저 본다.
+  // 개발 오더도 감사·분석 에이전트가 deliverables/에 보고서를 남기므로,
+  // deliverables를 먼저 보면 코드 오더가 비개발로 오분류된다(FE-10884 사례).
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
+  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
   if (statusMd) {
     const wt = parseOrderStatus(statusMd, key).workTypeHint;
     if (wt) return wt;
