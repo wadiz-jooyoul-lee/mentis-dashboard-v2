@@ -11,6 +11,28 @@ export type DobbyExpression =
   | "curious"
   | "neutral";
 
+/** 에이전트 상태 → 도비 표정(오케스트레이션 보드·전체 아바타 페이지 공용). */
+export function dobbyExpression(state: string): DobbyExpression {
+  switch (state) {
+    case "대기":
+    case "재통합대기":
+      return "resting";
+    case "완료":
+      return "happy";
+    case "분석중":
+    case "분석완료":
+      return "thinking";
+    case "구현중":
+    case "진행중":
+    case "수정중":
+      return "tired";
+    case "리뷰중":
+      return "curious";
+    default:
+      return "neutral";
+  }
+}
+
 /** 헥스 색을 factor(0~1)만큼 어둡게 만든다(윤곽선용). */
 function darken(hex: string, factor: number): string {
   const m = hex.replace("#", "");
@@ -59,6 +81,7 @@ export default function DobbyIcon({
       fill="none"
       aria-hidden
       role="img"
+      style={{ flexShrink: 0 }}
     >
       {/* 귀 */}
       <path

@@ -272,6 +272,7 @@ function parseAgents(md: string): AgentRow[] {
     state: stateIdx,
     round: columnIndex(t.headers, "라운드"),
     upd: columnIndex(t.headers, "갱신"),
+    start: columnIndex(t.headers, "착수", "시작"),
   };
   return rowsOf(t).map((r) => ({
     agent: at(r, ci.name),
@@ -280,6 +281,7 @@ function parseAgents(md: string): AgentRow[] {
     state: normAgentState(at(r, ci.state)),
     round: at(r, ci.round),
     updatedAt: at(r, ci.upd),
+    startedAt: at(r, ci.start),
   }));
 }
 

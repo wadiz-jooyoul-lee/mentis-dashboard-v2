@@ -57,8 +57,11 @@ function epicKeys(): string[] {
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
-  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
+  // 코드 구현 증거(implementation.md)를 deliverables보다 먼저 본다.
+  // 개발 오더도 감사·분석 에이전트가 deliverables/에 보고서를 남기므로,
+  // deliverables를 먼저 보면 코드 오더가 비개발로 오분류된다(FE-10884 사례).
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
+  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
   if (statusMd) {
     const wt = parseOrderStatus(statusMd, key).workTypeHint;
     if (wt) return wt;
@@ -66,29 +69,82 @@ function workTypeOf(key: string, statusMd: string | null): WorkType {
   return null;
 }
 
-/** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. */
+/**
+ * 이 슬러그의 산출물(deliverables/{슬러그}.md 또는 폴더)이 있으면 완료로 본다.
+ * 오케스트레이터가 상태표 갱신을 미뤄도(감사·산출 에이전트가 결과물만 남긴 경우)
+ * 대시보드가 결과물을 근거로 완료를 즉시 반영하기 위함. 코드 에이전트는 deliverables를
+ * 만들지 않으므로 이 보정에 걸리지 않는다(잘못된 완료 표시 방지).
+ */
+function completedByDeliverable(key: string, slug: string): boolean {
+  if (!slug || slug === "-") return false;
+  const base = path.join(orderDir(key), "deliverables");
+  try {
+    return fs.existsSync(path.join(base, `${slug}.md`)) || fs.existsSync(path.join(base, slug));
+  } catch {
+    return false;
+  }
+}
+
+/** agent-logs.json의 슬러그 목록(스폰된 에이전트). 문자열·객체 값 모두 키만 취한다. */
+function agentLogSlugs(key: string): string[] {
+  const raw = readFileSafe(path.join(orderDir(key), "agent-logs.json"));
+  if (!raw) return [];
+  try {
+    return Object.keys(JSON.parse(raw) as Record<string, unknown>).filter((k) => k && k !== "-");
+  } catch {
+    return [];
+  }
+}
+
+/** 상태표가 진행 상태여도, 산출물이 있으면 완료로 보정한다. */
+function applyDeliverableCompletion(key: string, o: Orchestration): Orchestration {
+  o.agents = o.agents.map((a) =>
+    a.state !== "완료" && completedByDeliverable(key, a.agent) ? { ...a, state: "완료" } : a
+  );
+  return o;
+}
+
+/**
+ * 스폰됐지만(agent-logs.json에 있음) 상태표에는 없는 에이전트를 보드에 병합한다.
+ * 오케스트레이터가 새 에이전트 행 추가를 누락해도 대시보드에 보이게 한다.
+ * 상태: 산출물이 있으면 완료, 없으면 진행중으로 추정.
+ */
+function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
+  const have = new Set(o.agents.map((a) => a.agent));
+  for (const slug of agentLogSlugs(key)) {
+    if (have.has(slug)) continue;
+    o.agents.push({
+      agent: slug,
+      issue: "",
+      branch: "",
+      state: completedByDeliverable(key, slug) ? "완료" : "진행중",
+      round: "",
+      updatedAt: "",
+      startedAt: "",
+    });
+  }
+  return o;
+}
+
+/** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. 이후 산출물·스폰로그로 보정. */
 function orchestrationOf(key: string, statusMd: string | null): Orchestration | null {
   const omd = readFileSafe(path.join(orderDir(key), "orchestration.md"));
+  let o: Orchestration | null = null;
   if (omd) {
-    const o = parseOrchestration(omd);
+    o = parseOrchestration(omd);
     if (!o.epicKey) o.epicKey = key;
-    return o;
-  }
-  if (statusMd) {
+  } else if (statusMd) {
     const st = parseOrderStatus(statusMd, key);
     if (st.agents.length > 0) {
-      return {
-        epicKey: key,
-        mode: null,
-        agents: st.agents,
-        scope: [],
-        conflicts: "",
-        events: [],
-        restMarkdown: "",
-      };
+      o = { epicKey: key, mode: null, agents: st.agents, scope: [], conflicts: "", events: [], restMarkdown: "" };
     }
   }
-  return null;
+  // 상태표가 없어도 스폰된 에이전트가 있으면 보드를 만든다.
+  if (!o) {
+    if (agentLogSlugs(key).length === 0) return null;
+    o = { epicKey: key, mode: null, agents: [], scope: [], conflicts: "", events: [], restMarkdown: "" };
+  }
+  return mergeSpawnedAgents(key, applyDeliverableCompletion(key, o));
 }
 
 export type Counts = { total: number } & Record<string, number>;
@@ -147,6 +203,18 @@ export function listEpics(): EpicSummary[] {
   }
   epics.sort((a, b) => (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
   return epics;
+}
+
+/**
+ * 각 에이전트의 현재 "작업 지문" = `상태#라운드`(결과물 완료 보정 반영). 슬러그→지문.
+ * 아바타 소감(재미기능)이 "소감 만든 뒤 추가 작업했는지"를 판단하는 근거로 쓴다.
+ */
+export function agentSigs(key: string): Record<string, string> {
+  const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
+  const o = orchestrationOf(key, statusMd);
+  const out: Record<string, string> = {};
+  if (o) for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+  return out;
 }
 
 export type Contract = { slug: string; role: string; raw: string };

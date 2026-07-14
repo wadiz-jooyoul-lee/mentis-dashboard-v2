@@ -4,17 +4,58 @@ import Link from "next/link";
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Alert } from "antd";
+import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Alert, Timeline } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
 import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
 import JobConsole from "@/components/JobConsole";
-import DobbyIcon from "@/components/DobbyIcon";
+import GroupAvatar from "@/components/GroupAvatar";
+import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
+import { assignOrderAvatars } from "@/lib/avatarAssign";
+import type { QuipsFile, QuipEntry } from "@/lib/quips";
 import "./markdown.css";
 
 const { Title, Text, Paragraph } = Typography;
+
+const QUIP_MOOD_EMOJI: Record<string, string> = {
+  happy: "😊",
+  cheer: "🙌",
+  complain: "😤",
+  ponder: "🤔",
+  chill: "😎",
+  tired: "😮‍💨",
+  bored: "🥱",
+};
+
+/** 에이전트 상세: 시간별 소감 기록(시간·상태·소감). 오래된 것 → 최신 순. */
+function QuipHistory({ entries }: { entries?: QuipEntry[] }) {
+  if (!entries || entries.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Text strong>소감 기록</Text>
+      <Timeline
+        style={{ marginTop: 8 }}
+        items={entries.map((e) => ({
+          children: (
+            <Space direction="vertical" size={2}>
+              <Space size={6} wrap align="center">
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {(e.at ?? "").replace("T", " ").slice(0, 16)}
+                </Text>
+                <Tag style={{ margin: 0 }}>{e.state}</Tag>
+              </Space>
+              <Text>
+                {QUIP_MOOD_EMOJI[e.mood] ?? "💬"} {e.text}
+              </Text>
+            </Space>
+          ),
+        }))}
+      />
+    </div>
+  );
+}
 
 /** before→after 코드를 -/+ 로 표시. Write(old="")는 + 만. */
 function DiffView({ hunks }: { hunks: EditHunk[] }) {
@@ -135,11 +176,14 @@ function WorkBody({ w }: { w: AgentWork }) {
 export default function OrchestrationChanges({
   epicKey,
   epic,
+  quips,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  quips?: QuipsFile | null;
 }) {
   const agents: AgentRow[] = epic?.orchestration?.agents ?? [];
+  const avatarMap = assignOrderAvatars(epicKey, agents.map((a) => a.agent));
   const works = epic?.agentWorks ?? [];
   const contracts = epic?.contracts ?? [];
 
@@ -184,9 +228,12 @@ export default function OrchestrationChanges({
           ]}
           style={{ marginBottom: 8 }}
         />
-        <Title level={2} style={{ margin: 0 }}>
-          에이전트 상세 — {epicKey}
-        </Title>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Title level={2} style={{ margin: 0 }}>
+            에이전트 상세 — {epicKey}
+          </Title>
+          <QuipsControl epicKey={epicKey} />
+        </div>
       </div>
       <Paragraph type="secondary" style={{ marginTop: 12 }}>
         각 에이전트의 상태와 작업 내역입니다. 대화 로그(agent-logs.json)가 있으면 수정 파일·커밋·diff·요약을, 없으면 상태·계약을 보여줍니다.
@@ -224,7 +271,7 @@ export default function OrchestrationChanges({
                 <Card
                   title={
                     <Space size={8} align="center" wrap>
-                      <DobbyIcon size={26} expression="curious" color={dobbyColor(a.agent)} />
+                      <GroupAvatar slug={a.agent} avatar={avatarMap.get(a.agent)} state={a.state} size={26} quip={quips?.changes?.[a.agent]} />
                       <Text strong style={{ fontSize: 16 }}>
                         {a.agent}
                       </Text>
@@ -263,6 +310,7 @@ export default function OrchestrationChanges({
                       )}
                     </Space>
                   )}
+                  <QuipHistory entries={quips?.history?.[a.agent]} />
                   <Collapse
                     ghost
                     destroyOnHidden

@@ -22,9 +22,13 @@ import {
   Alert,
 } from "antd";
 import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
-import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
+import DobbyIcon from "@/components/DobbyIcon";
+import GroupAvatar from "@/components/GroupAvatar";
+import QuipsControl from "@/components/QuipsControl";
 import IssueReport from "@/components/IssueReport";
+import type { QuipsFile, Quip } from "@/lib/quips";
 import { dobbyColor } from "@/lib/dobby";
+import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
@@ -33,20 +37,30 @@ import "./markdown.css";
 
 const { Title, Text } = Typography;
 
-/** 갱신 시각 이후 경과(분). 파싱 실패 시 null. */
+/** 시각 문자열에 시:분이 있나(날짜만이면 false). 날짜만이면 경과를 못 재므로 정체 판정에서 제외. */
+function hasTimeOfDay(v: string | null | undefined): boolean {
+  return !!v && /\d{1,2}:\d{2}/.test(v);
+}
+
+/** 주어진 시각 이후 경과(분). 파싱 실패·시각없음이면 null. */
 function minutesSince(v: string | null | undefined): number | null {
-  if (!v) return null;
-  const d = new Date(v.replace(" ", "T"));
+  if (!hasTimeOfDay(v)) return null;
+  const d = new Date((v as string).replace(" ", "T"));
   if (isNaN(d.getTime())) return null;
   return Math.floor((Date.now() - d.getTime()) / 60000);
 }
 
 // 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·분석완료·재통합대기·완료 제외)
 const ACTIVE_STATES = ["분석중", "구현중", "진행중", "리뷰중", "수정중"];
+const STALE_MIN = 15;
+/**
+ * 정체 의심 = 활성 상태 + "작업 시작(착수) 시각"으로부터 STALE_MIN분 이상 경과.
+ * 착수 시각이 없거나 날짜만이면(시:분 없음) 경과를 못 재므로 판정하지 않는다(오탐 방지).
+ */
 function isStale(a: AgentRow): boolean {
   if (!ACTIVE_STATES.includes(a.state)) return false;
-  const m = minutesSince(a.updatedAt);
-  return m != null && m >= 15;
+  const m = minutesSince(a.startedAt);
+  return m != null && m >= STALE_MIN;
 }
 
 // 역할명 → 고정 색(이름 해시로 팔레트에서 선택)
@@ -67,27 +81,6 @@ function roleColor(name: string): string {
 }
 
 /** 에이전트 상태 → 도비 표정. */
-function dobbyExpression(state: string): DobbyExpression {
-  switch (state) {
-    case "대기":
-    case "재통합대기":
-      return "resting";
-    case "완료":
-      return "happy";
-    case "분석중":
-    case "분석완료":
-      return "thinking";
-    case "구현중":
-    case "진행중":
-    case "수정중":
-      return "tired";
-    case "리뷰중":
-      return "curious";
-    default:
-      return "neutral";
-  }
-}
-
 /** 이벤트를 시(hour) 단위로 묶는다. 입력은 최신 먼저 정렬 가정(순서 유지). */
 function groupByHour(events: EventRow[]): { hour: string; events: EventRow[] }[] {
   const groups: { hour: string; events: EventRow[] }[] = [];
@@ -143,11 +136,17 @@ function AgentCard({
   a,
   epicKey,
   changeSlug,
+  avatar,
+  quip,
 }: {
   a: AgentRow;
   epicKey: string;
   /** 이 에이전트의 변경 기록 slug(있으면 카드 클릭 시 해당 섹션으로 이동) */
   changeSlug?: string;
+  /** 배정된 그룹 아바타 */
+  avatar?: AssignedAvatar;
+  /** 이 에이전트의 board 소감(있으면 호버 말풍선) */
+  quip?: Quip | null;
 }) {
   const router = useRouter();
   const stale = isStale(a);
@@ -171,11 +170,7 @@ function AgentCard({
     >
       <Space direction="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <DobbyIcon
-            size={34}
-            expression={dobbyExpression(a.state)}
-            color={dobbyColor(a.agent)}
-          />
+          <GroupAvatar slug={a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
             <Tag
               color={roleColor(a.agent)}
@@ -209,7 +204,7 @@ function AgentCard({
         </Space>
         {stale && (
           <Tag color="error" icon={<WarningOutlined />}>
-            정체 의심 ({minutesSince(a.updatedAt)}분 무변화)
+            정체 의심 (착수 후 {minutesSince(a.startedAt)}분 경과)
           </Tag>
         )}
         {clickable && (
@@ -229,11 +224,16 @@ function AgentCard({
 export default function OrchestrationBoard({
   epicKey,
   epic,
+  quips,
 }: {
   epicKey: string;
   epic: EpicDetail | null;
+  quips?: QuipsFile | null;
 }) {
   const o = epic?.orchestration ?? null;
+
+  // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
+  const avatarMap = assignOrderAvatars(epicKey, (o?.agents ?? []).map((a) => a.agent));
 
   // 리뷰/계약 slug → 한국어 역할명(계약 헤딩에서, "계약" 접미 제거)
   const roleBySlug = new Map(
@@ -331,6 +331,7 @@ export default function OrchestrationBoard({
             구현 내용
           </Button>
         </Link>
+        <QuipsControl epicKey={epicKey} />
       </Space>
     </div>
   );
@@ -405,7 +406,7 @@ export default function OrchestrationBoard({
           style={{ marginBottom: 16 }}
           message={`정체 의심 ${staleAgents.length}건`}
           description={staleAgents
-            .map((a) => `${a.agent}(${a.issue}) ${minutesSince(a.updatedAt)}분`)
+            .map((a) => `${a.agent}(${a.issue}) 착수 후 ${minutesSince(a.startedAt)}분`)
             .join(" · ")}
         />
       )}
@@ -442,6 +443,8 @@ export default function OrchestrationBoard({
                     a={a}
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
+                    avatar={avatarMap.get(a.agent)}
+                    quip={quips?.board?.[a.agent]}
                   />
                 ))}
               </div>
@@ -529,10 +532,12 @@ export default function OrchestrationBoard({
               key: g.agent,
               label: (
                 <Space size={8} align="center">
-                  <DobbyIcon
+                  <GroupAvatar
+                    slug={g.agent}
+                    avatar={avatarMap.get(g.agent)}
+                    state={o?.agents.find((x) => x.agent === g.agent)?.state}
                     size={24}
-                    expression="curious"
-                    color={dobbyColor(roleBySlug.get(g.agent) ?? g.agent)}
+                    quip={quips?.reviews?.[g.agent]}
                   />
                   <Text strong>{roleBySlug.get(g.agent) ?? g.agent}</Text>
                   <Tag>{g.reviews.length}개 라운드</Tag>
