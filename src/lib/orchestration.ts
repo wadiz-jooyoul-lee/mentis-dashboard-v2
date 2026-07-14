@@ -82,6 +82,17 @@ function completedByDeliverable(key: string, slug: string): boolean {
   }
 }
 
+/** agent-logs.json의 슬러그 목록(스폰된 에이전트). 문자열·객체 값 모두 키만 취한다. */
+function agentLogSlugs(key: string): string[] {
+  const raw = readFileSafe(path.join(orderDir(key), "agent-logs.json"));
+  if (!raw) return [];
+  try {
+    return Object.keys(JSON.parse(raw) as Record<string, unknown>).filter((k) => k && k !== "-");
+  } catch {
+    return [];
+  }
+}
+
 /** 상태표가 진행 상태여도, 산출물이 있으면 완료로 보정한다. */
 function applyDeliverableCompletion(key: string, o: Orchestration): Orchestration {
   o.agents = o.agents.map((a) =>
@@ -90,29 +101,46 @@ function applyDeliverableCompletion(key: string, o: Orchestration): Orchestratio
   return o;
 }
 
-/** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. */
+/**
+ * 스폰됐지만(agent-logs.json에 있음) 상태표에는 없는 에이전트를 보드에 병합한다.
+ * 오케스트레이터가 새 에이전트 행 추가를 누락해도 대시보드에 보이게 한다.
+ * 상태: 산출물이 있으면 완료, 없으면 진행중으로 추정.
+ */
+function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
+  const have = new Set(o.agents.map((a) => a.agent));
+  for (const slug of agentLogSlugs(key)) {
+    if (have.has(slug)) continue;
+    o.agents.push({
+      agent: slug,
+      issue: "",
+      branch: "",
+      state: completedByDeliverable(key, slug) ? "완료" : "진행중",
+      round: "",
+      updatedAt: "",
+    });
+  }
+  return o;
+}
+
+/** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. 이후 산출물·스폰로그로 보정. */
 function orchestrationOf(key: string, statusMd: string | null): Orchestration | null {
   const omd = readFileSafe(path.join(orderDir(key), "orchestration.md"));
+  let o: Orchestration | null = null;
   if (omd) {
-    const o = parseOrchestration(omd);
+    o = parseOrchestration(omd);
     if (!o.epicKey) o.epicKey = key;
-    return applyDeliverableCompletion(key, o);
-  }
-  if (statusMd) {
+  } else if (statusMd) {
     const st = parseOrderStatus(statusMd, key);
     if (st.agents.length > 0) {
-      return applyDeliverableCompletion(key, {
-        epicKey: key,
-        mode: null,
-        agents: st.agents,
-        scope: [],
-        conflicts: "",
-        events: [],
-        restMarkdown: "",
-      });
+      o = { epicKey: key, mode: null, agents: st.agents, scope: [], conflicts: "", events: [], restMarkdown: "" };
     }
   }
-  return null;
+  // 상태표가 없어도 스폰된 에이전트가 있으면 보드를 만든다.
+  if (!o) {
+    if (agentLogSlugs(key).length === 0) return null;
+    o = { epicKey: key, mode: null, agents: [], scope: [], conflicts: "", events: [], restMarkdown: "" };
+  }
+  return mergeSpawnedAgents(key, applyDeliverableCompletion(key, o));
 }
 
 export type Counts = { total: number } & Record<string, number>;
