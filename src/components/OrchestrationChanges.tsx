@@ -1,15 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline } from "antd";
+import { Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
 import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
 import JobConsole from "@/components/JobConsole";
+import OrderHeader from "@/components/OrderHeader";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
@@ -206,35 +206,12 @@ export default function OrchestrationChanges({
 
   return (
     <div>
-      <div
-        style={{
-          position: "sticky",
-          top: 64,
-          zIndex: 90,
-          background: "#fff",
-          marginLeft: "calc(-50vw + 50%)",
-          marginRight: "calc(-50vw + 50%)",
-          marginTop: -24,
-          padding: "12px 24px",
-          borderBottom: "1px solid #f0f0f0",
-        }}
-      >
-        <Breadcrumb
-          items={[
-            { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orchestration">오케스트레이션</Link> },
-            { title: <Link href={`/orchestration/${epicKey}`}>{epicKey}</Link> },
-            { title: "에이전트 상세" },
-          ]}
-          style={{ marginBottom: 8 }}
-        />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <Title level={2} style={{ margin: 0 }}>
-            에이전트 상세 — {epicKey}
-          </Title>
-          <QuipsControl epicKey={epicKey} />
-        </div>
-      </div>
+      <OrderHeader
+        epicKey={epicKey}
+        mode={epic?.orchestration?.mode ?? null}
+        worktreeRemoved={epic?.worktreeRemoved}
+        extra={<QuipsControl epicKey={epicKey} />}
+      />
       <Paragraph type="secondary" style={{ marginTop: 12 }}>
         각 에이전트의 상태와 작업 내역입니다. 대화 로그(agent-logs.json)가 있으면 수정 파일·커밋·diff·요약을, 없으면 상태·계약을 보여줍니다.
       </Paragraph>

@@ -15,6 +15,8 @@ export default function ExplainPage({ params }: { params: { key: string } }) {
       epicKey={params.key}
       md={epic?.explainerMd ?? null}
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
+      mode={epic?.orchestration?.mode ?? null}
+      worktreeRemoved={epic?.worktreeRemoved ?? false}
     />
   );
 }

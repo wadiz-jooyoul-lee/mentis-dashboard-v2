@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Breadcrumb,
   Typography,
   Space,
-  Button,
   Badge,
   Tag,
   Card,
@@ -21,18 +19,16 @@ import {
   Empty,
   Alert,
 } from "antd";
-import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
-import DobbyIcon from "@/components/DobbyIcon";
+import { WarningOutlined, FileTextOutlined } from "@ant-design/icons";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
+import OrderHeader from "@/components/OrderHeader";
 import IssueReport from "@/components/IssueReport";
 import type { QuipsFile, Quip } from "@/lib/quips";
-import { dobbyColor } from "@/lib/dobby";
 import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
-import { jiraUrl } from "@/lib/jira";
 import "./markdown.css";
 
 const { Title, Text } = Typography;
@@ -299,90 +295,14 @@ export default function OrchestrationBoard({
     const slug = slugByToken.get((agentName || "").trim().split(/\s+/)[0]);
     return slug && changeSlugs.has(slug) ? slug : undefined;
   };
-  const hasChanges = changeSlugs.size > 0;
 
   const header = (
-    <div
-      style={{
-        position: "sticky",
-        top: 64,
-        zIndex: 90,
-        background: "#fff",
-        // 뷰포트 전체 너비로 풀블리드 + 상단 콘텐츠 패딩(24) 상쇄해 헤더에 붙임
-        marginLeft: "calc(-50vw + 50%)",
-        marginRight: "calc(-50vw + 50%)",
-        marginTop: -24,
-        padding: "12px 24px",
-        borderBottom: "1px solid #f0f0f0",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <Breadcrumb
-          items={[
-            { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orchestration">오케스트레이션</Link> },
-            { title: epicKey },
-          ]}
-        />
-        <Link
-          href="/agents"
-          style={{
-            fontSize: 12,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <DobbyIcon size={18} expression="happy" color={dobbyColor("소개")} />
-          에이전트 소개
-        </Link>
-      </div>
-      <Space align="center" size={12} wrap style={{ marginBottom: 12 }}>
-        <Title level={2} style={{ margin: 0 }}>
-          {epicKey}
-        </Title>
-        {o?.mode && <Tag>{o.mode}</Tag>}
-        {epic?.worktreeRemoved && (
-          <Tag color="default" style={{ color: "#8c8c8c" }}>
-            워크트리 삭제됨
-          </Tag>
-        )}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(epicKey)}
-          target="_blank"
-        >
-          Jira에서 열기
-        </Button>
-        {hasChanges && (
-          <Link href={`/orchestration/${epicKey}/changes`}>
-            <Button type="link" icon={<FileTextOutlined />}>
-              코드 변경
-            </Button>
-          </Link>
-        )}
-        <Link href={`/orchestration/console/${epicKey}`}>
-          <Button type="link" icon={<CodeOutlined />}>
-            콘솔
-          </Button>
-        </Link>
-        <Link href={`/orchestration/${epicKey}/explain`}>
-          <Button type="link" icon={<ReadOutlined />}>
-            구현 내용
-          </Button>
-        </Link>
-        <QuipsControl epicKey={epicKey} />
-      </Space>
-    </div>
+    <OrderHeader
+      epicKey={epicKey}
+      mode={o?.mode ?? null}
+      worktreeRemoved={epic?.worktreeRemoved}
+      extra={<QuipsControl epicKey={epicKey} />}
+    />
   );
 
   if (!o) {
