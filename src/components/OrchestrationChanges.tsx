@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Alert, Timeline } from "antd";
+import { Breadcrumb, Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
 import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
@@ -316,20 +316,6 @@ export default function OrchestrationChanges({
                     destroyOnHidden
                     style={{ marginTop: 12 }}
                     items={[
-                      {
-                        key: "live",
-                        label: "실시간 콘솔",
-                        children: epic?.hasJob ? (
-                          <JobConsole orderKey={epicKey} height={300} />
-                        ) : (
-                          <Alert
-                            type="info"
-                            showIcon
-                            message="실시간 콘솔 없음"
-                            description="이 오더는 대시보드 실행 패널로 띄운 것이 아니라 실시간 로그(run.log)가 없습니다. 아래 ‘기록 콘솔’에서 지난 실행 기록을 확인하세요."
-                          />
-                        ),
-                      },
                       {
                         key: "rec",
                         label: "기록 콘솔",
