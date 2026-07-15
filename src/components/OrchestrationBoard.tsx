@@ -337,10 +337,17 @@ export default function OrchestrationBoard({
   );
 
   if (!o) {
+    const phase = epic?.phaseLabel;
     return (
       <div>
         {header}
-        <Empty description="orchestration.md가 아직 없습니다 (셋업 초기일 수 있음)" />
+        <Empty
+          description={
+            phase && phase !== "-"
+              ? `${phase} — 에이전트 편성 전입니다. 분석이 끝나면 에이전트가 보드에 나타납니다.`
+              : "아직 준비 중입니다 (셋업·분석 초기일 수 있음)."
+          }
+        />
       </div>
     );
   }
