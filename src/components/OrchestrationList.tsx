@@ -19,10 +19,9 @@ function distribution(r: EpicSummary) {
   const c = r.counts;
   const items: Array<[string, number, string]> = [
     ["대기", c.대기, "default"],
-    ["구현중", c.구현중, "blue"],
-    ["리뷰중", c.리뷰중, "gold"],
-    ["수정중", c.수정중, "orange"],
-    ["재통합대기", c.재통합대기, "purple"],
+    ["분석", c.분석, "cyan"],
+    ["구현", c.구현, "blue"],
+    ["리뷰", c.리뷰, "gold"],
     ["완료", c.완료, "green"],
   ];
   // 에이전트 표가 아직 없는 착수 직후: 상태 분포 대신 status.md 현재 단계를 보여준다.

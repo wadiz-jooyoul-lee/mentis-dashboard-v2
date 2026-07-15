@@ -94,8 +94,8 @@ function minutesSince(v: string | null | undefined): number | null {
   return Math.floor((Date.now() - d.getTime()) / 60000);
 }
 
-// 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·분석완료·재통합대기·완료 제외)
-const ACTIVE_STATES = ["분석중", "구현중", "진행중", "리뷰중", "수정중"];
+// 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·완료 제외)
+const ACTIVE_STATES = ["분석", "구현", "리뷰"];
 const STALE_MIN = 15;
 /**
  * 정체 의심 = 활성 상태 + "작업 시작(착수) 시각"으로부터 STALE_MIN분 이상 경과.

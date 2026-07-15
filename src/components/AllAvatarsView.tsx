@@ -10,8 +10,8 @@ import { dobbyColor } from "@/lib/dobby";
 const { Title, Paragraph, Text } = Typography;
 
 // 에이전트 상태 어휘(순서). 표정이 바뀌는 상태만 캡션을 붙인다.
-const STATES = ["대기", "분석중", "구현중", "리뷰중", "수정중", "재통합대기", "완료"];
-const CAPTION: Record<string, string> = { 대기: "심심", 구현중: "집중", 수정중: "헐레벌떡" };
+const STATES = ["대기", "분석", "구현", "리뷰", "완료"];
+const CAPTION: Record<string, string> = { 대기: "심심", 구현: "집중/헐레벌떡(랜덤)" };
 
 function MemberRow({
   member,
@@ -72,9 +72,8 @@ export default function AllAvatarsView() {
         전체 에이전트 · 상태별 표정
       </Title>
       <Paragraph type="secondary">
-        도비를 제외한 그룹 아바타(BTS·프로미스나인)의 상태별 표정입니다. <b>대기(심심) · 구현중(집중) ·
-        수정중(헐레벌떡)</b>만 표정이 바뀌고, 나머지 상태(분석중·리뷰중·재통합대기·완료)는 멤버 기본
-        표정을 유지합니다.
+        도비를 제외한 그룹 아바타(BTS·프로미스나인)의 상태별 표정입니다. <b>대기(심심) · 구현(집중/헐레벌떡
+        — 에이전트별 랜덤)</b>만 표정이 바뀌고, 나머지 상태(분석·리뷰·완료)는 멤버 기본 표정을 유지합니다.
       </Paragraph>
 
       <Title level={3}>방탄소년단 (BTS)</Title>

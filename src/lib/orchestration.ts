@@ -487,13 +487,13 @@ export function orchestrationMetricsFor(workType: WorkType): Metric[] {
   const epics = listEpics().filter((e) => e.workType === workType);
   if (epics.length === 0) return [{ label: "오더", value: 0 }];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현중") + sum("산출중");
-  const review = sum("리뷰중");
+  const impl = sum("구현");
+  const review = sum("리뷰");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "진행중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰중", value: review, color: "orange" }] : []),
+    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
+    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];
 }
@@ -503,13 +503,13 @@ export function orchestrationMetrics(): Metric[] {
   const epics = listEpics();
   if (epics.length === 0) return [];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현중");
-  const review = sum("리뷰중");
+  const impl = sum("구현");
+  const review = sum("리뷰");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "구현중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰중", value: review, color: "orange" }] : []),
+    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
+    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];
 }

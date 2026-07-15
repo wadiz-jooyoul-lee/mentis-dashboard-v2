@@ -239,7 +239,7 @@ export default function BtsAvatar({
 }) {
   const cfg = BTS_AVATARS[member];
   if (!cfg) return null;
-  const f = stateFace(state);
+  const f = stateFace(state, member);
   const eyes = f?.eyes ?? cfg.eyes;
   const mouth = f?.mouth ?? cfg.mouth;
   const bg = `bg-${member}`;
