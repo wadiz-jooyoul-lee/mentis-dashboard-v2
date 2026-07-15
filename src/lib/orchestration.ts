@@ -327,6 +327,8 @@ export type EpicDetail = {
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
   title: string | null;
+  /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
+  phaseLabel: string | null;
   analysisMd: string | null;
   implementationMd: string | null;
   produceMd: string | null;
@@ -457,6 +459,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     agentWorks,
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
+    phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
     produceMd:
