@@ -37,6 +37,50 @@ import "./markdown.css";
 
 const { Title, Text } = Typography;
 
+/** 마크다운을 `## ` 블록 단위로 쪼갠다(첫 `#` 제목 프리앰블 제외). 각 블록 = 카드 1개. */
+function parseCardBlocks(md: string): { title: string; body: string }[] {
+  return md
+    .split(/^##\s+/m)
+    .slice(1)
+    .map((p) => {
+      const nl = p.indexOf("\n");
+      return {
+        title: (nl === -1 ? p : p.slice(0, nl)).trim(),
+        body: nl === -1 ? "" : p.slice(nl + 1).trim(),
+      };
+    })
+    .filter((b) => b.title);
+}
+
+/** `## ` 블록 마크다운을 카드 목록으로 렌더하는 공용 섹션(자율판단·사이드이펙트·확인가이드 공용). */
+function MarkdownCards({ title, subtitle, md }: { title: string; subtitle: string; md: string | null }) {
+  if (!md || !md.trim()) return null;
+  const blocks = parseCardBlocks(md);
+  return (
+    <div style={{ marginTop: 20 }}>
+      <Title level={4}>{title}</Title>
+      <Text type="secondary">{subtitle}</Text>
+      {blocks.length > 0 ? (
+        <Space direction="vertical" size={12} style={{ width: "100%", marginTop: 8 }}>
+          {blocks.map((b, i) => (
+            <Card key={i} size="small" title={b.title}>
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{b.body}</ReactMarkdown>
+              </div>
+            </Card>
+          ))}
+        </Space>
+      ) : (
+        <Card size="small" style={{ marginTop: 8 }}>
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /** 시각 문자열에 시:분이 있나(날짜만이면 false). 날짜만이면 경과를 못 재므로 정체 판정에서 제외. */
 function hasTimeOfDay(v: string | null | undefined): boolean {
   return !!v && /\d{1,2}:\d{2}/.test(v);
@@ -584,6 +628,20 @@ export default function OrchestrationBoard({
         </div>
       )}
 
+      {/* 사이드 이펙트 분석 (side-effects.md) — 설계 시점 파급 점검 */}
+      <MarkdownCards
+        title="사이드 이펙트 분석"
+        subtitle="이 구현 설계가 기존·인접 기능에 미칠 수 있는 파급을 다각도로 점검한 결과입니다."
+        md={epic!.sideEffectsMd}
+      />
+
+      {/* 자율 판단 기록 (decisions.md) */}
+      <MarkdownCards
+        title="자율 판단 기록"
+        subtitle="사용자에게 묻지 않고 스스로 정한 결정과 그 이유·다른 선택지입니다."
+        md={epic!.decisionsMd}
+      />
+
       {/* 구현 / 산출 */}
       {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
         <div style={{ marginTop: 20 }}>
@@ -597,6 +655,13 @@ export default function OrchestrationBoard({
           </Card>
         </div>
       )}
+
+      {/* 확인 가이드 (test-guide.md) — 사용자 수동 사이드이펙트 확인 TC */}
+      <MarkdownCards
+        title="확인 가이드 (수동 TC)"
+        subtitle="사용자가 직접 사이드이펙트를 확인하는 방법입니다. 화면·절차·기대 결과 순으로 따라 하세요."
+        md={epic!.testGuideMd}
+      />
 
       {/* 산출물 (deliverables/) */}
       {epic!.deliverables.length > 0 && (

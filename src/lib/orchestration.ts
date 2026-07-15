@@ -333,6 +333,12 @@ export type EpicDetail = {
   implementationMd: string | null;
   produceMd: string | null;
   summaryMd: string | null;
+  /** 자율 판단 기록(decisions.md). 대시보드가 카드로 렌더. 없으면 null. */
+  decisionsMd: string | null;
+  /** 사이드 이펙트 분석(side-effects.md). 대시보드가 카드로 렌더. 없으면 null. */
+  sideEffectsMd: string | null;
+  /** 사용자 수동 확인 가이드(test-guide.md). 대시보드가 카드로 렌더. 없으면 null. */
+  testGuideMd: string | null;
   deliverables: Deliverable[];
   runs: ReportRun[];
   /** 대시보드가 띄운 잡(run.log)이 있는지 — 실시간 콘솔 가용 여부. */
@@ -466,6 +472,9 @@ export function getEpic(epicKey: string): EpicDetail | null {
       readFileSafe(path.join(dir, "produce.md")) ??
       readFileSafe(path.join(dir, "deliverables", "produce.md")),
     summaryMd: readFileSafe(path.join(dir, "summary.md")),
+    decisionsMd: readFileSafe(path.join(dir, "decisions.md")),
+    sideEffectsMd: readFileSafe(path.join(dir, "side-effects.md")),
+    testGuideMd: readFileSafe(path.join(dir, "test-guide.md")),
     deliverables: readDeliverables(epicKey),
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
