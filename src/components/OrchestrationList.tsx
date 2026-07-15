@@ -38,6 +38,13 @@ function agentBadges(r: EpicSummary) {
   );
 }
 
+/** 실행 모드가 자율(B)인지. 미지정/A는 false. "B", "B (자율)", "자율" 등 표기 흔들림 방어. */
+function isAutonomous(mode: string | null): boolean {
+  if (!mode) return false;
+  const m = mode.trim();
+  return /^B\b/i.test(m) || m.includes("자율");
+}
+
 /** 작업 상태: dobby-end로 워크트리 삭제=종료, dobby-resolve로 해결=해결됨, 그 외=작업중. */
 function workStatus(r: EpicSummary): { text: string; color: string } {
   if (r.worktreeRemoved || r.phase === "종료") return { text: "종료", color: "default" };
@@ -84,34 +91,33 @@ export default function OrchestrationList({
       key: "title",
       width: 300,
       // 고정 너비에서 최대 2줄까지만, 넘치면 말줄임. hover 시 전체 제목 툴팁.
-      render: (t: string | null) =>
-        t ? (
+      // 자율(B) 모드 오더는 제목을 붉게 + 호버 시 Popover로 모드를 알린다.
+      render: (t: string | null, r: EpicSummary) => {
+        const b = isAutonomous(r.mode);
+        const body = t ? (
           <span
-            title={t}
+            title={b ? undefined : t}
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
               wordBreak: "break-word",
+              ...(b ? { color: "#cf1322" } : {}),
             }}
           >
             {t}
           </span>
         ) : (
-          <Text type="secondary">-</Text>
-        ),
-    },
-    {
-      title: "실행 모드",
-      dataIndex: "mode",
-      key: "mode",
-      // 짧은 모드(예: "A (대화형)")는 그대로, 긴 설명만 앞 키워드로 축약
-      render: (m: string | null) => {
-        if (!m) return "-";
-        const t = m.trim();
-        const short = t.length <= 12 ? t : t.split(/[\s(（]/)[0];
-        return <Tag>{short}</Tag>;
+          <Text type="secondary" style={b ? { color: "#cf1322" } : undefined}>
+            -
+          </Text>
+        );
+        return b ? (
+          <Popover content="자율(B) 모드 · Workflow로 자동·병렬 실행">{body}</Popover>
+        ) : (
+          body
+        );
       },
     },
     {
