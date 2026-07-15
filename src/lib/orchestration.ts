@@ -158,6 +158,16 @@ function countAgents(o: Orchestration): Counts {
   return c;
 }
 
+/** 기록된 워크트리 경로가 있고 모두 디스크에서 사라졌으면 true(dobby-end 정리 등). 기록 없으면 false(알 수 없음). */
+function worktreesGone(worktrees: { path: string }[]): boolean {
+  const withPath = worktrees.filter((w) => w.path);
+  if (withPath.length === 0) return false;
+  return withPath.every((w) => {
+    const p = w.path.startsWith("~") ? path.join(os.homedir(), w.path.slice(1)) : w.path;
+    return !fs.existsSync(p);
+  });
+}
+
 export type EpicSummary = {
   epicKey: string;
   mode: string | null;
@@ -169,6 +179,8 @@ export type EpicSummary = {
   /** go-dobby 확장: 개발/비개발 구분 + 제목 */
   workType: WorkType;
   title: string | null;
+  /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). status.md 워크트리 표 경로 존재로 판단. */
+  worktreeRemoved: boolean;
   /** status.md 현재 단계(정규화 버킷) + 짧은 라벨 — 에이전트 표가 아직 없는 착수 직후 표시용 */
   phase: PhaseKey;
   phaseLabel: string;
@@ -190,6 +202,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     lastActivity: (times.length ? times[times.length - 1] : null) ?? st?.updatedAt ?? null,
     workType: workTypeOf(key, statusMd),
     title: st?.meta.title ?? null,
+    worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
   };
@@ -327,6 +340,8 @@ export type EpicDetail = {
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
   title: string | null;
+  /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
+  worktreeRemoved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
   analysisMd: string | null;
@@ -465,6 +480,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     agentWorks,
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
+    worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),

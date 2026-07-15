@@ -350,6 +350,11 @@ export default function OrchestrationBoard({
           {epicKey}
         </Title>
         {o?.mode && <Tag>{o.mode}</Tag>}
+        {epic?.worktreeRemoved && (
+          <Tag color="default" style={{ color: "#8c8c8c" }}>
+            워크트리 삭제됨
+          </Tag>
+        )}
         <Button
           type="link"
           icon={<LinkOutlined />}

@@ -41,6 +41,11 @@ function distribution(r: EpicSummary) {
             {label} {n}
           </Tag>
         ))}
+      {r.worktreeRemoved && (
+        <Tag color="default" style={{ color: "#8c8c8c" }}>
+          워크트리 삭제됨
+        </Tag>
+      )}
     </Space>
   );
 }
