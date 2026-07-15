@@ -468,13 +468,12 @@ export default function OrchestrationBoard({
         {cols.map((col) => {
           const b = agentStateBadge(col);
           const items = o.agents.filter((a) => a.state === col);
-          // 비어 있는 칼럼은 폭을 좁혀 최대한 한 줄에 배치, 카드가 있으면 넓게
-          const empty = items.length === 0;
+          // 5개 고정 열 → 폭을 균등하게 나눠 전체 너비를 채운다(좁은 화면에선 줄바꿈).
           return (
             <Col
               key={col}
-              flex={empty ? "0 1 116px" : "0 1 180px"}
-              style={{ minWidth: empty ? 116 : 180 }}
+              flex="1 1 0"
+              style={{ minWidth: 150 }}
             >
               <div
                 style={{
