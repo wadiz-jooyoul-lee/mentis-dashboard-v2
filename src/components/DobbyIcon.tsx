@@ -15,18 +15,14 @@ export type DobbyExpression =
 export function dobbyExpression(state: string): DobbyExpression {
   switch (state) {
     case "대기":
-    case "재통합대기":
       return "resting";
     case "완료":
       return "happy";
-    case "분석중":
-    case "분석완료":
+    case "분석":
       return "thinking";
-    case "구현중":
-    case "진행중":
-    case "수정중":
+    case "구현":
       return "tired";
-    case "리뷰중":
+    case "리뷰":
       return "curious";
     default:
       return "neutral";

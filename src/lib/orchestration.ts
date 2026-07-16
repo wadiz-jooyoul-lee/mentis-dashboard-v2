@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
+import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
@@ -158,6 +159,16 @@ function countAgents(o: Orchestration): Counts {
   return c;
 }
 
+/** 기록된 워크트리 경로가 있고 모두 디스크에서 사라졌으면 true(dobby-end 정리 등). 기록 없으면 false(알 수 없음). */
+function worktreesGone(worktrees: { path: string }[]): boolean {
+  const withPath = worktrees.filter((w) => w.path);
+  if (withPath.length === 0) return false;
+  return withPath.every((w) => {
+    const p = w.path.startsWith("~") ? path.join(os.homedir(), w.path.slice(1)) : w.path;
+    return !fs.existsSync(p);
+  });
+}
+
 export type EpicSummary = {
   epicKey: string;
   mode: string | null;
@@ -169,6 +180,8 @@ export type EpicSummary = {
   /** go-dobby 확장: 개발/비개발 구분 + 제목 */
   workType: WorkType;
   title: string | null;
+  /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). status.md 워크트리 표 경로 존재로 판단. */
+  worktreeRemoved: boolean;
   /** status.md 현재 단계(정규화 버킷) + 짧은 라벨 — 에이전트 표가 아직 없는 착수 직후 표시용 */
   phase: PhaseKey;
   phaseLabel: string;
@@ -190,6 +203,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     lastActivity: (times.length ? times[times.length - 1] : null) ?? st?.updatedAt ?? null,
     workType: workTypeOf(key, statusMd),
     title: st?.meta.title ?? null,
+    worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
   };
@@ -327,18 +341,36 @@ export type EpicDetail = {
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
   title: string | null;
+  /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
+  worktreeRemoved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
   analysisMd: string | null;
   implementationMd: string | null;
   produceMd: string | null;
   summaryMd: string | null;
+  /** 자율 판단 기록(decisions.md). 대시보드가 카드로 렌더. 없으면 null. */
+  decisionsMd: string | null;
+  /** 사이드 이펙트 분석(side-effects.md). 대시보드가 카드로 렌더. 없으면 null. */
+  sideEffectsMd: string | null;
+  /** 사용자 수동 확인 가이드(test-guide.md). 대시보드가 카드로 렌더. 없으면 null. */
+  testGuideMd: string | null;
   deliverables: Deliverable[];
   runs: ReportRun[];
   /** 대시보드가 띄운 잡(run.log)이 있는지 — 실시간 콘솔 가용 여부. */
   hasJob: boolean;
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
+  /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
+  jiraIssueMd: string | null;
+  /** Jira 탭 — 읽기 쉽게 정리한 이슈(jira-issue-clean.md). 버튼 생성. */
+  jiraIssueCleanMd: string | null;
+  /** Jira 탭 — 코멘트 핵심 정리(jira-comments.md). 버튼 생성. */
+  jiraCommentsMd: string | null;
+  /** Jira 탭 — 업데이트 내용 정리(jira-enrich.md). 버튼 생성·편집 가능. */
+  jiraEnrichMd: string | null;
+  /** Jira 탭 — 게시 여부 플래그(jira-enrich.json). desc/comment별 반영 시각. */
+  jiraPosted: { desc?: string; comment?: string };
 };
 
 /** test-runs/{시각}/result.md 회차들(최신순). */
@@ -459,6 +491,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     agentWorks,
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
+    worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
@@ -466,11 +499,50 @@ export function getEpic(epicKey: string): EpicDetail | null {
       readFileSafe(path.join(dir, "produce.md")) ??
       readFileSafe(path.join(dir, "deliverables", "produce.md")),
     summaryMd: readFileSafe(path.join(dir, "summary.md")),
+    decisionsMd: readFileSafe(path.join(dir, "decisions.md")),
+    sideEffectsMd: readFileSafe(path.join(dir, "side-effects.md")),
+    testGuideMd: readFileSafe(path.join(dir, "test-guide.md")),
     deliverables: readDeliverables(epicKey),
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
+    jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
+    jiraIssueCleanMd: readFileSafe(path.join(dir, "jira-issue-clean.md")),
+    jiraCommentsMd: readFileSafe(path.join(dir, "jira-comments.md")),
+    jiraEnrichMd: readFileSafe(path.join(dir, "jira-enrich.md")),
+    jiraPosted: readJiraPosted(dir),
   };
+}
+
+/** jira-enrich.json에서 게시 여부 플래그를 읽는다(없으면 빈 객체). */
+function readJiraPosted(dir: string): { desc?: string; comment?: string } {
+  const raw = readFileSafe(path.join(dir, "jira-enrich.json"));
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw) as { desc?: unknown; comment?: unknown };
+    const r: { desc?: string; comment?: string } = {};
+    if (typeof o.desc === "string") r.desc = o.desc;
+    if (typeof o.comment === "string") r.comment = o.comment;
+    return r;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 사용자가 편집한 업데이트 초안을 jira-enrich.md에 저장한다(게시 전 수정용).
+ * 잡이 아니라 직접 파일 쓰기.
+ */
+export function saveJiraEnrichDraft(key: string, text: string): { ok: boolean; reason?: string } {
+  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
+  const dir = orderDir(key);
+  if (!fs.existsSync(dir)) return { ok: false, reason: "no_order" };
+  try {
+    fs.writeFileSync(path.join(dir, "jira-enrich.md"), text, "utf8");
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "write_failed" };
+  }
 }
 
 /** 허브 카드용 work-type별 지표(개발/비개발). */
@@ -478,13 +550,13 @@ export function orchestrationMetricsFor(workType: WorkType): Metric[] {
   const epics = listEpics().filter((e) => e.workType === workType);
   if (epics.length === 0) return [{ label: "오더", value: 0 }];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현중") + sum("산출중");
-  const review = sum("리뷰중");
+  const impl = sum("구현");
+  const review = sum("리뷰");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "진행중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰중", value: review, color: "orange" }] : []),
+    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
+    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];
 }
@@ -494,13 +566,13 @@ export function orchestrationMetrics(): Metric[] {
   const epics = listEpics();
   if (epics.length === 0) return [];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현중");
-  const review = sum("리뷰중");
+  const impl = sum("구현");
+  const review = sum("리뷰");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "구현중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰중", value: review, color: "orange" }] : []),
+    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
+    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];
 }

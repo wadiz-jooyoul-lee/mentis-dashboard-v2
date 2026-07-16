@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Breadcrumb,
   Typography,
   Space,
-  Button,
   Badge,
   Tag,
   Card,
@@ -21,21 +19,64 @@ import {
   Empty,
   Alert,
 } from "antd";
-import { LinkOutlined, WarningOutlined, FileTextOutlined, CodeOutlined, ReadOutlined } from "@ant-design/icons";
-import DobbyIcon from "@/components/DobbyIcon";
+import { WarningOutlined, FileTextOutlined } from "@ant-design/icons";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
+import OrderHeader from "@/components/OrderHeader";
 import IssueReport from "@/components/IssueReport";
 import type { QuipsFile, Quip } from "@/lib/quips";
-import { dobbyColor } from "@/lib/dobby";
 import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
-import { jiraUrl } from "@/lib/jira";
+import { isJiraIssueKey } from "@/lib/keys";
 import "./markdown.css";
 
 const { Title, Text } = Typography;
+
+/** 마크다운을 `## ` 블록 단위로 쪼갠다(첫 `#` 제목 프리앰블 제외). 각 블록 = 카드 1개. */
+function parseCardBlocks(md: string): { title: string; body: string }[] {
+  return md
+    .split(/^##\s+/m)
+    .slice(1)
+    .map((p) => {
+      const nl = p.indexOf("\n");
+      return {
+        title: (nl === -1 ? p : p.slice(0, nl)).trim(),
+        body: nl === -1 ? "" : p.slice(nl + 1).trim(),
+      };
+    })
+    .filter((b) => b.title);
+}
+
+/** `## ` 블록 마크다운을 카드 목록으로 렌더하는 공용 섹션(자율판단·사이드이펙트·확인가이드 공용). */
+function MarkdownCards({ title, subtitle, md }: { title: string; subtitle: string; md: string | null }) {
+  if (!md || !md.trim()) return null;
+  const blocks = parseCardBlocks(md);
+  return (
+    <div style={{ marginTop: 20 }}>
+      <Title level={4}>{title}</Title>
+      <Text type="secondary">{subtitle}</Text>
+      {blocks.length > 0 ? (
+        <Space direction="vertical" size={12} style={{ width: "100%", marginTop: 8 }}>
+          {blocks.map((b, i) => (
+            <Card key={i} size="small" title={b.title}>
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{b.body}</ReactMarkdown>
+              </div>
+            </Card>
+          ))}
+        </Space>
+      ) : (
+        <Card size="small" style={{ marginTop: 8 }}>
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 /** 시각 문자열에 시:분이 있나(날짜만이면 false). 날짜만이면 경과를 못 재므로 정체 판정에서 제외. */
 function hasTimeOfDay(v: string | null | undefined): boolean {
@@ -50,8 +91,8 @@ function minutesSince(v: string | null | undefined): number | null {
   return Math.floor((Date.now() - d.getTime()) / 60000);
 }
 
-// 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·분석완료·재통합대기·완료 제외)
-const ACTIVE_STATES = ["분석중", "구현중", "진행중", "리뷰중", "수정중"];
+// 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·완료 제외)
+const ACTIVE_STATES = ["분석", "구현", "리뷰"];
 const STALE_MIN = 15;
 /**
  * 정체 의심 = 활성 상태 + "작업 시작(착수) 시각"으로부터 STALE_MIN분 이상 경과.
@@ -255,85 +296,15 @@ export default function OrchestrationBoard({
     const slug = slugByToken.get((agentName || "").trim().split(/\s+/)[0]);
     return slug && changeSlugs.has(slug) ? slug : undefined;
   };
-  const hasChanges = changeSlugs.size > 0;
 
   const header = (
-    <div
-      style={{
-        position: "sticky",
-        top: 64,
-        zIndex: 90,
-        background: "#fff",
-        // 뷰포트 전체 너비로 풀블리드 + 상단 콘텐츠 패딩(24) 상쇄해 헤더에 붙임
-        marginLeft: "calc(-50vw + 50%)",
-        marginRight: "calc(-50vw + 50%)",
-        marginTop: -24,
-        padding: "12px 24px",
-        borderBottom: "1px solid #f0f0f0",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <Breadcrumb
-          items={[
-            { title: <Link href="/">홈</Link> },
-            { title: <Link href="/orchestration">오케스트레이션</Link> },
-            { title: epicKey },
-          ]}
-        />
-        <Link
-          href="/agents"
-          style={{
-            fontSize: 12,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <DobbyIcon size={18} expression="happy" color={dobbyColor("소개")} />
-          에이전트 소개
-        </Link>
-      </div>
-      <Space align="center" size={12} wrap style={{ marginBottom: 12 }}>
-        <Title level={2} style={{ margin: 0 }}>
-          {epicKey}
-        </Title>
-        {o?.mode && <Tag>{o.mode}</Tag>}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(epicKey)}
-          target="_blank"
-        >
-          Jira에서 열기
-        </Button>
-        {hasChanges && (
-          <Link href={`/orchestration/${epicKey}/changes`}>
-            <Button type="link" icon={<FileTextOutlined />}>
-              코드 변경
-            </Button>
-          </Link>
-        )}
-        <Link href={`/orchestration/console/${epicKey}`}>
-          <Button type="link" icon={<CodeOutlined />}>
-            콘솔
-          </Button>
-        </Link>
-        <Link href={`/orchestration/${epicKey}/explain`}>
-          <Button type="link" icon={<ReadOutlined />}>
-            구현 내용
-          </Button>
-        </Link>
-        <QuipsControl epicKey={epicKey} />
-      </Space>
-    </div>
+    <OrderHeader
+      epicKey={epicKey}
+      mode={o?.mode ?? null}
+      worktreeRemoved={epic?.worktreeRemoved}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
+      extra={<QuipsControl epicKey={epicKey} />}
+    />
   );
 
   if (!o) {
@@ -424,13 +395,12 @@ export default function OrchestrationBoard({
         {cols.map((col) => {
           const b = agentStateBadge(col);
           const items = o.agents.filter((a) => a.state === col);
-          // 비어 있는 칼럼은 폭을 좁혀 최대한 한 줄에 배치, 카드가 있으면 넓게
-          const empty = items.length === 0;
+          // 5개 고정 열 → 폭을 균등하게 나눠 전체 너비를 채운다(좁은 화면에선 줄바꿈).
           return (
             <Col
               key={col}
-              flex={empty ? "0 1 116px" : "0 1 180px"}
-              style={{ minWidth: empty ? 116 : 180 }}
+              flex="1 1 0"
+              style={{ minWidth: 150 }}
             >
               <div
                 style={{
@@ -584,6 +554,20 @@ export default function OrchestrationBoard({
         </div>
       )}
 
+      {/* 사이드 이펙트 분석 (side-effects.md) — 설계 시점 파급 점검 */}
+      <MarkdownCards
+        title="사이드 이펙트 분석"
+        subtitle="이 구현 설계가 기존·인접 기능에 미칠 수 있는 파급을 다각도로 점검한 결과입니다."
+        md={epic!.sideEffectsMd}
+      />
+
+      {/* 자율 판단 기록 (decisions.md) */}
+      <MarkdownCards
+        title="자율 판단 기록"
+        subtitle="사용자에게 묻지 않고 스스로 정한 결정과 그 이유·다른 선택지입니다."
+        md={epic!.decisionsMd}
+      />
+
       {/* 구현 / 산출 */}
       {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
         <div style={{ marginTop: 20 }}>
@@ -598,13 +582,34 @@ export default function OrchestrationBoard({
         </div>
       )}
 
+      {/* 확인 가이드 (test-guide.md) — 사용자 수동 사이드이펙트 확인 TC */}
+      <MarkdownCards
+        title="확인 가이드 (수동 TC)"
+        subtitle="사용자가 직접 사이드이펙트를 확인하는 방법입니다. 화면·절차·기대 결과 순으로 따라 하세요."
+        md={epic!.testGuideMd}
+      />
+
       {/* 산출물 (deliverables/) */}
       {epic!.deliverables.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <Title level={4}>산출물</Title>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             {epic!.deliverables.map((d) => (
-              <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
+              <Card
+                key={d.name}
+                size="small"
+                title={<Text code>deliverables/{d.name}</Text>}
+                extra={
+                  d.content ? (
+                    <a
+                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(d.content)}`}
+                      download={d.name}
+                    >
+                      다운로드
+                    </a>
+                  ) : undefined
+                }
+              >
                 {d.kind === "md" ? (
                   <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{d.content}</ReactMarkdown>

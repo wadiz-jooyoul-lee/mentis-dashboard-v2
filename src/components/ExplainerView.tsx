@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Breadcrumb, Typography, Empty, Button, Collapse, Badge } from "antd";
-import Link from "next/link";
+import { Typography, Empty, Button, Collapse, Badge } from "antd";
 import FeedView from "@/components/FeedView";
 import MarkdownDoc from "@/components/MarkdownDoc";
+import OrderHeader from "@/components/OrderHeader";
 import type { FeedItem, JobState } from "@/lib/jobs";
 
 const { Title, Paragraph } = Typography;
@@ -118,21 +118,24 @@ export default function ExplainerView({
   epicKey,
   md,
   job = null,
+  mode = null,
+  worktreeRemoved = false,
+  hasJira = false,
 }: {
   epicKey: string;
   md: string | null;
   job?: ExplainJob | null;
+  mode?: string | null;
+  worktreeRemoved?: boolean;
+  hasJira?: boolean;
 }) {
   return (
     <div>
-      <Breadcrumb
-        style={{ marginBottom: 12 }}
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orchestration">오케스트레이션</Link> },
-          { title: <Link href={`/orchestration/${epicKey}`}>{epicKey}</Link> },
-          { title: "구현 내용" },
-        ]}
+      <OrderHeader
+        epicKey={epicKey}
+        mode={mode}
+        worktreeRemoved={worktreeRemoved}
+        hasJira={hasJira}
       />
       {!md ? (
         <GenerateExplainer epicKey={epicKey} />

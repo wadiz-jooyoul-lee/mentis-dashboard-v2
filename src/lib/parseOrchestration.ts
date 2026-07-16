@@ -32,33 +32,25 @@ export type Orchestration = {
 const at = (row: string[], i: number) => (i >= 0 && i < row.length ? row[i] : "");
 
 /**
- * 정식 상태 흐름 순서(칸반 고정 열). agent-start "에이전트 상태 값(정식)" 기준.
- * 서브: 대기→분석중→구현중→리뷰중→수정중→재통합대기→완료
- * 리뷰: 대기→진행중→완료 (진행중은 구현중 옆에 배치)
+ * 정식 상태 흐름 순서(칸반 고정 열). 각 에이전트는 자기 상태 집합 안에서만 움직인다.
+ * 구현·산출: 대기→구현→완료 / 분석·감사: 대기→분석→완료 / 리뷰: 대기→리뷰→완료 / 인라인: 대기→분석→구현→완료
  * 그 외(정의 밖) 값은 뒤에 붙어 사라지지 않는다.
  */
-export const STATE_ORDER: string[] = [
-  "대기",
-  "분석중",
-  "구현중",
-  "진행중",
-  "리뷰중",
-  "수정중",
-  "재통합대기",
-  "완료",
-];
+export const STATE_ORDER: string[] = ["대기", "분석", "구현", "리뷰", "완료"];
 
+/**
+ * 상태 정규화 → 5개(대기·분석·구현·리뷰·완료)로 접는다. 옛 상태값도 여기서 매핑:
+ * 분석중→분석 / 구현중·산출중·수정중→구현 / 진행중·리뷰중→리뷰 / 재통합대기·(분석)완료→완료.
+ */
 export function normAgentState(v: string): AgentState {
   const s = v.replace(/\*/g, "").trim();
-  const base = s.split(/[(（]/)[0].trim(); // "수정중(round-3)" → "수정중"
-  if (s.includes("분석완료")) return "분석완료"; // "완료" 검사보다 먼저
-  if (s.includes("완료")) return "완료";
-  if (s.includes("재통합")) return "재통합대기"; // "대기" 검사보다 먼저
-  if (s.includes("수정") || s.includes("반영")) return "수정중";
-  if (s.includes("리뷰")) return "리뷰중";
-  if (s.includes("구현")) return "구현중";
-  if (s.includes("분석")) return "분석중";
-  if (s.includes("진행")) return "진행중";
+  const base = s.split(/[(（]/)[0].trim(); // "구현(round-3)" → "구현"
+  if (s.includes("완료")) return "완료"; // 완료·분석완료·구현완료
+  if (s.includes("재통합")) return "완료"; // 재통합대기 → 완료(리뷰 통과·통합 단계)
+  if (s.includes("수정") || s.includes("반영")) return "구현"; // 수정 → 구현
+  if (s.includes("리뷰") || s.includes("진행")) return "리뷰"; // 리뷰·리뷰중·진행중 → 리뷰
+  if (s.includes("산출") || s.includes("구현")) return "구현"; // 산출·구현 → 구현
+  if (s.includes("분석")) return "분석";
   if (s.includes("대기")) return "대기";
   return base || "미상"; // 모르는 값도 라벨 그대로(사라지지 않게)
 }
@@ -208,13 +200,9 @@ export function parseOrchestration(md: string): Orchestration {
 
 const STATE_COLOR: Record<string, string> = {
   대기: "#bfbfbf",
-  분석중: "cyan",
-  분석완료: "geekblue",
-  구현중: "blue",
-  진행중: "geekblue",
-  리뷰중: "gold",
-  수정중: "orange",
-  재통합대기: "purple",
+  분석: "cyan",
+  구현: "blue",
+  리뷰: "gold",
   완료: "green",
 };
 

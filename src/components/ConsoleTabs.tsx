@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { Breadcrumb, Typography, Space, Tabs } from "antd";
+import { Typography, Space, Tabs } from "antd";
 import JobConsole from "@/components/JobConsole";
+import OrderHeader from "@/components/OrderHeader";
 
-const { Title, Paragraph } = Typography;
+const { Paragraph } = Typography;
 
 /**
  * 오더 콘솔 화면. 실시간과 지난 기록을 각각 별도 탭으로 제공한다:
@@ -18,10 +18,16 @@ export default function ConsoleTabs({
   orderKey,
   agents,
   height = 480,
+  mode = null,
+  worktreeRemoved = false,
+  hasJira = false,
 }: {
   orderKey: string;
   agents: { id: string; label: string }[];
   height?: number;
+  mode?: string | null;
+  worktreeRemoved?: boolean;
+  hasJira?: boolean;
 }) {
   const items = [
     {
@@ -42,24 +48,21 @@ export default function ConsoleTabs({
   ];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Breadcrumb
-        items={[
-          { title: <Link href="/">홈</Link> },
-          { title: <Link href="/orchestration">오케스트레이션</Link> },
-          { title: <Link href={`/orchestration/${orderKey}`}>{orderKey}</Link> },
-          { title: "콘솔" },
-        ]}
+    <div>
+      <OrderHeader
+        epicKey={orderKey}
+        mode={mode}
+        worktreeRemoved={worktreeRemoved}
+        hasJira={hasJira}
       />
-      <Title level={3} style={{ margin: 0 }}>
-        콘솔 — {orderKey}
-      </Title>
-      <Paragraph type="secondary" style={{ margin: 0 }}>
+      <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>
+        <Paragraph type="secondary" style={{ margin: 0 }}>
         <b>실시간</b>은 대시보드가 띄운 <code>dobby-order</code> 진행(정지·이어서 가능),
         <b> 기록</b>은 클로드 히스토리(세션·서브에이전트)를 재생/추적합니다(읽기 전용).
-        진행 중이면 자동 추적, 끝났으면 재생으로 표시됩니다.
-      </Paragraph>
-      <Tabs items={items} defaultActiveKey="__live__" destroyInactiveTabPane />
-    </Space>
+          진행 중이면 자동 추적, 끝났으면 재생으로 표시됩니다.
+        </Paragraph>
+        <Tabs items={items} defaultActiveKey="__live__" destroyInactiveTabPane />
+      </Space>
+    </div>
   );
 }

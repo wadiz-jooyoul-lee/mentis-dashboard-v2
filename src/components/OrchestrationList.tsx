@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Progress, Collapse, Badge } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Progress, Collapse, Badge, Popover } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
-import { phaseBadge } from "@/lib/parseOrderStatus";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
@@ -15,35 +14,42 @@ import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
 
-function distribution(r: EpicSummary) {
-  const c = r.counts;
-  const items: Array<[string, number, string]> = [
-    ["대기", c.대기, "default"],
-    ["구현중", c.구현중, "blue"],
-    ["리뷰중", c.리뷰중, "gold"],
-    ["수정중", c.수정중, "orange"],
-    ["재통합대기", c.재통합대기, "purple"],
-    ["완료", c.완료, "green"],
-  ];
-  // 에이전트 표가 아직 없는 착수 직후: 상태 분포 대신 status.md 현재 단계를 보여준다.
-  if (c.total === 0) {
-    return r.phaseLabel && r.phaseLabel !== "-" ? (
-      <Badge status={phaseBadge(r.phase)} text={r.phaseLabel} />
-    ) : (
-      <Text type="secondary">-</Text>
-    );
-  }
+// 칸반 상태별 색(에이전트 카운트 배지용). STATE_ORDER와 동일 순서.
+const STATE_BADGES: Array<{ key: string; color: string }> = [
+  { key: "대기", color: "#bfbfbf" },
+  { key: "분석", color: "cyan" },
+  { key: "구현", color: "blue" },
+  { key: "리뷰", color: "gold" },
+  { key: "완료", color: "green" },
+];
+
+/** 에이전트 상태 분포를 상태별 색상 카운트 배지(최대 5개)로. 0인 상태는 생략. */
+function agentBadges(r: EpicSummary) {
+  const shown = STATE_BADGES.filter(({ key }) => (r.counts[key] ?? 0) > 0);
+  if (shown.length === 0) return <Text type="secondary">-</Text>;
   return (
-    <Space size={4} wrap>
-      {items
-        .filter(([, n]) => n > 0)
-        .map(([label, n, color]) => (
-          <Tag key={label} color={color}>
-            {label} {n}
-          </Tag>
-        ))}
+    <Space size={8}>
+      {shown.map(({ key, color }) => (
+        <Popover key={key} content={`${key} ${r.counts[key]}명`}>
+          <Badge count={r.counts[key]} color={color} overflowCount={999} />
+        </Popover>
+      ))}
     </Space>
   );
+}
+
+/** 실행 모드가 자율(B)인지. 미지정/A는 false. "B", "B (자율)", "자율" 등 표기 흔들림 방어. */
+function isAutonomous(mode: string | null): boolean {
+  if (!mode) return false;
+  const m = mode.trim();
+  return /^B\b/i.test(m) || m.includes("자율");
+}
+
+/** 작업 상태: dobby-end로 워크트리 삭제=종료, dobby-resolve로 해결=해결됨, 그 외=작업중. */
+function workStatus(r: EpicSummary): { text: string; color: string } {
+  if (r.worktreeRemoved || r.phase === "종료") return { text: "종료", color: "default" };
+  if (r.phase === "해결") return { text: "해결됨", color: "success" };
+  return { text: "작업중", color: "processing" };
 }
 
 export default function OrchestrationList({
@@ -85,46 +91,47 @@ export default function OrchestrationList({
       key: "title",
       width: 300,
       // 고정 너비에서 최대 2줄까지만, 넘치면 말줄임. hover 시 전체 제목 툴팁.
-      render: (t: string | null) =>
-        t ? (
+      // 자율(B) 모드 오더는 제목을 붉게 + 호버 시 Popover로 모드를 알린다.
+      render: (t: string | null, r: EpicSummary) => {
+        const b = isAutonomous(r.mode);
+        const body = t ? (
           <span
-            title={t}
+            title={b ? undefined : t}
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
               wordBreak: "break-word",
+              ...(b ? { color: "#cf1322" } : {}),
             }}
           >
             {t}
           </span>
         ) : (
-          <Text type="secondary">-</Text>
-        ),
-    },
-    {
-      title: "실행 모드",
-      dataIndex: "mode",
-      key: "mode",
-      // 짧은 모드(예: "A (대화형)")는 그대로, 긴 설명만 앞 키워드로 축약
-      render: (m: string | null) => {
-        if (!m) return "-";
-        const t = m.trim();
-        const short = t.length <= 12 ? t : t.split(/[\s(（]/)[0];
-        return <Tag>{short}</Tag>;
+          <Text type="secondary" style={b ? { color: "#cf1322" } : undefined}>
+            -
+          </Text>
+        );
+        return b ? (
+          <Popover content="자율(B) 모드 · Workflow로 자동·병렬 실행">{body}</Popover>
+        ) : (
+          body
+        );
       },
     },
     {
       title: "에이전트",
-      dataIndex: "agentCount",
-      key: "agentCount",
-      render: (n: number) => `${n}명`,
+      key: "agents",
+      render: (_: unknown, r: EpicSummary) => agentBadges(r),
     },
     {
-      title: "상태 분포",
-      key: "counts",
-      render: (_: unknown, r: EpicSummary) => distribution(r),
+      title: "작업 상태",
+      key: "workStatus",
+      render: (_: unknown, r: EpicSummary) => {
+        const s = workStatus(r);
+        return <Tag color={s.color}>{s.text}</Tag>;
+      },
     },
     {
       title: "진행률",

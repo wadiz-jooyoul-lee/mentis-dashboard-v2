@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, message } from "antd";
-import { MessageOutlined } from "@ant-design/icons";
+import { Button, Popover, message } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 
 /**
@@ -110,15 +110,15 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
   }, [start]);
 
   return (
-    <Button
-      type="link"
-      size="small"
-      icon={<MessageOutlined />}
-      loading={busy}
-      onClick={() => start(true)}
-      style={{ padding: 0, height: "auto" }}
-    >
-      {busy ? "소감 생성 중…" : "소감 새로고침"}
-    </Button>
+    <Popover content={busy ? "소감 생성 중…" : "소감 리프레시"}>
+      <Button
+        type="text"
+        size="small"
+        icon={<ReloadOutlined />}
+        loading={busy}
+        onClick={() => start(true)}
+        aria-label="소감 리프레시"
+      />
+    </Popover>
   );
 }
