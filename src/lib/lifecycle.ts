@@ -6,3 +6,9 @@ export type Metric = {
   today?: number;
   color?: string;
 };
+
+// 허브 카드를 두 구획으로 나눠 보여주기 위한 지표 묶음(위=전체, 아래=오늘).
+export type CardStats = {
+  overall: Metric[];
+  today: Metric[];
+};

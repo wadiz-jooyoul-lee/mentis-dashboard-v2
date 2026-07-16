@@ -11,7 +11,7 @@ import {
 } from "@ant-design/icons";
 import type { Section } from "@/lib/sections";
 import { AREA_LABELS, AREA_ORDER } from "@/lib/sections";
-import type { Metric } from "@/lib/lifecycle";
+import type { Metric, CardStats } from "@/lib/lifecycle";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -30,42 +30,61 @@ const METRIC_COLOR: Record<string, string> = {
   orange: "#fa8c16",
 };
 
-function Metrics({ metrics }: { metrics: Metric[] }) {
+function MetricRow({ metrics, size = 22 }: { metrics: Metric[]; size?: number }) {
   return (
-    <Space size={20} style={{ marginTop: 14 }} wrap align="start">
+    <Space size={18} wrap align="start">
       {metrics.map((m) => (
-        <div key={m.label} style={{ lineHeight: 1.25 }}>
-          <div>
-            <span
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                color: m.color ? METRIC_COLOR[m.color] : undefined,
-              }}
-            >
-              {m.value}
-            </span>{" "}
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {m.label}
-            </Text>
-          </div>
-          {m.today !== undefined && (
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              오늘 {m.today}
-            </Text>
-          )}
+        <div key={m.label} style={{ lineHeight: 1.2 }}>
+          <span
+            style={{
+              fontSize: size,
+              fontWeight: 600,
+              color: m.color ? METRIC_COLOR[m.color] : undefined,
+            }}
+          >
+            {m.value}
+          </span>{" "}
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {m.label}
+          </Text>
         </div>
       ))}
     </Space>
   );
 }
 
+/** 카드 지표 영역: 위=전체 통계, 아래=오늘의 통계(구획 분리). */
+function Metrics({ stats }: { stats: CardStats }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <MetricRow metrics={stats.overall} />
+      {stats.today.length > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: "1px solid rgba(0,0,0,0.06)",
+          }}
+        >
+          <Text
+            type="secondary"
+            style={{ fontSize: 11, display: "block", marginBottom: 4 }}
+          >
+            오늘
+          </Text>
+          <MetricRow metrics={stats.today} size={18} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionCard({
   section,
-  metrics,
+  stats,
 }: {
   section: Section;
-  metrics: Metric[];
+  stats?: CardStats;
 }) {
   const Icon = ICONS[section.icon];
   const body = (
@@ -85,8 +104,8 @@ function SectionCard({
       <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
         {section.description}
       </Paragraph>
-      {metrics.length > 0 ? (
-        <Metrics metrics={metrics} />
+      {stats && stats.overall.length > 0 ? (
+        <Metrics stats={stats} />
       ) : (
         section.enabled && (
           <Text
@@ -114,7 +133,7 @@ export default function SectionGrid({
   stats,
 }: {
   sections: Section[];
-  stats: Record<string, Metric[]>;
+  stats: Record<string, CardStats>;
 }) {
   return (
     <div>
@@ -137,7 +156,7 @@ export default function SectionGrid({
             <Row gutter={[16, 16]}>
               {items.map((s) => (
                 <Col key={s.key} xs={24} sm={12} md={8}>
-                  <SectionCard section={s} metrics={stats[s.key] ?? []} />
+                  <SectionCard section={s} stats={stats[s.key]} />
                 </Col>
               ))}
             </Row>
