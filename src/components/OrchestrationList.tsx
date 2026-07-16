@@ -10,6 +10,7 @@ import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
 import OrderLauncher from "@/components/OrderLauncher";
 import DateFoldedTable from "@/components/DateFoldedTable";
+import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -153,6 +154,15 @@ export default function OrchestrationList({
           </Space>
         );
       },
+    },
+    {
+      title: "해결",
+      key: "resolve",
+      render: (_: unknown, r: EpicSummary) => (
+        <span onClick={(e) => e.stopPropagation()}>
+          <ResolveButton epicKey={r.epicKey} resolved={workStatus(r).text !== "작업중"} />
+        </span>
+      ),
     },
   ];
 

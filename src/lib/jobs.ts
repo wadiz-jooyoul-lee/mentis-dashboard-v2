@@ -270,6 +270,22 @@ export function startJiraPost(key: string, target: "desc" | "comment") {
   return startJira(key, `post target=${t}`, "haiku");
 }
 
+/**
+ * 해결 표시/취소: `/dobby-resolve {키} [undo]`를 백그라운드로 실행. 상태만 바꾸는 경량 작업(Haiku).
+ * undo=true면 해결 표시를 되돌린다(단계 → 통합, ## 해결 제거).
+ */
+export function startResolve(
+  key: string,
+  undo = false
+): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `resolve-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-resolve ${k}${undo ? " undo" : ""}`], false, "haiku");
+  return { ok: true, jobId };
+}
+
 /** 정지: 실행 중인 프로세스(그룹)를 종료한다. */
 export function stopOrder(key: string): { ok: boolean; reason?: string } {
   const m = readMeta(key);
