@@ -14,8 +14,13 @@ import {
   applyPending,
   getJobStatus,
   jobResultText,
+  startJiraClean,
+  startJiraComments,
+  startJiraEnrich,
+  startJiraPost,
   JOB_ID_RE,
 } from "@/lib/jobs";
+import { saveJiraEnrichDraft } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
@@ -43,6 +48,29 @@ export async function POST(req: NextRequest) {
   if (body?.quips) {
     const slugs = Array.isArray(body?.slugs) ? body.slugs.map(String) : undefined;
     const r = startQuips(String(body?.key ?? ""), slugs);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // Jira 탭: 생성(clean/comments/enrich)·게시(post)·초안 저장. 전부 사용자 버튼 트리거.
+  if (body?.jira) {
+    const k = String(body?.key ?? "");
+    const act = String(body.jira);
+    if (act === "save") {
+      const s = saveJiraEnrichDraft(k, String(body?.text ?? ""));
+      return NextResponse.json({ ok: s.ok, error: s.reason }, { status: s.ok ? 200 : 400 });
+    }
+    const r =
+      act === "clean"
+        ? startJiraClean(k)
+        : act === "comments"
+        ? startJiraComments(k)
+        : act === "enrich"
+        ? startJiraEnrich(k)
+        : act === "post"
+        ? startJiraPost(k, body?.target === "desc" ? "desc" : "comment")
+        : null;
+    if (!r) return NextResponse.json({ ok: false, error: "bad_jira_action" }, { status: 400 });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }

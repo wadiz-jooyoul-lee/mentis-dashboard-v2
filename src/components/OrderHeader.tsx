@@ -22,6 +22,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "changes") return `/orchestration/${key}/changes`;
   if (tab === "explain") return `/orchestration/${key}/explain`;
   if (tab === "console") return `/orchestration/console/${key}`;
+  if (tab === "jira") return `/orchestration/${key}/jira`;
   return `/orchestration/${key}`;
 }
 
@@ -29,6 +30,7 @@ function activeTab(pathname: string): string {
   if (pathname.startsWith("/orchestration/console/")) return "console";
   if (pathname.endsWith("/changes")) return "changes";
   if (pathname.endsWith("/explain")) return "explain";
+  if (pathname.endsWith("/jira")) return "jira";
   return "board";
 }
 
@@ -41,16 +43,20 @@ export default function OrderHeader({
   epicKey,
   mode = null,
   worktreeRemoved = false,
+  hasJira = false,
   extra,
 }: {
   epicKey: string;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
+  hasJira?: boolean;
   extra?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const active = activeTab(pathname);
+  const items = hasJira ? [...TABS, { key: "jira", label: "Jira" }] : TABS;
 
   return (
     <div
@@ -122,7 +128,7 @@ export default function OrderHeader({
       </Space>
       <Tabs
         activeKey={active}
-        items={TABS}
+        items={items}
         onChange={(k) => router.push(routeFor(epicKey, k))}
         style={{ marginBottom: 0 }}
         tabBarStyle={{ marginBottom: 0 }}

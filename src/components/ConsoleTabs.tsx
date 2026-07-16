@@ -20,12 +20,14 @@ export default function ConsoleTabs({
   height = 480,
   mode = null,
   worktreeRemoved = false,
+  hasJira = false,
 }: {
   orderKey: string;
   agents: { id: string; label: string }[];
   height?: number;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  hasJira?: boolean;
 }) {
   const items = [
     {
@@ -47,7 +49,12 @@ export default function ConsoleTabs({
 
   return (
     <div>
-      <OrderHeader epicKey={orderKey} mode={mode} worktreeRemoved={worktreeRemoved} />
+      <OrderHeader
+        epicKey={orderKey}
+        mode={mode}
+        worktreeRemoved={worktreeRemoved}
+        hasJira={hasJira}
+      />
       <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>
         <Paragraph type="secondary" style={{ margin: 0 }}>
         <b>실시간</b>은 대시보드가 띄운 <code>dobby-order</code> 진행(정지·이어서 가능),

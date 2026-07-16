@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
+import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
@@ -360,6 +361,16 @@ export type EpicDetail = {
   hasJob: boolean;
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
+  /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
+  jiraIssueMd: string | null;
+  /** Jira 탭 — 읽기 쉽게 정리한 이슈(jira-issue-clean.md). 버튼 생성. */
+  jiraIssueCleanMd: string | null;
+  /** Jira 탭 — 코멘트 핵심 정리(jira-comments.md). 버튼 생성. */
+  jiraCommentsMd: string | null;
+  /** Jira 탭 — 업데이트 내용 정리(jira-enrich.md). 버튼 생성·편집 가능. */
+  jiraEnrichMd: string | null;
+  /** Jira 탭 — 게시 여부 플래그(jira-enrich.json). desc/comment별 반영 시각. */
+  jiraPosted: { desc?: string; comment?: string };
 };
 
 /** test-runs/{시각}/result.md 회차들(최신순). */
@@ -495,7 +506,43 @@ export function getEpic(epicKey: string): EpicDetail | null {
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
+    jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
+    jiraIssueCleanMd: readFileSafe(path.join(dir, "jira-issue-clean.md")),
+    jiraCommentsMd: readFileSafe(path.join(dir, "jira-comments.md")),
+    jiraEnrichMd: readFileSafe(path.join(dir, "jira-enrich.md")),
+    jiraPosted: readJiraPosted(dir),
   };
+}
+
+/** jira-enrich.json에서 게시 여부 플래그를 읽는다(없으면 빈 객체). */
+function readJiraPosted(dir: string): { desc?: string; comment?: string } {
+  const raw = readFileSafe(path.join(dir, "jira-enrich.json"));
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw) as { desc?: unknown; comment?: unknown };
+    const r: { desc?: string; comment?: string } = {};
+    if (typeof o.desc === "string") r.desc = o.desc;
+    if (typeof o.comment === "string") r.comment = o.comment;
+    return r;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 사용자가 편집한 업데이트 초안을 jira-enrich.md에 저장한다(게시 전 수정용).
+ * 잡이 아니라 직접 파일 쓰기.
+ */
+export function saveJiraEnrichDraft(key: string, text: string): { ok: boolean; reason?: string } {
+  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "invalid_key" };
+  const dir = orderDir(key);
+  if (!fs.existsSync(dir)) return { ok: false, reason: "no_order" };
+  try {
+    fs.writeFileSync(path.join(dir, "jira-enrich.md"), text, "utf8");
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "write_failed" };
+  }
 }
 
 /** 허브 카드용 work-type별 지표(개발/비개발). */

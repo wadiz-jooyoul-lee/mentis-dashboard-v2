@@ -210,6 +210,7 @@ export default function OrchestrationChanges({
         epicKey={epicKey}
         mode={epic?.orchestration?.mode ?? null}
         worktreeRemoved={epic?.worktreeRemoved}
+        hasJira={!!epic?.jiraIssueMd}
         extra={<QuipsControl epicKey={epicKey} />}
       />
       <Paragraph type="secondary" style={{ marginTop: 12 }}>

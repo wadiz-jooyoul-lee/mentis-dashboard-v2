@@ -17,6 +17,7 @@ export default function ExplainPage({ params }: { params: { key: string } }) {
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
+      hasJira={!!epic?.jiraIssueMd}
     />
   );
 }

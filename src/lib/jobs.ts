@@ -109,13 +109,17 @@ export function isRunning(key: string): boolean {
   return processIsClaude(m.pid);
 }
 
-/** claude 헤드리스 실행(신규/재개 공용). append=true면 로그 이어쓰기. */
-function spawnClaude(key: string, promptArgs: string[], append: boolean): void {
+/**
+ * claude 헤드리스 실행(신규/재개 공용). append=true면 로그 이어쓰기.
+ * model을 주면 `--model`로 그 모델을 강제한다(요약·게시·소감 등 저렴/고정 모델용).
+ */
+function spawnClaude(key: string, promptArgs: string[], append: boolean, model?: string): void {
   fs.mkdirSync(jobDir(key), { recursive: true });
   const out = fs.openSync(logPath(key), append ? "a" : "w");
   const workspace = getWorkspaceDir();
   const args = [
     ...promptArgs,
+    ...(model ? ["--model", model] : []),
     "--permission-mode",
     "bypassPermissions",
     "--output-format",
@@ -222,8 +226,44 @@ export function startQuips(
     .map((s) => String(s).trim())
     .filter((s) => /^[A-Za-z0-9_-]+$/.test(s));
   const prompt = `/avatar-quips ${k}${safe.length ? " " + safe.join(" ") : ""}`;
-  spawnClaude(jobId, ["-p", prompt], false);
+  // 소감은 재미기능 → 가장 저렴한 모델(Haiku)로.
+  spawnClaude(jobId, ["-p", prompt], false, "haiku");
   return { ok: true, jobId };
+}
+
+/**
+ * Jira 탭 관련 백그라운드 잡(사용자 버튼 트리거). `/dobby-jira-tab {키} <sub>`.
+ * 핵심 파악(clean·comments·enrich)은 품질 위해 Opus, 단순 반영(post)은 Haiku.
+ */
+function startJira(
+  key: string,
+  sub: string,
+  model: string
+): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `jira-${sub.split(" ")[0]}-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-jira-tab ${k} ${sub}`], false, model);
+  return { ok: true, jobId };
+}
+
+/** ① 이슈 원문 읽기 쉽게 정리(Opus). */
+export function startJiraClean(key: string) {
+  return startJira(key, "clean", "opus");
+}
+/** ② 코멘트 핵심 정리(Opus). */
+export function startJiraComments(key: string) {
+  return startJira(key, "comments", "opus");
+}
+/** ③ 업데이트 내용 정리(Opus). */
+export function startJiraEnrich(key: string) {
+  return startJira(key, "enrich", "opus");
+}
+/** 게시: 설명/코멘트에 반영(Haiku — 단순 반영). */
+export function startJiraPost(key: string, target: "desc" | "comment") {
+  const t = target === "desc" ? "desc" : "comment";
+  return startJira(key, `post target=${t}`, "haiku");
 }
 
 /** 정지: 실행 중인 프로세스(그룹)를 종료한다. */

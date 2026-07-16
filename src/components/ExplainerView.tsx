@@ -120,16 +120,23 @@ export default function ExplainerView({
   job = null,
   mode = null,
   worktreeRemoved = false,
+  hasJira = false,
 }: {
   epicKey: string;
   md: string | null;
   job?: ExplainJob | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  hasJira?: boolean;
 }) {
   return (
     <div>
-      <OrderHeader epicKey={epicKey} mode={mode} worktreeRemoved={worktreeRemoved} />
+      <OrderHeader
+        epicKey={epicKey}
+        mode={mode}
+        worktreeRemoved={worktreeRemoved}
+        hasJira={hasJira}
+      />
       {!md ? (
         <GenerateExplainer epicKey={epicKey} />
       ) : (

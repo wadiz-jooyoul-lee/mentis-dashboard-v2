@@ -26,6 +26,7 @@ export default function OrderConsolePage({
       height={480}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
+      hasJira={!!epic?.jiraIssueMd}
     />
   );
 }
