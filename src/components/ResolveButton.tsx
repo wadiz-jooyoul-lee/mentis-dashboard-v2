@@ -70,12 +70,24 @@ export default function ResolveButton({
       if (st.state === "running") return;
       stop();
       setBusy(false);
-      if (st.result && /unknown command|command not found|not found/i.test(st.result)) {
+      const result = st.result ?? "";
+      if (/unknown command|command not found|not found/i.test(result)) {
         message.error("dobby-resolve 스킬이 없어 실패했습니다. go-dobby 플러그인을 업데이트하세요.");
         return;
       }
       if (st.state === "failed") {
         message.error("처리에 실패했습니다 — 콘솔을 확인하세요.");
+        return;
+      }
+      // 스킬이 정상 종료(exit 0)했지만 실제로는 해결을 적용하지 못한 경우(메타/설정 못 찾음)를 잡는다.
+      // 예: status.md를 못 찾아 "먼저 dobby-order로 진행하라"며 아무것도 안 하고 끝나면 성공으로 오인된다.
+      if (/status\.md[\s\S]*?없|먼저\s*(\/?go-dobby:)?dobby-order|dobby-order로\s*(먼저\s*)?진행|config\.env[\s\S]*?없|dobby-init.*먼저|먼저.*dobby-init/i.test(result)) {
+        message.warning(
+          undo
+            ? "해결 취소가 적용되지 않았습니다 — 오더 메타를 찾지 못했습니다. 경로/설정을 확인하세요."
+            : "해결 처리가 적용되지 않았습니다 — 오더 메타(status.md)를 찾지 못했습니다. 경로/설정을 확인하세요."
+        );
+        router.refresh();
         return;
       }
       message.success(undo ? "해결 표시를 취소했습니다." : "해결로 표시했습니다.");
