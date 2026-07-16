@@ -92,6 +92,7 @@ export default function ResolveButton({
     >
       <Button
         size="small"
+        type={resolved ? "default" : "primary"}
         icon={resolved ? <UndoOutlined /> : <CheckCircleOutlined />}
         loading={busy}
         onClick={(e) => e.stopPropagation()}
