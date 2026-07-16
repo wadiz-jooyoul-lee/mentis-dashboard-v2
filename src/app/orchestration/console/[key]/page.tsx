@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import ConsoleTabs from "@/components/ConsoleTabs";
 import { getEpic } from "@/lib/orchestration";
 import { listConsoleAgents } from "@/lib/transcript";
-import { ORDER_KEY_RE } from "@/lib/keys";
+import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export default function OrderConsolePage({
       height={480}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
     />
   );
 }

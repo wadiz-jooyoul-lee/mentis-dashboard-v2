@@ -121,7 +121,9 @@ export default function OrderLauncher({
         <Paragraph type="secondary" style={{ margin: 0 }}>
           입력을 <code>/dobby-order</code> 뒤에 그대로 전달해 백그라운드 실행합니다. 진행 로그는 아래에서 실시간 확인.
           <br />
-          받는 것: <b>이슈 키</b>(FE1-1187) · <b>이슈/문서 URL</b> · <b>이슈 없이 요구사항·문서만</b>(→ dobby-order가 <code>TASK-</code> 생성). 인자도 가능: <code>base=</code> <code>agents=N</code> <code>mode=A|B</code>.
+          받는 것: <b>이슈 키</b>(FE1-1187) · <b>이슈/문서 URL</b> · <b>이슈 없이 요구사항·문서만</b>(→ dobby-order가 <code>TASK-</code> 생성). 인자: <code>base=</code> <code>agents=N</code> <code>mode=A|B</code> <code>light</code> <code>produce</code> <code>ref=키</code>.
+          <br />
+          예) <code>FE1-1274 produce</code> 될지만 판단 · <code>FE1-1300 ref=FE1-1274</code> 조사 참조해 개발 · <code>FE1-1274 light</code> 가볍게 · <code>EPIC-1 mode=B</code> 자동 병렬. 전체 옵션은 <code>help</code> 입력.
           <br />
           <Text type="warning">주의: 헤드리스 claude를 bypassPermissions로 실행합니다(로컬 신뢰 환경 전용).</Text>
         </Paragraph>

@@ -10,6 +10,7 @@ import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
 import JobConsole from "@/components/JobConsole";
 import OrderHeader from "@/components/OrderHeader";
+import { isJiraIssueKey } from "@/lib/keys";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
@@ -210,7 +211,7 @@ export default function OrchestrationChanges({
         epicKey={epicKey}
         mode={epic?.orchestration?.mode ?? null}
         worktreeRemoved={epic?.worktreeRemoved}
-        hasJira={!!epic?.jiraIssueMd}
+        hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
         extra={<QuipsControl epicKey={epicKey} />}
       />
       <Paragraph type="secondary" style={{ marginTop: 12 }}>

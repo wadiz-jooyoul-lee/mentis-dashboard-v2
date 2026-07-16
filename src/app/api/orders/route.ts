@@ -14,6 +14,7 @@ import {
   applyPending,
   getJobStatus,
   jobResultText,
+  startJiraSnapshot,
   startJiraClean,
   startJiraComments,
   startJiraEnrich,
@@ -61,7 +62,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: s.ok, error: s.reason }, { status: s.ok ? 200 : 400 });
     }
     const r =
-      act === "clean"
+      act === "snapshot"
+        ? startJiraSnapshot(k)
+        : act === "clean"
         ? startJiraClean(k)
         : act === "comments"
         ? startJiraComments(k)

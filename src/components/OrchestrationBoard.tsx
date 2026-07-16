@@ -29,6 +29,7 @@ import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
+import { isJiraIssueKey } from "@/lib/keys";
 import "./markdown.css";
 
 const { Title, Text } = Typography;
@@ -301,7 +302,7 @@ export default function OrchestrationBoard({
       epicKey={epicKey}
       mode={o?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved}
-      hasJira={!!epic?.jiraIssueMd}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
       extra={<QuipsControl epicKey={epicKey} />}
     />
   );
@@ -594,7 +595,21 @@ export default function OrchestrationBoard({
           <Title level={4}>산출물</Title>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             {epic!.deliverables.map((d) => (
-              <Card key={d.name} size="small" title={<Text code>deliverables/{d.name}</Text>}>
+              <Card
+                key={d.name}
+                size="small"
+                title={<Text code>deliverables/{d.name}</Text>}
+                extra={
+                  d.content ? (
+                    <a
+                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(d.content)}`}
+                      download={d.name}
+                    >
+                      다운로드
+                    </a>
+                  ) : undefined
+                }
+              >
                 {d.kind === "md" ? (
                   <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{d.content}</ReactMarkdown>

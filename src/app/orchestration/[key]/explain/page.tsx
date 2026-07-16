@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getEpic } from "@/lib/orchestration";
-import { ORDER_KEY_RE } from "@/lib/keys";
+import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 import { getJobStatus } from "@/lib/jobs";
 import ExplainerView from "@/components/ExplainerView";
 
@@ -17,7 +17,7 @@ export default function ExplainPage({ params }: { params: { key: string } }) {
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
     />
   );
 }

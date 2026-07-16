@@ -74,7 +74,9 @@ export default function JiraTabView(props: Props) {
   };
 
   // ① 기존 지라 이슈 내용: 정리본(있으면) + 원문 접기. dobby-order가 저장한 원문 재활용.
-  const issueTab = (
+  // 아직 안 불러온 기존 오더면 "불러오기" 버튼(snapshot)으로 그때 조회.
+  const hasIssue = !!(props.jiraIssueMd || props.jiraIssueCleanMd);
+  const issueTab = hasIssue ? (
     <div>
       <Space style={{ marginBottom: 12 }}>
         <Button
@@ -101,6 +103,16 @@ export default function JiraTabView(props: Props) {
         />
       )}
     </div>
+  ) : (
+    <Empty description="이슈 내용을 아직 불러오지 않았습니다 (작업 시작 전이거나 이전 오더)">
+      <Button
+        type="primary"
+        loading={busy === "snapshot"}
+        onClick={() => trigger("snapshot")}
+      >
+        Jira에서 이슈 불러오기
+      </Button>
+    </Empty>
   );
 
   // ② 코멘트 핵심 정리: 버튼 생성(전체 코멘트 새로 조회).

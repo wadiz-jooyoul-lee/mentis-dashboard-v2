@@ -248,6 +248,10 @@ function startJira(
   return { ok: true, jobId };
 }
 
+/** 이슈 원문 가져오기 — 재활용본(jira-issue.md)이 없는 기존 오더용(Haiku, 단순 조회). */
+export function startJiraSnapshot(key: string) {
+  return startJira(key, "snapshot", "haiku");
+}
 /** ① 이슈 원문 읽기 쉽게 정리(Opus). */
 export function startJiraClean(key: string) {
   return startJira(key, "clean", "opus");
