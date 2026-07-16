@@ -23,7 +23,7 @@ import { WarningOutlined, FileTextOutlined } from "@ant-design/icons";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
-import IssueReport from "@/components/IssueReport";
+import MarkdownCards from "@/components/MarkdownCards";
 import type { QuipsFile, Quip } from "@/lib/quips";
 import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
@@ -33,50 +33,6 @@ import { isJiraIssueKey } from "@/lib/keys";
 import "./markdown.css";
 
 const { Title, Text } = Typography;
-
-/** 마크다운을 `## ` 블록 단위로 쪼갠다(첫 `#` 제목 프리앰블 제외). 각 블록 = 카드 1개. */
-function parseCardBlocks(md: string): { title: string; body: string }[] {
-  return md
-    .split(/^##\s+/m)
-    .slice(1)
-    .map((p) => {
-      const nl = p.indexOf("\n");
-      return {
-        title: (nl === -1 ? p : p.slice(0, nl)).trim(),
-        body: nl === -1 ? "" : p.slice(nl + 1).trim(),
-      };
-    })
-    .filter((b) => b.title);
-}
-
-/** `## ` 블록 마크다운을 카드 목록으로 렌더하는 공용 섹션(자율판단·사이드이펙트·확인가이드 공용). */
-function MarkdownCards({ title, subtitle, md }: { title: string; subtitle: string; md: string | null }) {
-  if (!md || !md.trim()) return null;
-  const blocks = parseCardBlocks(md);
-  return (
-    <div style={{ marginTop: 20 }}>
-      <Title level={4}>{title}</Title>
-      <Text type="secondary">{subtitle}</Text>
-      {blocks.length > 0 ? (
-        <Space direction="vertical" size={12} style={{ width: "100%", marginTop: 8 }}>
-          {blocks.map((b, i) => (
-            <Card key={i} size="small" title={b.title}>
-              <div className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{b.body}</ReactMarkdown>
-              </div>
-            </Card>
-          ))}
-        </Space>
-      ) : (
-        <Card size="small" style={{ marginTop: 8 }}>
-          <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
 
 /** 시각 문자열에 시:분이 있나(날짜만이면 false). 날짜만이면 경과를 못 재므로 정체 판정에서 제외. */
 function hasTimeOfDay(v: string | null | undefined): boolean {
@@ -582,12 +538,6 @@ export default function OrchestrationBoard({
         </div>
       )}
 
-      {/* 확인 가이드 (test-guide.md) — 사용자 수동 사이드이펙트 확인 TC */}
-      <MarkdownCards
-        title="확인 가이드 (수동 TC)"
-        subtitle="사용자가 직접 사이드이펙트를 확인하는 방법입니다. 화면·절차·기대 결과 순으로 따라 하세요."
-        md={epic!.testGuideMd}
-      />
 
       {/* 산출물 (deliverables/) */}
       {epic!.deliverables.length > 0 && (
@@ -629,21 +579,6 @@ export default function OrchestrationBoard({
           </Space>
         </div>
       )}
-
-      {/* 검증 (test-runs) — 회차 없어도 영역은 표시 */}
-      <div style={{ marginTop: 20 }}>
-        <Title level={4}>검증</Title>
-        {epic!.runs.length > 0 ? (
-          <IssueReport issueKey={epicKey} runs={epic!.runs} embedded />
-        ) : (
-          <Card size="small">
-            <Text type="secondary">
-              아직 테스트 회차가 없습니다 — code 오더에서 <Text code>dobby-test</Text> 실행 시
-              <Text code> test-runs/</Text>에 회차가 쌓이고 여기 리포트가 표시됩니다.
-            </Text>
-          </Card>
-        )}
-      </div>
 
       {/* 종료 서머리 (summary.md) */}
       {epic!.summaryMd && (

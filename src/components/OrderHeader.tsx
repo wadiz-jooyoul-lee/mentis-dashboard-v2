@@ -15,12 +15,14 @@ const TABS = [
   { key: "board", label: "보드" },
   { key: "changes", label: "코드 변경" },
   { key: "explain", label: "구현 내용" },
+  { key: "verify", label: "검증" },
   { key: "console", label: "콘솔" },
 ];
 
 function routeFor(key: string, tab: string): string {
   if (tab === "changes") return `/orchestration/${key}/changes`;
   if (tab === "explain") return `/orchestration/${key}/explain`;
+  if (tab === "verify") return `/orchestration/${key}/verify`;
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
   return `/orchestration/${key}`;
@@ -30,6 +32,7 @@ function activeTab(pathname: string): string {
   if (pathname.startsWith("/orchestration/console/")) return "console";
   if (pathname.endsWith("/changes")) return "changes";
   if (pathname.endsWith("/explain")) return "explain";
+  if (pathname.endsWith("/verify")) return "verify";
   if (pathname.endsWith("/jira")) return "jira";
   return "board";
 }
