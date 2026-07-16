@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tabs, Button, Space, Empty, Collapse, Input, Tag, message, Alert } from "antd";
 import { ReloadOutlined, SaveOutlined } from "@ant-design/icons";
@@ -22,50 +22,107 @@ type Props = {
   jiraPosted: { desc?: string; comment?: string };
 };
 
-async function callJira(body: Record<string, unknown>): Promise<boolean> {
+async function postJira(
+  body: Record<string, unknown>
+): Promise<{ ok: boolean; key?: string; error?: string }> {
   try {
     const r = await fetch("/api/orders", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    return r.ok;
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, key: data?.key, error: data?.error };
   } catch {
-    return false;
+    return { ok: false, error: "network" };
   }
+}
+
+// 잡 결과 텍스트가 "스킬 미설치"를 뜻하는지(claude가 명령을 못 찾음).
+function isSkillMissing(result: string | null | undefined): boolean {
+  return !!result && /unknown command|command not found|not found|no such/i.test(result);
 }
 
 export default function JiraTabView(props: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState(props.jiraEnrichMd ?? "");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 서버가 새 내용을 주면(재생성·저장 후 새로고침) 편집칸을 동기화.
   useEffect(() => setDraft(props.jiraEnrichMd ?? ""), [props.jiraEnrichMd]);
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  // 생성/게시 잡 트리거 → 완료되면 자동 갱신(백그라운드라 대기 안 함).
+  const stopPoll = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  // 잡 결과를 폴링해 완료 시점을 판정한다. 실패(스킬 미설치 등)면 에러를 표면화.
+  const pollJob = (jobId: string) => {
+    let tries = 0;
+    stopPoll();
+    pollRef.current = setInterval(async () => {
+      tries += 1;
+      if (tries > 40) {
+        stopPoll();
+        setBusy(null);
+        setError("작업이 시간 내에 끝나지 않았습니다. 잠시 후 다시 시도하거나 콘솔을 확인하세요.");
+        return;
+      }
+      let st: { state?: string; result?: string } = {};
+      try {
+        st = await (
+          await fetch(`/api/orders?jobResult=${encodeURIComponent(jobId)}`, { cache: "no-store" })
+        ).json();
+      } catch {
+        return; // 일시 오류는 다음 폴에서 재시도
+      }
+      if (st.state === "running") return;
+      // 종료됨(done/failed/stopped) — 성공/실패 판정
+      stopPoll();
+      setBusy(null);
+      if (isSkillMissing(st.result)) {
+        setError(
+          "dobby-jira-tab 스킬이 설치돼 있지 않습니다. go-dobby 플러그인을 최신 버전으로 업데이트한 뒤 다시 시도하세요."
+        );
+        return;
+      }
+      if (st.state === "failed") {
+        setError(`작업이 실패했습니다: ${st.result || "원인 미상 — 콘솔을 확인하세요."}`);
+        return;
+      }
+      // 성공 — 산출물 반영
+      router.refresh();
+    }, 3000);
+  };
+
+  // 생성/게시 잡 트리거 → 백그라운드 실행 후 결과 폴링(대기 UI만 표시).
   const trigger = async (jira: string, extra: Record<string, unknown> = {}) => {
     const tag = jira + (typeof extra.target === "string" ? extra.target : "");
+    setError(null);
     setBusy(tag);
-    const ok = await callJira({ jira, key: props.epicKey, ...extra });
-    if (!ok) {
-      message.error("요청에 실패했습니다");
+    const res = await postJira({ jira, key: props.epicKey, ...extra });
+    if (!res.ok || !res.key) {
       setBusy(null);
+      setError(
+        res.error === "already_running"
+          ? "이미 실행 중입니다. 끝나면 자동으로 반영됩니다."
+          : "요청에 실패했습니다."
+      );
       return;
     }
-    message.success("시작됨 — 완료되면 자동으로 갱신됩니다");
-    setTimeout(() => router.refresh(), 4000);
-    setTimeout(() => {
-      router.refresh();
-      setBusy(null);
-    }, 12000);
+    pollJob(res.key);
   };
 
   const saveDraft = async () => {
     setBusy("save");
-    const ok = await callJira({ jira: "save", key: props.epicKey, text: draft });
+    const res = await postJira({ jira: "save", key: props.epicKey, text: draft });
     setBusy(null);
-    if (ok) {
+    if (res.ok) {
       message.success("초안을 저장했습니다");
       router.refresh();
     } else {
@@ -222,6 +279,16 @@ export default function JiraTabView(props: Props) {
         style={{ marginTop: 12, marginBottom: 12 }}
         message="이슈 내용은 작업 시작 때 읽은 걸 재활용합니다. 정리·코멘트·업데이트·게시는 버튼으로 실행되며, 게시 후 Jira와 동기화하지는 않습니다."
       />
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 12 }}
+          message={error}
+        />
+      )}
       <Tabs
         defaultActiveKey="issue"
         items={[

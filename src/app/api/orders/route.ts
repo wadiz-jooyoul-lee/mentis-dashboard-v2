@@ -163,6 +163,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // 잡 결과 조회: ?jobResult={잡id} → 상태 + 마지막 result 텍스트(실패 표면화용)
+  const jobResultKey = (sp.get("jobResult") ?? "").trim();
+  if (jobResultKey) {
+    if (!JOB_ID_RE.test(jobResultKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    const job = getJobStatus(jobResultKey);
+    return NextResponse.json({ state: job.state, result: jobResultText(jobResultKey) });
+  }
+
   const key = (sp.get("key") ?? "").trim();
   if (!key) {
     return NextResponse.json({ jobs: listJobs(), archived: listArchivedJobs() });
