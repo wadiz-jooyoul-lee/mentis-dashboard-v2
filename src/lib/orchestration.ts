@@ -13,7 +13,7 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
-import type { Metric } from "@/lib/lifecycle";
+import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
@@ -54,7 +54,7 @@ function epicKeys(): string[] {
     .map((d) => d.name);
 }
 
-/** work-type: produce.md/deliverables → 비소스, implementation.md → code, 아니면 status 힌트. */
+/** work-type: produce.md/deliverables → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
@@ -67,7 +67,9 @@ function workTypeOf(key: string, statusMd: string | null): WorkType {
     const wt = parseOrderStatus(statusMd, key).workTypeHint;
     if (wt) return wt;
   }
-  return null;
+  // 명시적으로 비소스(produce.md·deliverables·힌트)라는 근거가 없으면 개발(code)로 본다.
+  // → 분석 초기라 산출물이 아직 없는 오더도 개발 카드/필터에 잡힌다(미분류로 사라지지 않음).
+  return "code";
 }
 
 /**
@@ -177,6 +179,10 @@ export type EpicSummary = {
   latestEventTime: string | null;
   latestEventText: string | null;
   lastActivity: string | null;
+  /** 최초 활동 시각(가장 이른 이벤트/갱신) — "오늘 시작" 판정용. */
+  firstActivity: string | null;
+  /** 활성 에이전트 중 착수 후 오래 멈춘(정체) 것이 하나라도 있으면 true — "주의" 판정용. */
+  stalled: boolean;
   /** go-dobby 확장: 개발/비개발 구분 + 제목 */
   workType: WorkType;
   title: string | null;
@@ -187,12 +193,25 @@ export type EpicSummary = {
   phaseLabel: string;
 };
 
+// "일하는 중"인 상태 + 착수 후 STALE_MIN분 이상 경과면 정체(대시보드 보드와 동일 기준).
+const CARD_ACTIVE_STATES = ["분석", "구현", "리뷰"];
+const CARD_STALE_MIN = 15;
+function agentStalled(startedAt: string): boolean {
+  if (!/\d{1,2}:\d{2}/.test(startedAt)) return false; // 시:분 없으면 경과 못 잼 → 판정 안 함
+  const d = new Date(startedAt.replace(" ", "T"));
+  if (isNaN(d.getTime())) return false;
+  return Math.floor((Date.now() - d.getTime()) / 60000) >= CARD_STALE_MIN;
+}
+
 function summarize(key: string, o: Orchestration | null, statusMd: string | null): EpicSummary {
   const counts = o ? countAgents(o) : { total: 0 };
   const times = o
     ? [...o.events.map((e) => e.time), ...o.agents.map((a) => a.updatedAt).filter(Boolean)].sort()
     : [];
   const st = statusMd ? parseOrderStatus(statusMd, key) : null;
+  const stalled = !!o?.agents.some(
+    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a.startedAt)
+  );
   return {
     epicKey: key,
     mode: o?.mode ?? null,
@@ -201,6 +220,8 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     latestEventTime: o?.events[0]?.time ?? null,
     latestEventText: o?.events[0]?.text ?? null,
     lastActivity: (times.length ? times[times.length - 1] : null) ?? st?.updatedAt ?? null,
+    firstActivity: (times.length ? times[0] : null) ?? null,
+    stalled,
     workType: workTypeOf(key, statusMd),
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
@@ -545,20 +566,53 @@ export function saveJiraEnrichDraft(key: string, text: string): { ok: boolean; r
   }
 }
 
-/** 허브 카드용 work-type별 지표(개발/비개발). */
-export function orchestrationMetricsFor(workType: WorkType): Metric[] {
+/** 오더가 끝난 상태인가(목록 "작업 상태"와 동일 기준): dobby-end 종료 또는 dobby-resolve 해결. */
+function orderFinished(e: EpicSummary): boolean {
+  return e.worktreeRemoved || e.phase === "종료" || e.phase === "해결";
+}
+/** 시각 문자열의 날짜(YYYY-MM-DD) 부분. 없으면 null. */
+function dateOf(v: string | null): string | null {
+  const m = v?.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+/** 로컬 기준 YYYY-MM-DD. */
+function ymd(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * 허브 카드용 work-type별 지표(개발/비개발). 전부 **오더 개수** 기준.
+ * - 위(overall): 전체 · 진행 중 · 완료(+ 정체 있으면 주의).
+ * - 아래(today): 오늘 시작 · 오늘 완료 · 오늘 활동.
+ */
+export function orchestrationCardStats(workType: WorkType): CardStats {
   const epics = listEpics().filter((e) => e.workType === workType);
-  if (epics.length === 0) return [{ label: "오더", value: 0 }];
-  const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현");
-  const review = sum("리뷰");
-  const done = sum("완료");
-  return [
-    { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
-    ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
-  ];
+  const total = epics.length;
+  if (total === 0) return { overall: [{ label: "오더", value: 0 }], today: [] };
+
+  const done = epics.filter(orderFinished).length;
+  const inProgress = total - done;
+  const attention = epics.filter((e) => !orderFinished(e) && e.stalled).length;
+
+  const today = ymd(new Date());
+  const startedToday = epics.filter((e) => dateOf(e.firstActivity) === today).length;
+  const doneToday = epics.filter((e) => orderFinished(e) && dateOf(e.lastActivity) === today).length;
+  const activeToday = epics.filter((e) => dateOf(e.lastActivity) === today).length;
+
+  return {
+    overall: [
+      { label: "전체", value: total },
+      { label: "진행 중", value: inProgress, color: "blue" },
+      { label: "완료", value: done, color: "green" },
+      ...(attention > 0 ? [{ label: "주의", value: attention, color: "red" }] : []),
+    ],
+    today: [
+      { label: "오늘 시작", value: startedToday },
+      { label: "오늘 완료", value: doneToday, color: "green" },
+      { label: "오늘 활동", value: activeToday, color: "blue" },
+    ],
+  };
 }
 
 /** 허브 오케스트레이션 지표. */

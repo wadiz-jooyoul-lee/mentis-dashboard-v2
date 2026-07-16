@@ -19,6 +19,7 @@ import {
   startJiraComments,
   startJiraEnrich,
   startJiraPost,
+  startResolve,
   JOB_ID_RE,
 } from "@/lib/jobs";
 import { saveJiraEnrichDraft } from "@/lib/orchestration";
@@ -49,6 +50,13 @@ export async function POST(req: NextRequest) {
   if (body?.quips) {
     const slugs = Array.isArray(body?.slugs) ? body.slugs.map(String) : undefined;
     const r = startQuips(String(body?.key ?? ""), slugs);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 해결 표시/취소: /dobby-resolve {키} [undo] 백그라운드 실행(목록의 "해결 처리"/"해결 취소" 버튼).
+  if (body?.resolve) {
+    const r = startResolve(String(body?.key ?? ""), body?.undo === true);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }

@@ -67,10 +67,13 @@ export default function JiraTabView(props: Props) {
     stopPoll();
     pollRef.current = setInterval(async () => {
       tries += 1;
-      if (tries > 40) {
+      // 게시(post)는 MCP 호출·사용량 한도로 수 분 걸릴 수 있어 넉넉히 기다린다(최대 ~7분).
+      if (tries > 140) {
         stopPoll();
         setBusy(null);
-        setError("작업이 시간 내에 끝나지 않았습니다. 잠시 후 다시 시도하거나 콘솔을 확인하세요.");
+        message.info(
+          "아직 백그라운드에서 진행 중일 수 있어요 — 완료되면 자동 반영됩니다. 오래 걸리면 콘솔에서 진행을 확인하세요(사용량 한도일 수 있음)."
+        );
         return;
       }
       let st: { state?: string; result?: string } = {};
