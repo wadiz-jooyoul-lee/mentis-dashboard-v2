@@ -22,7 +22,7 @@ import {
   startResolve,
   JOB_ID_RE,
 } from "@/lib/jobs";
-import { saveJiraEnrichDraft } from "@/lib/orchestration";
+import { saveJiraEnrichDraft, prTargets } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
@@ -179,6 +179,15 @@ export async function GET(req: NextRequest) {
     }
     const job = getJobStatus(jobResultKey);
     return NextResponse.json({ state: job.state, result: jobResultText(jobResultKey) });
+  }
+
+  // PR 생성 링크 대상: ?prTargets={오더키} → [{repo, branch, repoUrl}]
+  const prKey = (sp.get("prTargets") ?? "").trim();
+  if (prKey) {
+    if (!ORDER_KEY_RE.test(prKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    return NextResponse.json({ targets: prTargets(prKey) });
   }
 
   const key = (sp.get("key") ?? "").trim();
