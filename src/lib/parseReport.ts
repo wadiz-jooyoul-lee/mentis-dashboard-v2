@@ -141,6 +141,49 @@ function countVerdicts(scenarios: Scenario[]): Counts {
   return counts;
 }
 
+/**
+ * 표가 없는 신 포맷 대비 — 집계 요약 한 줄("PASS 2 / FAIL 0 / SKIP 4",
+ * "통과 2 · 실패 0 · 스킵 4" 등)에서 직접 카운트를 뽑는다. PASS·FAIL을 모두 포함한
+ * 줄만 요약으로 인정한다(개별 시나리오 헤딩의 "— PASS" 오탐 방지).
+ */
+function findSummaryCounts(lines: string[]): Counts | null {
+  for (const line of lines) {
+    if (!/(PASS|통과)/i.test(line) || !/(FAIL|실패)/i.test(line)) continue;
+    const n = (re: RegExp) => {
+      const m = line.match(re);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    const pass = n(/(?:PASS|통과)\s*[:：]?\s*(\d+)/i);
+    const fail = n(/(?:FAIL|실패)\s*[:：]?\s*(\d+)/i);
+    const skip = n(/(?:SKIP|스킵)\s*[:：]?\s*(\d+)/i);
+    const warn = n(/(?:WARN|주의)\s*[:：]?\s*(\d+)/i);
+    const total = pass + fail + skip + warn;
+    if (total > 0) return { total, pass, fail, skip, warn };
+  }
+  return null;
+}
+
+/**
+ * 표가 없을 때 시나리오 헤딩("### TC-1 … — PASS")·판정 불릿("- 판정: PASS")에서 카운트한다.
+ * 요약 라인이 없을 때의 폴백.
+ */
+function countHeadingVerdicts(lines: string[]): Counts {
+  const counts: Counts = { total: 0, pass: 0, fail: 0, skip: 0, warn: 0 };
+  const HEAD = /^#{2,4}\s+.+?\s*[—–-]\s*\*{0,2}(PASS|FAIL|SKIP|WARN|주의|통과|실패|스킵)\b/i;
+  const BULLET = /^\s*[-*]\s*\*{0,2}판정\*{0,2}\s*[:：]\s*\*{0,2}(PASS|FAIL|SKIP|WARN|주의|통과|실패|스킵)\b/i;
+  for (const line of lines) {
+    const m = line.match(HEAD) ?? line.match(BULLET);
+    if (!m) continue;
+    const v = normalizeVerdict(m[1]);
+    counts.total++;
+    if (v === "pass") counts.pass++;
+    else if (v === "fail") counts.fail++;
+    else if (v === "skip") counts.skip++;
+    else if (v === "warn") counts.warn++;
+  }
+  return counts;
+}
+
 export function parseReport(md: string): ParsedReport {
   const lines = md.split("\n");
 
@@ -151,7 +194,12 @@ export function parseReport(md: string): ParsedReport {
 
   const table = findScenarioTable(lines);
   const scenarios = table ? parseScenarios(lines, table) : [];
-  const counts = countVerdicts(scenarios);
+  let counts = countVerdicts(scenarios);
+  // 표가 없어 집계가 비면(신 포맷) 요약 라인 → 헤딩/판정 불릿 순으로 카운트를 보정한다.
+  if (counts.total === 0) {
+    const alt = findSummaryCounts(lines) ?? countHeadingVerdicts(lines);
+    if (alt.total > 0) counts = alt;
+  }
 
   // 메타 수집 범위: 표 시작 전(표 없으면 "변경 요약" 헤딩 전, 그것도 없으면 전체)
   let metaEnd = lines.length;
