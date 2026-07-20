@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button, Popover, Input, Space, Typography, message, Empty, Spin } from "antd";
-import { BranchesOutlined, CopyOutlined } from "@ant-design/icons";
+import { BranchesOutlined, CopyOutlined, ExportOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -139,6 +139,15 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
                         style={{ flexShrink: 0 }}
                       >
                         복사
+                      </Button>
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<ExportOutlined />}
+                        onClick={() => window.open(url!, "_blank", "noopener,noreferrer")}
+                        style={{ flexShrink: 0 }}
+                      >
+                        열기
                       </Button>
                     </div>
                   )}
