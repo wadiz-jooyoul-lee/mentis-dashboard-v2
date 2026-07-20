@@ -222,31 +222,44 @@ export default function OrchestrationChanges({
         <Empty description="에이전트 정보가 없습니다" />
       ) : (
         <>
-          <Space size={[8, 8]} wrap style={{ marginBottom: 20 }}>
-            {agents.map((a, i) => (
-              <a key={`${a.agent}-${i}`} href={`#${anchorOf(a.agent)}`}>
-                <Tag
-                  style={{
-                    cursor: "pointer",
-                    color: dobbyColor(a.agent),
-                    borderColor: dobbyColor(a.agent),
-                    background: "transparent",
-                    fontWeight: 600,
-                    padding: "2px 10px",
-                  }}
-                >
-                  {a.agent}
-                </Tag>
-              </a>
-            ))}
-          </Space>
+          {/* 에이전트 이동 버튼 — 스크롤해도 헤더(sticky, top64+height133=197) 바로 아래 고정 */}
+          <div
+            style={{
+              position: "sticky",
+              top: 197,
+              zIndex: 80,
+              background: "#fff",
+              padding: "8px 0 10px",
+              marginBottom: 12,
+              borderBottom: "1px solid #f5f5f5",
+            }}
+          >
+            <Space size={[8, 8]} wrap>
+              {agents.map((a, i) => (
+                <a key={`${a.agent}-${i}`} href={`#${anchorOf(a.agent)}`}>
+                  <Tag
+                    style={{
+                      cursor: "pointer",
+                      color: dobbyColor(a.agent),
+                      borderColor: dobbyColor(a.agent),
+                      background: "transparent",
+                      fontWeight: 600,
+                      padding: "2px 10px",
+                    }}
+                  >
+                    {a.agent}
+                  </Tag>
+                </a>
+              ))}
+            </Space>
+          </div>
 
           {agents.map((a, i) => {
             const w = workFor(a.agent);
             const c = contractFor(a.agent);
             const badge = agentStateBadge(a.state);
             return (
-              <div key={`${a.agent}-${i}`} id={anchorOf(a.agent)} style={{ scrollMarginTop: 80, marginBottom: 20 }}>
+              <div key={`${a.agent}-${i}`} id={anchorOf(a.agent)} style={{ scrollMarginTop: 250, marginBottom: 20 }}>
                 <Card
                   title={
                     <Space size={8} align="center" wrap>
