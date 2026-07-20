@@ -5,7 +5,12 @@ import { findTable, columnIndex } from "@/lib/md";
 export type AgentState = string;
 
 export type AgentRow = {
+  /** 파일·로그용 식별자(슬러그). 계약·리뷰·agent-logs 매칭에 쓴다. */
   agent: string;
+  /** 사람이 읽는 롤 표시명(개발자·리뷰어·분석/개발자 등). 없으면 대시보드가 슬러그로 표시. */
+  name?: string;
+  /** 현재 작업 한 줄(이름 호버 툴팁). 없으면 툴팁 없음. */
+  desc?: string;
   issue: string;
   branch: string;
   state: AgentState;
@@ -122,6 +127,8 @@ export function parseOrchestration(md: string): Orchestration {
   if (aT) {
     // 실제 go-dobby orchestration.md는 이름 컬럼을 "슬러그"로 쓰기도 한다 → 둘 다 인식.
     const iAgent = columnIndex(aT.headers, "에이전트", "슬러그");
+    const iName = columnIndex(aT.headers, "이름");
+    const iDesc = columnIndex(aT.headers, "설명");
     const iIssue = columnIndex(aT.headers, "이슈");
     const iBranch = columnIndex(aT.headers, "브랜치");
     const iState = columnIndex(aT.headers, "상태");
@@ -131,6 +138,8 @@ export function parseOrchestration(md: string): Orchestration {
     for (const r of aT.rows) {
       agents.push({
         agent: at(r, iAgent),
+        name: at(r, iName) || undefined,
+        desc: at(r, iDesc) || undefined,
         issue: at(r, iIssue),
         branch: at(r, iBranch),
         state: normAgentState(at(r, iState)),
