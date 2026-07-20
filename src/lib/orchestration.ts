@@ -10,7 +10,7 @@ import path from "node:path";
 import os from "node:os";
 import { getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
+import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import type { Metric, CardStats } from "@/lib/lifecycle";
@@ -88,6 +88,20 @@ function completedByDeliverable(key: string, slug: string): boolean {
   }
 }
 
+/** reviews/round-N 폴더 아래 리뷰 파일이 하나라도 있으면 true(리뷰가 실제로 수행됨). */
+function hasAnyReview(key: string): boolean {
+  const dir = path.join(orderDir(key), "reviews");
+  try {
+    for (const rd of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (rd.isDirectory() && fs.readdirSync(path.join(dir, rd.name)).some((f) => f.endsWith(".md")))
+        return true;
+    }
+  } catch {
+    /* reviews 없음 */
+  }
+  return false;
+}
+
 /** agent-logs.json의 슬러그 목록(스폰된 에이전트). 문자열·객체 값 모두 키만 취한다. */
 function agentLogSlugs(key: string): string[] {
   const raw = readFileSafe(path.join(orderDir(key), "agent-logs.json"));
@@ -110,17 +124,26 @@ function applyDeliverableCompletion(key: string, o: Orchestration): Orchestratio
 /**
  * 스폰됐지만(agent-logs.json에 있음) 상태표에는 없는 에이전트를 보드에 병합한다.
  * 오케스트레이터가 새 에이전트 행 추가를 누락해도 대시보드에 보이게 한다.
- * 상태: 산출물이 있으면 완료, 없으면 진행중으로 추정.
+ * 상태는 항상 5-state 중 하나로 추정한다(옛 "진행중" 금지):
+ *   산출물 있음→완료 / 리뷰 에이전트+리뷰파일 있음→완료(끝난 라운드 잔재) / 리뷰 에이전트→리뷰 / 그 외→구현.
  */
 function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
   const have = new Set(o.agents.map((a) => a.agent));
   for (const slug of agentLogSlugs(key)) {
     if (have.has(slug)) continue;
+    const isReview = /review|리뷰/i.test(slug);
+    const state: AgentState = completedByDeliverable(key, slug)
+      ? "완료"
+      : isReview
+      ? hasAnyReview(key)
+        ? "완료"
+        : "리뷰"
+      : "구현";
     o.agents.push({
       agent: slug,
       issue: "",
       branch: "",
-      state: completedByDeliverable(key, slug) ? "완료" : "진행중",
+      state,
       round: "",
       updatedAt: "",
       startedAt: "",
