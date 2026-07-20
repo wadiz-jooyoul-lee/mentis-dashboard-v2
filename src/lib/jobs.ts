@@ -448,8 +448,11 @@ function allJobKeys(): string[] {
 function listJobsBy(archived: boolean): JobWithKey[] {
   const jobs: JobWithKey[] = [];
   for (const key of allJobKeys()) {
-    // explain(구현 내용 생성)·quips(아바타 소감) 잡은 오더 런처에 노출하지 않는다(부가 기능).
-    if (key.startsWith("explain-") || key.startsWith("quips-")) continue;
+    // 오더 런처엔 **실제 오더 런만** 노출한다. 잡 키가 오더 키(ORDER_KEY_RE) 또는
+    // 문서전용 `task-…`인 것만 통과 — 버튼이 뒤에서 띄운 부가 잡(explain·quips·jira·
+    // resolve·backfill 등, 접두어가 붙어 오더 키 형식이 아님)은 각 버튼이 상태를 따로
+    // 보여주므로 여기서 제외한다.
+    if (!(ORDER_KEY_RE.test(key) || key.startsWith("task-"))) continue;
     const m = readMeta(key);
     if (!m) continue;
     if ((m.archived === true) !== archived) continue;
