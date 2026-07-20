@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Breadcrumb, Typography, Space, Tag, Button, Tabs } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
+import PrLinkButton from "@/components/PrLinkButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
 
@@ -128,6 +129,7 @@ export default function OrderHeader({
         >
           Jira에서 열기
         </Button>
+        <PrLinkButton epicKey={epicKey} />
       </Space>
       <Tabs
         activeKey={active}

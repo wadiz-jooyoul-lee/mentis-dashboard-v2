@@ -8,9 +8,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getMetaDir } from "@/lib/issues";
+import { getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { parseOrchestration, type Orchestration } from "@/lib/parseOrchestration";
+import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import type { Metric, CardStats } from "@/lib/lifecycle";
@@ -88,6 +88,20 @@ function completedByDeliverable(key: string, slug: string): boolean {
   }
 }
 
+/** reviews/round-N 폴더 아래 리뷰 파일이 하나라도 있으면 true(리뷰가 실제로 수행됨). */
+function hasAnyReview(key: string): boolean {
+  const dir = path.join(orderDir(key), "reviews");
+  try {
+    for (const rd of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (rd.isDirectory() && fs.readdirSync(path.join(dir, rd.name)).some((f) => f.endsWith(".md")))
+        return true;
+    }
+  } catch {
+    /* reviews 없음 */
+  }
+  return false;
+}
+
 /** agent-logs.json의 슬러그 목록(스폰된 에이전트). 문자열·객체 값 모두 키만 취한다. */
 function agentLogSlugs(key: string): string[] {
   const raw = readFileSafe(path.join(orderDir(key), "agent-logs.json"));
@@ -110,17 +124,26 @@ function applyDeliverableCompletion(key: string, o: Orchestration): Orchestratio
 /**
  * 스폰됐지만(agent-logs.json에 있음) 상태표에는 없는 에이전트를 보드에 병합한다.
  * 오케스트레이터가 새 에이전트 행 추가를 누락해도 대시보드에 보이게 한다.
- * 상태: 산출물이 있으면 완료, 없으면 진행중으로 추정.
+ * 상태는 항상 5-state 중 하나로 추정한다(옛 "진행중" 금지):
+ *   산출물 있음→완료 / 리뷰 에이전트+리뷰파일 있음→완료(끝난 라운드 잔재) / 리뷰 에이전트→리뷰 / 그 외→구현.
  */
 function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
   const have = new Set(o.agents.map((a) => a.agent));
   for (const slug of agentLogSlugs(key)) {
     if (have.has(slug)) continue;
+    const isReview = /review|리뷰/i.test(slug);
+    const state: AgentState = completedByDeliverable(key, slug)
+      ? "완료"
+      : isReview
+      ? hasAnyReview(key)
+        ? "완료"
+        : "리뷰"
+      : "구현";
     o.agents.push({
       agent: slug,
       issue: "",
       branch: "",
-      state: completedByDeliverable(key, slug) ? "완료" : "진행중",
+      state,
       round: "",
       updatedAt: "",
       startedAt: "",
@@ -272,10 +295,13 @@ function expandHome(p: string): string {
 }
 function commonDir(paths: string[]): string {
   if (paths.length === 0) return "";
-  const split = paths.map((p) => p.split("/"));
-  const first = split[0];
+  // 파일명(마지막 세그먼트)은 공통 접두어 계산에서 제외한다. 안 그러면 파일이 1개일 때
+  // base가 전체 경로가 되어 rel(f)가 빈 문자열이 되고 → 파일명이 사라지고 diff 패널 key가
+  // 빈 문자열이라 펼쳐지지도 않는다(단일 파일 변경이 안 보이던 원인).
+  const dirs = paths.map((p) => p.split("/").slice(0, -1));
+  const first = dirs[0];
   let i = 0;
-  for (; i < first.length; i++) if (!split.every((s) => s[i] === first[i])) break;
+  for (; i < first.length; i++) if (!dirs.every((s) => s[i] === first[i])) break;
   return first.slice(0, i).join("/");
 }
 
@@ -443,6 +469,98 @@ function readDeliverables(key: string): Deliverable[] {
     }
   } catch {
     /* skip */
+  }
+  return out;
+}
+
+export type PrTarget = { repo: string; branch: string; repoUrl: string | null };
+
+/** 소스 저장소 .git/config의 origin url을 github https 형태로 정규화. 없으면 null. */
+function githubUrlOf(repo: string): string | null {
+  if (!repo) return null;
+  const txt = readFileSafe(path.join(getReposRoot(), repo, ".git", "config"));
+  if (!txt) return null;
+  // [remote "origin"] 블록의 url = ... 추출
+  const block = txt.match(/\[remote "origin"\]([\s\S]*?)(?:\n\[|$)/)?.[1] ?? txt;
+  const url = block.match(/url\s*=\s*(\S+)/)?.[1];
+  if (!url) return null;
+  const gh = url.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/i);
+  return gh ? `https://github.com/${gh[1]}/${gh[2]}` : null;
+}
+
+/** {workspace}/subtree/ 에서 `{repo}-{키}[...]` 폴더를 찾아 repo명을 얻는다(status.md에 워크트리 미기록 시). */
+function repoFromSubtree(key: string): string {
+  try {
+    const subtree = path.join(getWorkspaceDir(), "subtree");
+    const re = new RegExp(`^(.+)-${key}(?:-.*)?$`);
+    for (const name of fs.readdirSync(subtree)) {
+      const m = name.match(re);
+      if (m) return m[1];
+    }
+  } catch {
+    /* subtree 없음 */
+  }
+  return "";
+}
+
+/**
+ * PR 생성 링크용 대상: 이 오더의 (repo, 개발 브랜치, github repo URL) 목록.
+ * status.md의 세 형식을 모두 수용한다:
+ *  ① 워크트리 표(`| repo | 브랜치 | 경로 |`)  ② 라벨 불릿(`- **브랜치**: …`)  ③ `## 브랜치` 아래 브랜치 불릿.
+ * repo는 표의 repo 컬럼 → 워크트리 경로 basename → subtree 폴더 글롭 순으로 도출한다.
+ */
+export function prTargets(key: string): PrTarget[] {
+  const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
+  if (!statusMd) return [];
+  const st = parseOrderStatus(statusMd, key);
+  const repoFromPath = (p: string) => {
+    const base = (p || "").split("/").filter(Boolean).pop() ?? "";
+    return base.replace(new RegExp(`-${key}(?:-.*)?$`), "");
+  };
+
+  const pairs: { repo: string; branch: string }[] = [];
+  // ① 워크트리 표(멀티레포면 repo별 행)
+  for (const w of st.worktrees) {
+    if (w.branch) pairs.push({ repo: w.repo || repoFromPath(w.path), branch: w.branch });
+  }
+  // ② 라벨 불릿 "- **브랜치**: …" (+ "- **워크트리**: /…/{repo}-{키}")
+  if (pairs.length === 0) {
+    const bm = statusMd.match(/^\s*[-*]\s*\*{0,2}브랜치\*{0,2}\s*[:：]\s*`?([^\s`(]+)/m);
+    const wm = statusMd.match(/^\s*[-*]\s*\*{0,2}워크트리\*{0,2}\s*[:：]\s*`?(\S+)/m);
+    if (bm) pairs.push({ repo: wm ? repoFromPath(wm[1]) : "", branch: bm[1] });
+  }
+  // ③ "## 브랜치" 섹션의 브랜치 불릿(예: "- bugfix/QA-22718 (커밋 …)")
+  if (pairs.length === 0) {
+    const lines = statusMd.split("\n");
+    let inSec = false;
+    for (const line of lines) {
+      if (/^##\s/.test(line)) inSec = /브랜치/.test(line.replace(/[#*]/g, ""));
+      else if (inSec) {
+        const m = line.match(/^\s*[-*]\s*`?([A-Za-z0-9._-]+\/[A-Za-z0-9._\/-]+)/);
+        if (m) {
+          pairs.push({ repo: "", branch: m[1] });
+          break;
+        }
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const out: PrTarget[] = [];
+  for (const p of pairs) {
+    const branch = p.branch.replace(/`/g, "").trim();
+    if (!branch || branch === "-") continue;
+    let repo = p.repo;
+    if (!repo) {
+      repo =
+        st.worktrees.length === 1
+          ? st.worktrees[0].repo || repoFromPath(st.worktrees[0].path)
+          : repoFromSubtree(key);
+    }
+    const dk = `${repo}|${branch}`;
+    if (seen.has(dk)) continue;
+    seen.add(dk);
+    out.push({ repo, branch, repoUrl: githubUrlOf(repo) });
   }
   return out;
 }
