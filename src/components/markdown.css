@@ -76,3 +76,12 @@
 .row-fail > td {
   background: #fff1f0;
 }
+
+/* 해결됨/종료된 오더 행 — 배경을 약간 어둡게 해 작업 중 오더와 구분 */
+.row-resolved > td {
+  background: #f0f0f0;
+}
+.row-resolved > td.ant-table-cell-row-hover,
+.row-resolved:hover > td {
+  background: #e6e6e6;
+}

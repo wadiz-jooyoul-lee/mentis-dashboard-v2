@@ -35,6 +35,7 @@ export default function DateFoldedTable<T extends object>({
   columns,
   rowKey,
   onRowClick,
+  rowClassName,
   emptyText,
 }: {
   items: T[];
@@ -42,6 +43,7 @@ export default function DateFoldedTable<T extends object>({
   columns: TableProps<T>["columns"];
   rowKey: TableProps<T>["rowKey"];
   onRowClick?: (r: T) => void;
+  rowClassName?: TableProps<T>["rowClassName"];
   emptyText?: string;
 }) {
   if (items.length === 0) {
@@ -86,6 +88,7 @@ export default function DateFoldedTable<T extends object>({
         pagination={false}
         size="middle"
         scroll={{ x: "max-content" }}
+        rowClassName={rowClassName}
         onRow={
           onRowClick
             ? (r) => ({

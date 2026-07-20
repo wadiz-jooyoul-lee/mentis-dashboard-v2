@@ -218,6 +218,7 @@ export default function OrchestrationList({
           columns={columns}
           rowKey="epicKey"
           onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
+          rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
           emptyText="진행 중인 오더가 없습니다"
         />
       </div>
