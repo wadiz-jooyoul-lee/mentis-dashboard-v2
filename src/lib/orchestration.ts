@@ -488,6 +488,26 @@ function githubUrlOf(repo: string): string | null {
   return gh ? `https://github.com/${gh[1]}/${gh[2]}` : null;
 }
 
+/** git 워크트리 폴더의 현재 브랜치를 파일로 읽는다(git 스폰 없이). 못 읽으면 "". */
+function branchFromWorktree(dir: string): string {
+  try {
+    const gitPath = path.join(dir, ".git");
+    let gitDir: string;
+    if (fs.statSync(gitPath).isDirectory()) {
+      gitDir = gitPath;
+    } else {
+      // 워크트리는 .git이 파일: "gitdir: /…/worktrees/{name}"
+      const m = readFileSafe(gitPath)?.match(/gitdir:\s*(.+)/);
+      if (!m) return "";
+      gitDir = path.isAbsolute(m[1].trim()) ? m[1].trim() : path.resolve(dir, m[1].trim());
+    }
+    const head = (readFileSafe(path.join(gitDir, "HEAD")) ?? "").trim();
+    return head.match(/ref:\s*refs\/heads\/(.+)/)?.[1]?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** {workspace}/subtree/ 에서 `{repo}-{키}[...]` 폴더를 찾아 repo명을 얻는다(status.md에 워크트리 미기록 시). */
 function repoFromSubtree(key: string): string {
   try {
@@ -542,6 +562,22 @@ export function prTargets(key: string): PrTarget[] {
           break;
         }
       }
+    }
+  }
+  // ④ status.md에 브랜치가 전혀 없으면 실제 워크트리(subtree)에서 직접 읽는다.
+  //    파일시스템(=실제 브랜치)이 진실이라, 오케스트레이터가 status.md에 브랜치를 안 남겨도 PR 링크가 뜬다.
+  if (pairs.length === 0) {
+    try {
+      const subtree = path.join(getWorkspaceDir(), "subtree");
+      const re = new RegExp(`^(.+)-${key}(?:-.*)?$`);
+      for (const name of fs.readdirSync(subtree)) {
+        const m = name.match(re);
+        if (!m) continue;
+        const branch = branchFromWorktree(path.join(subtree, name));
+        if (branch) pairs.push({ repo: m[1], branch });
+      }
+    } catch {
+      /* subtree 없음 */
     }
   }
 
