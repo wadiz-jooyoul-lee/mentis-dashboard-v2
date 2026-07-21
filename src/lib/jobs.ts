@@ -54,6 +54,35 @@ function claudeBin(): string {
   return fs.existsSync(local) ? local : "claude";
 }
 
+/** 설치된 go-dobby 플러그인의 dobby-lib.sh 경로(최신 버전). 결정론 헬퍼 직접 실행용. 없으면 null. */
+function goDobbyLib(): string | null {
+  const base = path.join(
+    os.homedir(),
+    ".claude/plugins/cache/mentis-plugins/go-dobby"
+  );
+  let versions: string[];
+  try {
+    versions = fs.readdirSync(base);
+  } catch {
+    return null;
+  }
+  // semver 내림차순(0.2.0 > 0.1.21)
+  const semverDesc = (a: string, b: string) => {
+    const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) if ((pb[i] ?? 0) !== (pa[i] ?? 0)) return (pb[i] ?? 0) - (pa[i] ?? 0);
+    return 0;
+  };
+  for (const v of versions.sort(semverDesc)) {
+    const p = path.join(base, v, "reference", "dobby-lib.sh");
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+/** POSIX 셸 single-quote 이스케이프. */
+const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
 type Meta = {
   key: string;
   pid: number;
@@ -282,7 +311,44 @@ export function startResolve(
   if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
   const jobId = `resolve-${k}`;
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
-  spawnClaude(jobId, ["-p", `/dobby-resolve ${k}${undo ? " undo" : ""}`], false, "haiku");
+
+  // 해결/취소는 순수 결정론(dobby_resolve KEY [undo])이라 LLM을 띄우지 않고 헬퍼를 bash로 직접 실행한다.
+  // (headless claude+haiku가 설정 로딩을 반쯤 수행해 "config 없음"으로 오진하던 문제를 우회 — 즉시·토큰0·안정.)
+  // 결과는 기존 폴링이 읽는 stream-json `type:result` 한 줄로 기록한다.
+  fs.mkdirSync(jobDir(jobId), { recursive: true });
+  const finish = (isError: boolean, result: string) => {
+    fs.writeFileSync(
+      logPath(jobId),
+      JSON.stringify({ type: "result", is_error: isError, result }) + "\n"
+    );
+    writeMeta({ key: jobId, pid: -1, startedAt: Date.now() });
+  };
+  const lib = goDobbyLib();
+  if (!lib) {
+    finish(true, "❌ go-dobby 플러그인을 찾지 못했습니다 — /plugin으로 설치/업데이트하세요.");
+    return { ok: true, jobId };
+  }
+  const cfg = path.join(os.homedir(), ".config/go-dobby/config.env");
+  // ORCHESTRATION_META는 dobby_load_config가 계산·export하므로 그걸 부른 뒤 존재를 확인한다.
+  const script =
+    `source ${shq(cfg)} 2>/dev/null; ` +
+    `source ${shq(lib)} || exit 4; ` +
+    `dobby_load_config >/dev/null 2>&1; ` +
+    `[ -n "$ORCHESTRATION_META" ] || exit 3; ` +
+    `dobby_resolve ${shq(k)}${undo ? " undo" : ""}`;
+  try {
+    execFileSync("bash", ["-c", script], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    finish(false, undo ? "해결 표시를 취소했습니다." : "해결로 표시했습니다.");
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string; status?: number };
+    const detail =
+      err.status === 3
+        ? "설정(config.env)을 찾지 못했습니다 — /dobby-init을 확인하세요."
+        : err.status === 4
+        ? "go-dobby 헬퍼(dobby-lib.sh) 로드 실패."
+        : (err.stderr || err.stdout || "").toString().slice(0, 160).trim() || "알 수 없는 오류";
+    finish(true, `❌ 해결 처리 실패: ${detail}`);
+  }
   return { ok: true, jobId };
 }
 
