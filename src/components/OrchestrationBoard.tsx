@@ -235,20 +235,27 @@ export default function OrchestrationBoard({
   // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
   const avatarMap = assignOrderAvatars(epicKey, (o?.agents ?? []).map((a) => a.agent));
 
-  // 리뷰/계약 slug → 한국어 역할명(계약 헤딩에서, "계약" 접미 제거)
-  const roleBySlug = new Map(
-    (epic?.contracts ?? []).map((c) => [
-      c.slug,
-      c.role.replace(/\s*계약\s*$/, "").trim(),
-    ])
-  );
+  // slug → 에이전트 표시 이름. **상태표(orchestration.md '이름')가 실제(카드에 뜨는) 이름**이며 최우선.
+  // 계약서만 있는 경우엔 계약 헤딩("계약 — {슬러그} (역할)")에서 접두 "계약 —"·접미 "계약"을 떼어 fallback.
+  // 계약/리뷰 라벨을 이 맵으로 통일해 칸반 카드 이름과 어긋나지 않게 한다.
+  const nameBySlug = new Map<string, string>();
+  for (const c of epic?.contracts ?? []) {
+    const cleaned = c.role
+      .replace(/^\s*계약\s*[—–-]\s*/, "")
+      .replace(/\s*계약\s*$/, "")
+      .trim();
+    if (cleaned) nameBySlug.set(c.slug, cleaned);
+  }
+  for (const a of o?.agents ?? []) {
+    if (a.name) nameBySlug.set(a.agent, a.name); // 상태표 이름 최우선
+  }
 
-  // 작업 로그가 있는 slug + (역할명 앞 토큰 → slug) 매핑으로, 칸반 카드가
+  // 작업 로그가 있는 slug + (이름 앞 토큰 → slug) 매핑으로, 칸반 카드가
   // 자기 에이전트의 코드 변경 섹션으로 이동할 slug를 찾는다.
   const changeSlugs = new Set((epic?.agentWorks ?? []).map((w) => w.slug));
   const slugByToken = new Map<string, string>();
-  for (const [slug, role] of roleBySlug) {
-    const token = role.split(/\s+/)[0];
+  for (const [slug, name] of nameBySlug) {
+    const token = name.split(/\s+/)[0];
     if (token) slugByToken.set(token, slug);
   }
   const changeSlugFor = (agentName: string): string | undefined => {
@@ -446,7 +453,7 @@ export default function OrchestrationBoard({
           <Collapse
             items={epic!.contracts.map((c) => ({
               key: c.slug,
-              label: c.role,
+              label: nameBySlug.get(c.slug) ?? c.role,
               children: (
                 <div className="markdown-body">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -475,7 +482,7 @@ export default function OrchestrationBoard({
                     size={24}
                     quip={quips?.reviews?.[g.agent]}
                   />
-                  <Text strong>{roleBySlug.get(g.agent) ?? g.agent}</Text>
+                  <Text strong>{nameBySlug.get(g.agent) ?? g.agent}</Text>
                   <Tag>{g.reviews.length}개 라운드</Tag>
                 </Space>
               ),

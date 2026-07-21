@@ -136,7 +136,7 @@ export default function OrderHeader({
         items={items}
         onChange={(k) => router.push(routeFor(epicKey, k))}
         style={{ marginBottom: 0 }}
-        tabBarStyle={{ marginBottom: 0 }}
+        tabBarStyle={{ marginBottom: 0, paddingLeft: 12 }}
       />
       </div>
     </div>

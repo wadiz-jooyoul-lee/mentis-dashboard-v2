@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Progress, Collapse, Badge, Popover } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Progress, Badge, Popover, Tabs, Tooltip } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
@@ -65,6 +65,9 @@ export default function OrchestrationList({
   initialArchived?: JobWithKey[];
 }) {
   const router = useRouter();
+
+  // 작업중(미해결)만 모아 상단에 노출한다. epics는 이미 lastActivity 내림차순(최근 활동순)이라 그 순서를 그대로 쓴다.
+  const active = epics.filter((r) => workStatus(r).text === "작업중");
 
   const columns = [
     {
@@ -131,6 +134,19 @@ export default function OrchestrationList({
       key: "workStatus",
       render: (_: unknown, r: EpicSummary) => {
         const s = workStatus(r);
+        if (s.text === "종료") {
+          // 종료(워크트리 정리 완료) = 도비 해방. 얼굴 + 호버 툴팁.
+          return (
+            <Tag color={s.color}>
+              <Tooltip title="도비는 자유에요">
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <DobbyIcon size={14} expression="happy" color={dobbyColor("종료")} />
+                  종료
+                </span>
+              </Tooltip>
+            </Tag>
+          );
+        }
         return <Tag color={s.color}>{s.text}</Tag>;
       },
     },
@@ -197,9 +213,44 @@ export default function OrchestrationList({
         오케스트레이션 보드
       </Title>
 
-      <Collapse
-        ghost
+      <Tabs
+        defaultActiveKey="list"
+        tabBarStyle={{ paddingLeft: 12 }}
         items={[
+          {
+            key: "list",
+            label: "오더 목록",
+            children: (
+              <>
+                {/* 상단: 작업중(미해결)만 모아서 — 아래 날짜별과 동일한 폴드(단일 그룹, 기본 펼침) */}
+                <DateFoldedTable<EpicSummary>
+                  items={active}
+                  dateOf={() => null}
+                  groupLabel="작업중"
+                  columns={columns}
+                  rowKey="epicKey"
+                  onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
+                  emptyText="작업중인 오더가 없습니다"
+                />
+
+                {/* 하단: 현재의 날짜별 목록(전체 — 작업중 포함) */}
+                <div style={{ marginTop: 24 }}>
+                  <Text type="secondary">읽는 경로: {sourceDir}</Text>
+                  <div style={{ marginTop: 16 }}>
+                    <DateFoldedTable<EpicSummary>
+                      items={epics}
+                      dateOf={(r) => r.lastActivity}
+                      columns={columns}
+                      rowKey="epicKey"
+                      onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
+                      rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
+                      emptyText="진행 중인 오더가 없습니다"
+                    />
+                  </div>
+                </div>
+              </>
+            ),
+          },
           {
             key: "launcher",
             label: "오더 실행",
@@ -209,19 +260,6 @@ export default function OrchestrationList({
           },
         ]}
       />
-
-      <Text type="secondary">읽는 경로: {sourceDir}</Text>
-      <div style={{ marginTop: 16 }}>
-        <DateFoldedTable<EpicSummary>
-          items={epics}
-          dateOf={(r) => r.lastActivity}
-          columns={columns}
-          rowKey="epicKey"
-          onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
-          rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
-          emptyText="진행 중인 오더가 없습니다"
-        />
-      </div>
     </div>
   );
 }
