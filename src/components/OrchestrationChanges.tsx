@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline } from "antd";
+import { Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline, Tooltip } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
 import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
 import type { AgentRow } from "@/lib/parseOrchestration";
@@ -237,18 +237,20 @@ export default function OrchestrationChanges({
             <Space size={[8, 8]} wrap>
               {agents.map((a, i) => (
                 <a key={`${a.agent}-${i}`} href={`#${anchorOf(a.agent)}`}>
-                  <Tag
-                    style={{
-                      cursor: "pointer",
-                      color: dobbyColor(a.agent),
-                      borderColor: dobbyColor(a.agent),
-                      background: "transparent",
-                      fontWeight: 600,
-                      padding: "2px 10px",
-                    }}
-                  >
-                    {a.agent}
-                  </Tag>
+                  <Tooltip title={a.desc || undefined}>
+                    <Tag
+                      style={{
+                        cursor: "pointer",
+                        color: dobbyColor(a.agent),
+                        borderColor: dobbyColor(a.agent),
+                        background: "transparent",
+                        fontWeight: 600,
+                        padding: "2px 10px",
+                      }}
+                    >
+                      {a.name || a.agent}
+                    </Tag>
+                  </Tooltip>
                 </a>
               ))}
             </Space>
@@ -264,9 +266,11 @@ export default function OrchestrationChanges({
                   title={
                     <Space size={8} align="center" wrap>
                       <GroupAvatar slug={a.agent} avatar={avatarMap.get(a.agent)} state={a.state} size={26} quip={quips?.changes?.[a.agent]} />
-                      <Text strong style={{ fontSize: 16 }}>
-                        {a.agent}
-                      </Text>
+                      <Tooltip title={a.desc || undefined}>
+                        <Text strong style={{ fontSize: 16 }}>
+                          {a.name || a.agent}
+                        </Text>
+                      </Tooltip>
                       <Tag color={badge.color}>{a.state}</Tag>
                       {a.round && <Tag>라운드 {a.round}</Tag>}
                     </Space>

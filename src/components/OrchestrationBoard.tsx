@@ -18,6 +18,7 @@ import {
   Collapse,
   Empty,
   Alert,
+  Tooltip,
 } from "antd";
 import { WarningOutlined, FileTextOutlined } from "@ant-design/icons";
 import GroupAvatar from "@/components/GroupAvatar";
@@ -169,12 +170,14 @@ function AgentCard({
         <Space size={6} wrap align="center">
           <GroupAvatar slug={a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
-            <Tag
-              color={roleColor(a.agent)}
-              style={{ margin: 0, fontWeight: 600, fontSize: 13 }}
-            >
-              {a.agent}
-            </Tag>
+            <Tooltip title={a.desc || undefined}>
+              <Tag
+                color={roleColor(a.agent)}
+                style={{ margin: 0, fontWeight: 600, fontSize: 13 }}
+              >
+                {a.name || a.agent}
+              </Tag>
+            </Tooltip>
           )}
         </Space>
         {a.issue && a.issue !== "-" && (

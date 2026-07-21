@@ -2,9 +2,36 @@
 
 import { useState } from "react";
 import { Button, Popover, Input, Space, Typography, message, Empty, Spin } from "antd";
-import { BranchesOutlined } from "@ant-design/icons";
+import { BranchesOutlined, CopyOutlined, ExportOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
+
+/** 클립보드 복사 — 보안 컨텍스트가 아니면(예: http://IP) navigator.clipboard가 없으므로 execCommand로 폴백. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* 폴백으로 진행 */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 type Target = { repo: string; branch: string; repoUrl: string | null };
 
@@ -45,12 +72,9 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
       : null;
 
   const copy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      message.success("PR 링크를 복사했습니다.");
-    } catch {
-      message.error("복사에 실패했습니다 — 링크를 직접 선택해 복사하세요.");
-    }
+    const ok = await copyText(url);
+    if (ok) message.success("PR 링크를 복사했습니다.");
+    else message.error("복사에 실패했습니다 — 링크를 직접 선택해 복사하세요.");
   };
 
   const content = (
@@ -93,21 +117,38 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
                       </Text>
                     </div>
                   ) : (
-                    <div
-                      onClick={() => copy(url!)}
-                      title="클릭하면 복사"
-                      style={{
-                        cursor: "pointer",
-                        fontSize: 12,
-                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                        wordBreak: "break-all",
-                        background: "#f5f5f5",
-                        borderRadius: 4,
-                        padding: "4px 8px",
-                        marginTop: 2,
-                      }}
-                    >
-                      {url}
+                    <div style={{ display: "flex", alignItems: "stretch", gap: 6, marginTop: 2 }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          fontSize: 12,
+                          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                          wordBreak: "break-all",
+                          userSelect: "all",
+                          background: "#f5f5f5",
+                          borderRadius: 4,
+                          padding: "4px 8px",
+                        }}
+                      >
+                        {url}
+                      </div>
+                      <Button
+                        size="small"
+                        icon={<CopyOutlined />}
+                        onClick={() => copy(url!)}
+                        style={{ flexShrink: 0 }}
+                      >
+                        복사
+                      </Button>
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<ExportOutlined />}
+                        onClick={() => window.open(url!, "_blank", "noopener,noreferrer")}
+                        style={{ flexShrink: 0 }}
+                      >
+                        열기
+                      </Button>
                     </div>
                   )}
                 </div>
