@@ -26,6 +26,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "verify") return `/orchestration/${key}/verify`;
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
+  if (tab === "artifact") return `/orchestration/${key}/artifact`;
   return `/orchestration/${key}`;
 }
 
@@ -35,6 +36,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/explain")) return "explain";
   if (pathname.endsWith("/verify")) return "verify";
   if (pathname.endsWith("/jira")) return "jira";
+  if (pathname.endsWith("/artifact")) return "artifact";
   return "board";
 }
 
@@ -60,7 +62,11 @@ export default function OrderHeader({
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const active = activeTab(pathname);
-  const items = hasJira ? [...TABS, { key: "jira", label: "Jira" }] : TABS;
+  const items = [
+    ...TABS,
+    ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
+    { key: "artifact", label: "아티팩트" },
+  ];
 
   return (
     <div

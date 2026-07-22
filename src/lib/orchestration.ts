@@ -408,6 +408,8 @@ export type EpicDetail = {
   hasJob: boolean;
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
+  /** 아티팩트 탭 — dobby-share가 게시한 claude.ai 공개 아티팩트 URL(artifact-share.md에서 추출). 없으면 null. */
+  artifactShareUrl: string | null;
   /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
   jiraIssueMd: string | null;
   /** Jira 탭 — 읽기 쉽게 정리한 이슈(jira-issue-clean.md). 버튼 생성. */
@@ -681,6 +683,10 @@ export function getEpic(epicKey: string): EpicDetail | null {
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
+    artifactShareUrl:
+      (readFileSafe(path.join(dir, "artifact-share.md")) ?? "").match(
+        /https?:\/\/[^\s)>\]]+/
+      )?.[0] ?? null,
     jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
     jiraIssueCleanMd: readFileSafe(path.join(dir, "jira-issue-clean.md")),
     jiraCommentsMd: readFileSafe(path.join(dir, "jira-comments.md")),
