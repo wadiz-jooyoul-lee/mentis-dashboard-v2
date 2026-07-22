@@ -55,6 +55,7 @@ export default function ArtifactTabView({
   epicKey,
   hasExplainer,
   shareUrl,
+  lanIp,
   mode,
   worktreeRemoved,
   hasJira,
@@ -62,13 +63,21 @@ export default function ArtifactTabView({
   epicKey: string;
   hasExplainer: boolean;
   shareUrl: string | null;
+  /** 서버 LAN IP — localhost로 접속했을 때 공유 가능한 IP 링크로 치환. */
+  lanIp: string | null;
   mode: string | null;
   worktreeRemoved: boolean;
   hasJira: boolean;
 }) {
-  // window.location.origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
+  // 링크는 공유 가능하도록 IP 기반으로. localhost/127.0.0.1 접속이면 서버 LAN IP로 치환(포트 유지).
+  // IP로 접속했으면 그 host 그대로. hydration 불일치 방지 위해 mount 후 설정.
   const [origin, setOrigin] = useState<string>("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    const loc = window.location;
+    const isLocal = loc.hostname === "localhost" || loc.hostname === "127.0.0.1";
+    const host = isLocal && lanIp ? `${lanIp}${loc.port ? ":" + loc.port : ""}` : loc.host;
+    setOrigin(`${loc.protocol}//${host}`);
+  }, [lanIp]);
   const localUrl = origin ? `${origin}/api/orders/artifact-html?key=${encodeURIComponent(epicKey)}` : "";
 
   return (
