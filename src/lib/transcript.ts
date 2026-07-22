@@ -188,12 +188,20 @@ export function listConsoleAgents(key: string): ConsoleAgent[] {
     return discoverFromProjects(key)?.agents ?? [];
   }
   const out: ConsoleAgent[] = [];
-  for (const [slug, val] of Object.entries(map)) {
+  for (const [rawSlug, val] of Object.entries(map)) {
+    // ⚠️ 라운드별로 잘못 생성된 슬러그(review-fe-r2·review-agent-r3 등)를 base 슬러그로 접는다.
+    // 오케스트레이터가 C5(재라운드=같은 슬러그+하위키)를 어겨도 콘솔에 리뷰어가 라운드마다 따로 뜨지 않게 방어.
+    const m = rawSlug.match(/^(.+)-r(\d+)$/);
+    const slug = m ? m[1] : rawSlug;
+    const roundPhase = m ? `round-${m[2]}` : null;
     if (typeof val === "string") {
-      out.push({ id: slug, slug, phase: null, path: expandHome(val) });
+      out.push({ id: roundPhase ? `${slug}::${roundPhase}` : slug, slug, phase: roundPhase, path: expandHome(val) });
     } else if (val && typeof val === "object") {
       for (const [phase, pv] of Object.entries(val as Record<string, unknown>)) {
-        if (typeof pv === "string") out.push({ id: `${slug}::${phase}`, slug, phase, path: expandHome(pv) });
+        if (typeof pv === "string") {
+          const ph = roundPhase ?? phase; // -r{n} 슬러그면 라운드를 phase로 사용
+          out.push({ id: `${slug}::${ph}`, slug, phase: ph, path: expandHome(pv) });
+        }
       }
     }
   }
