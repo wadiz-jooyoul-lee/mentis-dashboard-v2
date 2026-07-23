@@ -25,6 +25,21 @@ function loadMermaid() {
   return mermaidP;
 }
 
+/**
+ * mermaid 엣지 라벨(`|...|`) 방어: 라벨에 괄호·`/`·`:`·`#` 등 특수문자가 있는데
+ * 따옴표가 없으면 `Parse error`가 나므로 `|"..."|`로 자동 감싼다.
+ * (생성 단계에서 dobby-explain이 인용하는 게 원칙이지만, 이미 만들어진 문서까지 커버하는 방어책.)
+ * 특수문자 없는 순수 텍스트 라벨과 이미 인용된 라벨은 건드리지 않는다.
+ */
+function quoteMermaidEdgeLabels(chart: string): string {
+  return chart.replace(/\|([^|\n]+)\|/g, (m, label: string) => {
+    const t = label.trim();
+    if (t.startsWith('"') && t.endsWith('"')) return m; // 이미 인용됨
+    if (!/[()/:#<>]/.test(t)) return m; // 특수문자 없으면 그대로
+    return `|"${t.replace(/"/g, "")}"|`;
+  });
+}
+
 let mmSeq = 0;
 function Mermaid({ chart }: { chart: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,7 +50,7 @@ function Mermaid({ chart }: { chart: string }) {
       try {
         const mermaid = await loadMermaid();
         const id = `mmd-${++mmSeq}`;
-        const { svg } = await mermaid.render(id, chart);
+        const { svg } = await mermaid.render(id, quoteMermaidEdgeLabels(chart));
         if (alive && ref.current) ref.current.innerHTML = svg;
       } catch (e) {
         if (alive) setErr(String(e));
