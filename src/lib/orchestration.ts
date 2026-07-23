@@ -551,50 +551,57 @@ export function prTargets(key: string): PrTarget[] {
     const wm = statusMd.match(/^\s*[-*]\s*\*{0,2}워크트리\*{0,2}\s*[:：]\s*`?(\S+)/m);
     if (bm) pairs.push({ repo: wm ? repoFromPath(wm[1]) : "", branch: bm[1] });
   }
-  // ③ "## 브랜치" 섹션의 브랜치 불릿(예: "- bugfix/QA-22718 (커밋 …)")
+  // ③ "## 브랜치" 섹션의 브랜치 불릿. 끝의 "(repo)" 힌트를 쓰고(dobby_record_branch 형식 "- {브랜치} ({repo})"),
+  //    여러 줄=멀티 repo이므로 모두 읽는다(break 금지). "(커밋 …)" 같은 자유문 괄호는 repo로 안 잡힌다.
   if (pairs.length === 0) {
     const lines = statusMd.split("\n");
     let inSec = false;
     for (const line of lines) {
-      if (/^##\s/.test(line)) inSec = /브랜치/.test(line.replace(/[#*]/g, ""));
-      else if (inSec) {
-        const m = line.match(/^\s*[-*]\s*`?([A-Za-z0-9._-]+\/[A-Za-z0-9._\/-]+)/);
-        if (m) {
-          pairs.push({ repo: "", branch: m[1] });
-          break;
-        }
+      if (/^##\s/.test(line)) {
+        inSec = /브랜치/.test(line.replace(/[#*]/g, ""));
+        continue;
       }
+      if (!inSec) continue;
+      const m = line.match(/^\s*[-*]\s*`?([A-Za-z0-9._/-]+\/[A-Za-z0-9._/-]+)`?/);
+      if (!m) continue;
+      const rh = line.match(/\(([A-Za-z0-9._-]+)\)\s*$/); // 끝의 (repo) 힌트 — 공백 없는 repo명만
+      pairs.push({ repo: rh ? rh[1] : "", branch: m[1] });
     }
   }
-  // ④ status.md에 브랜치가 전혀 없으면 실제 워크트리(subtree)에서 직접 읽는다.
-  //    파일시스템(=실제 브랜치)이 진실이라, 오케스트레이터가 status.md에 브랜치를 안 남겨도 PR 링크가 뜬다.
-  if (pairs.length === 0) {
-    try {
-      const subtree = path.join(getWorkspaceDir(), "subtree");
-      const re = new RegExp(`^(.+)-${key}(?:-.*)?$`);
-      for (const name of fs.readdirSync(subtree)) {
-        const m = name.match(re);
-        if (!m) continue;
-        const branch = branchFromWorktree(path.join(subtree, name));
-        if (branch) pairs.push({ repo: m[1], branch });
-      }
-    } catch {
-      /* subtree 없음 */
+  // 빈 repo 해결(표 1개면 그 repo, 아니면 subtree 첫 매치). 이후 ④에서 누락 repo를 보완한다.
+  for (const p of pairs) {
+    if (!p.repo) {
+      p.repo =
+        st.worktrees.length === 1
+          ? st.worktrees[0].repo || repoFromPath(st.worktrees[0].path)
+          : repoFromSubtree(key);
     }
+  }
+  // ④ 실제 워크트리(subtree)에서 repo별 브랜치를 읽어 **status.md에 안 적힌 repo를 보완**한다.
+  //    멀티 repo인데 status.md엔 한 repo만 기록된 경우(다른 repo PR 링크 누락) + 브랜치 미기록 대비. 파일시스템이 진실.
+  try {
+    const subtree = path.join(getWorkspaceDir(), "subtree");
+    const re = new RegExp(`^(.+)-${key}(?:-.*)?$`);
+    const have = new Set(pairs.map((p) => p.repo).filter(Boolean));
+    for (const name of fs.readdirSync(subtree)) {
+      const m = name.match(re);
+      if (!m || have.has(m[1])) continue;
+      const branch = branchFromWorktree(path.join(subtree, name));
+      if (branch) {
+        pairs.push({ repo: m[1], branch });
+        have.add(m[1]);
+      }
+    }
+  } catch {
+    /* subtree 없음 */
   }
 
   const seen = new Set<string>();
   const out: PrTarget[] = [];
   for (const p of pairs) {
     const branch = p.branch.replace(/`/g, "").trim();
-    if (!branch || branch === "-") continue;
-    let repo = p.repo;
-    if (!repo) {
-      repo =
-        st.worktrees.length === 1
-          ? st.worktrees[0].repo || repoFromPath(st.worktrees[0].path)
-          : repoFromSubtree(key);
-    }
+    const repo = p.repo;
+    if (!branch || branch === "-" || !repo) continue;
     const dk = `${repo}|${branch}`;
     if (seen.has(dk)) continue;
     seen.add(dk);
