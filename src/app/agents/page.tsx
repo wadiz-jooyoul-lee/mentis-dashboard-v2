@@ -5,6 +5,8 @@ import { Breadcrumb, Card, Col, Row, Typography, Tag, Space } from "antd";
 import DobbyIcon, { type DobbyExpression } from "@/components/DobbyIcon";
 import BtsAvatar, { btsColor } from "@/components/BtsAvatar";
 import Fromis9Avatar, { fromisColor } from "@/components/Fromis9Avatar";
+import IveAvatar from "@/components/IveAvatar";
+import { iveColor } from "@/lib/ive";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Paragraph, Text } = Typography;
@@ -18,8 +20,8 @@ type Agent = {
   realName?: string;
   birth?: string;
   position?: string;
-  // 지정 시 도비 아이콘 대신 이름(멤버)에 맞는 그룹 오리지널 아바타를 그린다.
-  avatar?: "bts" | "fromis";
+  // 지정 시 도비 아이콘 대신 이름(멤버)에 맞는 그룹 아바타를 그린다(IVE는 실사진).
+  avatar?: "bts" | "fromis" | "ive";
 };
 
 // hue가 골고루 퍼지도록 선정(20~336). 성격·좋아하는 것은 재미로 붙인 소개용.
@@ -59,10 +61,27 @@ const FROMIS: Agent[] = [
   { name: "백지헌", avatar: "fromis", realName: "백지헌", birth: "2003-04-17", position: "보컬 · 막내", expression: "happy", personality: "그룹의 막내이자 사랑스러운 보컬. 씩씩한 에너지로 팀을 밝힌다.", likes: "칭찬 한마디" },
 ];
 
+// IVE(아이브) 멤버 — 본명·생년월일·포지션은 실제 프로필. 아바타는 웹에서 수집해 본인·표정을
+// 육안 검증한 실사진(로컬 전용). 성격 한 줄은 대표 이미지에서 재미로 각색.
+const IVE: Agent[] = [
+  { name: "가을", avatar: "ive", realName: "김가을", birth: "2002-09-24", position: "메인댄서 · 리드래퍼", expression: "thinking", personality: "무대를 휘어잡는 시크한 댄스 리더. 겉은 쿨해도 팀엔 누구보다 다정하다.", likes: "칼같이 맞아떨어지는 안무" },
+  { name: "안유진", avatar: "ive", realName: "안유진", birth: "2003-09-01", position: "리더 · 메인보컬", expression: "happy", personality: "‘완전 럭키비키🍀’ 초긍정 리더. 무슨 일이든 좋은 쪽으로 해석하는 행운의 아이콘.", likes: "행운으로 뒤집히는 상황" },
+  { name: "레이", avatar: "ive", realName: "나오이 레이", birth: "2004-02-03", position: "메인래퍼", expression: "curious", personality: "깜찍한 비주얼에 반전 래핑을 얹는 마이페이스 분위기 메이커.", likes: "예상 못 한 반전" },
+  { name: "장원영", avatar: "ive", realName: "장원영", birth: "2004-08-31", position: "비주얼 · 센터", expression: "happy", personality: "타고난 센터이자 비주얼. 우아함 뒤에 지독한 완벽주의가 숨어 있다.", likes: "1mm도 안 어긋난 라인" },
+  { name: "리즈", avatar: "ive", realName: "김지원", birth: "2004-11-21", position: "메인보컬", expression: "happy", personality: "청아한 음색의 메인보컬. 단단하고 성실한 노력파.", likes: "흔들림 없는 라이브 고음" },
+  { name: "이서", avatar: "ive", realName: "이현서", birth: "2007-02-21", position: "리드댄서 · 막내", expression: "happy", personality: "에너지 넘치는 막내. 뭐든 씩씩하게 도전하는 팀의 비타민.", likes: "새로 도전하는 모든 것" },
+];
+
 function AgentCard({ a }: { a: Agent }) {
   // 그룹 멤버는 시그니처 색 + 오리지널 아바타, 그 외 도비 에이전트는 해시 색 + 도비 아이콘.
   const sig =
-    a.avatar === "bts" ? btsColor(a.name) : a.avatar === "fromis" ? fromisColor(a.name) : null;
+    a.avatar === "bts"
+      ? btsColor(a.name)
+      : a.avatar === "fromis"
+      ? fromisColor(a.name)
+      : a.avatar === "ive"
+      ? iveColor(a.name)
+      : null;
   const color = sig || dobbyColor(a.name);
   return (
     <Card style={{ height: "100%" }}>
@@ -71,6 +90,8 @@ function AgentCard({ a }: { a: Agent }) {
           <BtsAvatar member={a.name} size={56} />
         ) : a.avatar === "fromis" ? (
           <Fromis9Avatar member={a.name} size={56} />
+        ) : a.avatar === "ive" ? (
+          <IveAvatar member={a.name} size={56} />
         ) : (
           <DobbyIcon size={56} expression={a.expression} color={color} />
         )}
@@ -153,6 +174,21 @@ export default function AgentsPage() {
 
       <Row gutter={[16, 16]}>
         {FROMIS.map((a) => (
+          <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
+            <AgentCard a={a} />
+          </Col>
+        ))}
+      </Row>
+
+      <Title level={3} style={{ marginTop: 40 }}>
+        아이브 (IVE)
+      </Title>
+      <Paragraph type="secondary">
+        재미로 추가한 IVE 멤버 에이전트. 본명·생년월일·포지션은 실제 프로필을 담았고, 아바타는 웹에서 수집해 본인·표정을 확인한 실사진(로컬 전용)입니다.
+      </Paragraph>
+
+      <Row gutter={[16, 16]}>
+        {IVE.map((a) => (
           <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
             <AgentCard a={a} />
           </Col>

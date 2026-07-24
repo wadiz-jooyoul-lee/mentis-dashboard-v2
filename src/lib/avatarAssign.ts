@@ -1,19 +1,21 @@
 /**
- * 오더(이슈)의 에이전트들에게 아바타 그룹(BTS·프로미스나인·도비)을 배정한다.
+ * 오더(이슈)의 에이전트들에게 아바타 그룹(BTS·프로미스나인·IVE·도비)을 배정한다.
  * 규칙:
  *  - 한 오더의 에이전트는 같은 그룹으로 묶어 배정한다(그룹 응집).
  *  - 그룹 멤버가 오더의 에이전트 수보다 적으면 다음 그룹에서 이어 채운다(도움).
- *  - 오더별 primary 그룹은 40:40:20(BTS:프로미스:도비) 가중으로 결정적으로 고른다.
+ *  - 오더별 primary 그룹은 30:30:20:20(BTS:프로미스:IVE:도비) 가중으로 결정적으로 고른다.
  *    → 여러 오더에 걸쳐 대략 그 비율로 분포. (도비는 무한 풀이라 소진되지 않는다.)
  */
 import { BTS_AVATARS } from "@/components/BtsAvatar";
 import { FROMIS_AVATARS } from "@/components/Fromis9Avatar";
+import { IVE_AVATARS } from "@/lib/ive";
 
-export type AvatarGroup = "bts" | "fromis" | "dobby";
+export type AvatarGroup = "bts" | "fromis" | "ive" | "dobby";
 export type AssignedAvatar = { group: AvatarGroup; member?: string };
 
 const BTS = Object.keys(BTS_AVATARS); // 7명
 const FROMIS = Object.keys(FROMIS_AVATARS); // 5명
+const IVE = Object.keys(IVE_AVATARS); // 6명
 
 function hash(s: string): number {
   let h = 2166136261 >>> 0;
@@ -24,17 +26,18 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-// 40:40:20 가중 primary 그룹(오더키로 결정적).
+// 30:30:20:20 가중 primary 그룹(오더키로 결정적).
 function primaryGroup(epicKey: string): AvatarGroup {
   const r = hash(epicKey) % 100;
-  return r < 40 ? "bts" : r < 80 ? "fromis" : "dobby";
+  return r < 30 ? "bts" : r < 60 ? "fromis" : r < 80 ? "ive" : "dobby";
 }
 
 // primary가 소진되면 이어 채울 순서. 도비는 항상 마지막(무한).
 const FILL_ORDER: Record<AvatarGroup, AvatarGroup[]> = {
-  bts: ["bts", "fromis", "dobby"],
-  fromis: ["fromis", "bts", "dobby"],
-  dobby: ["dobby", "bts", "fromis"],
+  bts: ["bts", "fromis", "ive", "dobby"],
+  fromis: ["fromis", "ive", "bts", "dobby"],
+  ive: ["ive", "fromis", "bts", "dobby"],
+  dobby: ["dobby", "bts", "fromis", "ive"],
 };
 
 /**
@@ -47,8 +50,8 @@ export function assignOrderAvatars(
 ): Map<string, AssignedAvatar> {
   const slugs = Array.from(new Set(agentSlugs.filter((s) => s && s !== "-"))).sort();
   const order = FILL_ORDER[primaryGroup(epicKey)];
-  const pool: Record<AvatarGroup, string[]> = { bts: BTS, fromis: FROMIS, dobby: [] };
-  const used: Record<AvatarGroup, number> = { bts: 0, fromis: 0, dobby: 0 };
+  const pool: Record<AvatarGroup, string[]> = { bts: BTS, fromis: FROMIS, ive: IVE, dobby: [] };
+  const used: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, dobby: 0 };
   const map = new Map<string, AssignedAvatar>();
   let gi = 0;
   for (const slug of slugs) {

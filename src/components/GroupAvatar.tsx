@@ -3,6 +3,7 @@
 import { Popover } from "antd";
 import BtsAvatar from "@/components/BtsAvatar";
 import Fromis9Avatar from "@/components/Fromis9Avatar";
+import IveAvatar from "@/components/IveAvatar";
 import DobbyIcon, { dobbyExpression } from "@/components/DobbyIcon";
 import { dobbyColor } from "@/lib/dobby";
 import type { AssignedAvatar } from "@/lib/avatarAssign";
@@ -41,6 +42,8 @@ export default function GroupAvatar({
       <BtsAvatar member={avatar.member} size={size} state={state} />
     ) : avatar?.group === "fromis" && avatar.member ? (
       <Fromis9Avatar member={avatar.member} size={size} state={state} />
+    ) : avatar?.group === "ive" && avatar.member ? (
+      <IveAvatar member={avatar.member} size={size} state={state} />
     ) : (
       <DobbyIcon size={size} expression={dobbyExpression(state ?? "")} color={dobbyColor(slug)} />
     );
