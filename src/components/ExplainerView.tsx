@@ -116,6 +116,7 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
 
 export default function ExplainerView({
   epicKey,
+  title = null,
   md,
   job = null,
   mode = null,
@@ -123,6 +124,7 @@ export default function ExplainerView({
   hasJira = false,
 }: {
   epicKey: string;
+  title?: string | null;
   md: string | null;
   job?: ExplainJob | null;
   mode?: string | null;
@@ -133,6 +135,7 @@ export default function ExplainerView({
     <div>
       <OrderHeader
         epicKey={epicKey}
+        title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
         hasJira={hasJira}

@@ -266,6 +266,7 @@ export default function OrchestrationBoard({
   const header = (
     <OrderHeader
       epicKey={epicKey}
+      title={epic?.title ?? null}
       mode={o?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}

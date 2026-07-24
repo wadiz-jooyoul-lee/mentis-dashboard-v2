@@ -11,6 +11,7 @@ const { Title, Text } = Typography;
 /** 검증 탭: 테스트 회차(test-runs) + 확인 가이드(수동 TC). 보드 하단에 있던 걸 별도 페이지로. */
 export default function VerifyView({
   epicKey,
+  title = null,
   mode,
   worktreeRemoved,
   hasJira,
@@ -18,6 +19,7 @@ export default function VerifyView({
   testGuideMd,
 }: {
   epicKey: string;
+  title?: string | null;
   mode: string | null;
   worktreeRemoved: boolean;
   hasJira: boolean;
@@ -28,6 +30,7 @@ export default function VerifyView({
     <div>
       <OrderHeader
         epicKey={epicKey}
+        title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
         hasJira={hasJira}

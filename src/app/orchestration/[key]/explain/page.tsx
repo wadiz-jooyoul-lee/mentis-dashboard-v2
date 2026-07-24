@@ -13,6 +13,7 @@ export default function ExplainPage({ params }: { params: { key: string } }) {
   return (
     <ExplainerView
       epicKey={params.key}
+      title={epic?.title ?? null}
       md={epic?.explainerMd ?? null}
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
