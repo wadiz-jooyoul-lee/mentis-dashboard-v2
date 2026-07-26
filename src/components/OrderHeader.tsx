@@ -9,7 +9,7 @@ import PrLinkButton from "@/components/PrLinkButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 // 오더 상세의 공통 탭. 어느 상세 페이지에서든 이 바로 서로 이동한다.
 const TABS = [
@@ -47,12 +47,15 @@ function activeTab(pathname: string): string {
  */
 export default function OrderHeader({
   epicKey,
+  title = null,
   mode = null,
   worktreeRemoved = false,
   hasJira = false,
   extra,
 }: {
   epicKey: string;
+  /** 이슈/작업 제목. 이슈 번호 옆에 작은 글씨로 표시. */
+  title?: string | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
@@ -117,26 +120,43 @@ export default function OrderHeader({
           {extra}
         </Space>
       </div>
-      <Space align="center" size={12} wrap style={{ marginBottom: 4 }}>
-        <Title level={2} style={{ margin: 0 }}>
-          {epicKey}
-        </Title>
-        {mode && <Tag>{mode}</Tag>}
-        {worktreeRemoved && (
-          <Tag color="default" style={{ color: "#8c8c8c" }}>
-            워크트리 삭제됨
-          </Tag>
-        )}
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          href={jiraUrl(epicKey)}
-          target="_blank"
-        >
-          Jira에서 열기
-        </Button>
-        <PrLinkButton epicKey={epicKey} />
-      </Space>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 4,
+        }}
+      >
+        <Space align="baseline" size={10} wrap style={{ minWidth: 0 }}>
+          <Title level={2} style={{ margin: 0 }}>
+            {epicKey}
+          </Title>
+          {title && (
+            <Text type="secondary" style={{ fontSize: 15, fontWeight: 400 }}>
+              {title}
+            </Text>
+          )}
+          {mode && <Tag>{mode}</Tag>}
+          {worktreeRemoved && (
+            <Tag color="default" style={{ color: "#8c8c8c" }}>
+              워크트리 삭제됨
+            </Tag>
+          )}
+        </Space>
+        <Space align="center" size={4} style={{ flexShrink: 0 }}>
+          <Button
+            type="link"
+            icon={<LinkOutlined />}
+            href={jiraUrl(epicKey)}
+            target="_blank"
+          >
+            Jira에서 열기
+          </Button>
+          <PrLinkButton epicKey={epicKey} />
+        </Space>
+      </div>
       <Tabs
         activeKey={active}
         items={items}

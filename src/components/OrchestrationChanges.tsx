@@ -209,6 +209,7 @@ export default function OrchestrationChanges({
     <div>
       <OrderHeader
         epicKey={epicKey}
+        title={epic?.title ?? null}
         mode={epic?.orchestration?.mode ?? null}
         worktreeRemoved={epic?.worktreeRemoved}
         hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}

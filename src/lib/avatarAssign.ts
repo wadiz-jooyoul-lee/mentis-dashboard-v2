@@ -3,7 +3,7 @@
  * 규칙:
  *  - 한 오더의 에이전트는 같은 그룹으로 묶어 배정한다(그룹 응집).
  *  - 그룹 멤버가 오더의 에이전트 수보다 적으면 다음 그룹에서 이어 채운다(도움).
- *  - 오더별 primary 그룹은 30:30:20:20(BTS:프로미스:IVE:도비) 가중으로 결정적으로 고른다.
+ *  - 오더별 primary 그룹은 25:25:25:25(BTS:프로미스:IVE:도비) 균등으로 결정적으로 고른다.
  *    → 여러 오더에 걸쳐 대략 그 비율로 분포. (도비는 무한 풀이라 소진되지 않는다.)
  */
 import { BTS_AVATARS } from "@/components/BtsAvatar";
@@ -26,10 +26,10 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-// 30:30:20:20 가중 primary 그룹(오더키로 결정적).
+// 25:25:25:25 균등 primary 그룹(오더키로 결정적).
 function primaryGroup(epicKey: string): AvatarGroup {
   const r = hash(epicKey) % 100;
-  return r < 30 ? "bts" : r < 60 ? "fromis" : r < 80 ? "ive" : "dobby";
+  return r < 25 ? "bts" : r < 50 ? "fromis" : r < 75 ? "ive" : "dobby";
 }
 
 // primary가 소진되면 이어 채울 순서. 도비는 항상 마지막(무한).

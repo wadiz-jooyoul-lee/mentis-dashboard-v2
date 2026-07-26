@@ -53,6 +53,7 @@ function LinkRow({ url }: { url: string }) {
 
 export default function ArtifactTabView({
   epicKey,
+  title = null,
   hasExplainer,
   shareUrl,
   mode,
@@ -60,6 +61,7 @@ export default function ArtifactTabView({
   hasJira,
 }: {
   epicKey: string;
+  title?: string | null;
   hasExplainer: boolean;
   shareUrl: string | null;
   mode: string | null;
@@ -75,6 +77,7 @@ export default function ArtifactTabView({
     <div>
       <OrderHeader
         epicKey={epicKey}
+        title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
         hasJira={hasJira}

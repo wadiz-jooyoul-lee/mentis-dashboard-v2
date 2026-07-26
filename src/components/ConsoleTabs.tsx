@@ -16,6 +16,7 @@ const { Paragraph } = Typography;
  */
 export default function ConsoleTabs({
   orderKey,
+  title = null,
   agents,
   height = 480,
   mode = null,
@@ -23,6 +24,7 @@ export default function ConsoleTabs({
   hasJira = false,
 }: {
   orderKey: string;
+  title?: string | null;
   agents: { id: string; label: string }[];
   height?: number;
   mode?: string | null;
@@ -51,6 +53,7 @@ export default function ConsoleTabs({
     <div>
       <OrderHeader
         epicKey={orderKey}
+        title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
         hasJira={hasJira}

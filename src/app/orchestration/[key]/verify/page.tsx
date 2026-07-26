@@ -13,6 +13,7 @@ export default function VerifyPage({ params }: { params: { key: string } }) {
   return (
     <VerifyView
       epicKey={params.key}
+      title={epic.title ?? null}
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved}
       hasJira={!!epic.jiraIssueMd || isJiraIssueKey(params.key)}
