@@ -104,6 +104,41 @@ export default function JiraTabView(props: Props) {
     }, 3000);
   };
 
+  // 마운트 시 서버에 진행 중인 잡이 있으면 로딩 상태로 복원한다.
+  // (탭 이동 후 돌아오면 busy가 초기화돼 버튼이 다시 눌리고 중복 요청되던 문제 방지 — 서버는 already_running으로 막지만 UI가 몰랐음.)
+  useEffect(() => {
+    const candidates: [string, string][] = [
+      [`jira-enrich-${props.epicKey}`, "enrich"],
+      [`jira-clean-${props.epicKey}`, "clean"],
+      [`jira-comments-${props.epicKey}`, "comments"],
+      [`jira-snapshot-${props.epicKey}`, "snapshot"],
+      [`jira-post-${props.epicKey}`, "postdesc"], // 게시는 desc/comment 공용 잡 — desc 버튼에 대표로 로딩
+    ];
+    let alive = true;
+    (async () => {
+      for (const [jobId, tag] of candidates) {
+        try {
+          const r = await fetch(`/api/orders?jobResult=${encodeURIComponent(jobId)}`, {
+            cache: "no-store",
+          });
+          const st = await r.json();
+          if (alive && st.state === "running") {
+            setBusy(tag);
+            pollJob(jobId); // 완료되면 busy 해제 + router.refresh
+            break; // busy는 단일 값 — 진행 중 잡 하나만 로딩 표시
+          }
+        } catch {
+          /* 무시 */
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // pollJob은 매 렌더 재생성되므로 의존성에서 제외(오더당 1회만 프로브).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.epicKey]);
+
   // 생성/게시 잡 트리거 → 백그라운드 실행 후 결과 폴링(대기 UI만 표시).
   const trigger = async (jira: string, extra: Record<string, unknown> = {}) => {
     const tag = jira + (typeof extra.target === "string" ? extra.target : "");

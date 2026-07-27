@@ -74,6 +74,12 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
     }
   }, [state, poll]);
 
+  // 마운트 시 서버 잡 상태 확인 — 이미 진행 중이면 버튼 대신 진행 표시로 복원한다.
+  // (탭 이동 후 돌아오면 state가 idle로 리셋돼 버튼이 다시 눌리고 중복 요청되던 문제 방지.)
+  useEffect(() => {
+    poll();
+  }, [poll]);
+
   const gen = async () => {
     setBusy(true);
     try {
