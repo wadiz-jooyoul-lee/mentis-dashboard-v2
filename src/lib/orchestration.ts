@@ -13,6 +13,7 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
+import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
@@ -385,6 +386,8 @@ export type EpicDetail = {
   contracts: Contract[];
   reviews: ReviewFile[];
   agentWorks: AgentWork[];
+  /** 슬러그별 핀 고정 아바타(avatars.json). 에이전트 추가돼도 기존은 불변. */
+  avatars: Record<string, AssignedAvatar>;
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
   title: string | null;
@@ -603,6 +606,36 @@ export function prTargets(key: string): PrTarget[] {
   return out;
 }
 
+function readPinnedAvatars(dir: string): Record<string, AssignedAvatar> {
+  const raw = readFileSafe(path.join(dir, "avatars.json"));
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? (o as Record<string, AssignedAvatar>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 에픽 아바타를 `avatars.json`에 1회 핀(고정)하고 반환한다.
+ * 최초엔 현재 계산값을 그대로 저장하고, 이후 신규 슬러그가 생기면 그 에픽 그룹의
+ * 미사용 멤버로 이어 배정해 저장한다(기존 담당은 불변 — 에이전트 추가로 안 바뀜).
+ */
+function epicAvatars(epicKey: string, dir: string, slugs: string[]): Record<string, AssignedAvatar> {
+  const existing = readPinnedAvatars(dir);
+  const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing));
+  // 신규 배정이 생겼을 때만 저장(읽기 경로의 불필요한 쓰기 방지).
+  if (Object.keys(obj).length !== Object.keys(existing).length) {
+    try {
+      fs.writeFileSync(path.join(dir, "avatars.json"), JSON.stringify(obj, null, 2));
+    } catch {
+      /* 저장 실패는 무시 — 다음 로드에서 재시도 */
+    }
+  }
+  return obj;
+}
+
 export function getEpic(epicKey: string): EpicDetail | null {
   const dir = orderDir(epicKey);
   if (!fs.existsSync(dir)) return null;
@@ -660,12 +693,18 @@ export function getEpic(epicKey: string): EpicDetail | null {
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
+  const avatars = epicAvatars(epicKey, dir, [
+    ...orchestration.agents.map((a) => a.agent),
+    ...contracts.map((c) => c.slug),
+    ...agentWorks.map((w) => w.slug),
+  ]);
   return {
     epicKey,
     orchestration,
     contracts,
     reviews,
     agentWorks,
+    avatars,
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,

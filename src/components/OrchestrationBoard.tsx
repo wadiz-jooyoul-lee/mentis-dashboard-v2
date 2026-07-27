@@ -26,7 +26,7 @@ import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import type { QuipsFile, Quip } from "@/lib/quips";
-import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
+import { type AssignedAvatar } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
@@ -233,7 +233,8 @@ export default function OrchestrationBoard({
   const o = epic?.orchestration ?? null;
 
   // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
-  const avatarMap = assignOrderAvatars(epicKey, (o?.agents ?? []).map((a) => a.agent));
+  // 핀 고정 아바타(서버 avatars.json). 에이전트가 추가돼도 기존 담당은 안 바뀐다.
+  const avatarMap = new Map(Object.entries(epic?.avatars ?? {}));
 
   // slug → 에이전트 표시 이름. **상태표(orchestration.md '이름')가 실제(카드에 뜨는) 이름**이며 최우선.
   // 계약서만 있는 경우엔 계약 헤딩("계약 — {슬러그} (역할)")에서 접두 "계약 —"·접미 "계약"을 떼어 fallback.

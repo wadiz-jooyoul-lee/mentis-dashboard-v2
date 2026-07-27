@@ -43,26 +43,44 @@ const FILL_ORDER: Record<AvatarGroup, AvatarGroup[]> = {
 /**
  * 오더의 에이전트 슬러그 목록 → 슬러그별 아바타 배정 맵.
  * 슬러그는 dedupe + 정렬해 상태 변화(칸반 이동)와 무관하게 안정적으로 배정한다.
+ *
+ * `existing`을 주면 **이미 배정된 슬러그는 그대로 유지**하고 신규 슬러그만
+ * 그 에픽 그룹의 **미사용 멤버**로 이어 배정한다(핀 고정). → 에이전트가 추가돼도
+ * 기존 담당은 안 바뀐다. existing에 있으나 현재 목록에 없는 슬러그도 유지한다(재등장 대비).
  */
 export function assignOrderAvatars(
   epicKey: string,
-  agentSlugs: string[]
+  agentSlugs: string[],
+  existing?: Map<string, AssignedAvatar> | Record<string, AssignedAvatar>
 ): Map<string, AssignedAvatar> {
   const slugs = Array.from(new Set(agentSlugs.filter((s) => s && s !== "-"))).sort();
   const order = FILL_ORDER[primaryGroup(epicKey)];
   const pool: Record<AvatarGroup, string[]> = { bts: BTS, fromis: FROMIS, ive: IVE, dobby: [] };
-  const used: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, dobby: 0 };
+  const usedNames: Record<AvatarGroup, Set<string>> = {
+    bts: new Set(),
+    fromis: new Set(),
+    ive: new Set(),
+    dobby: new Set(),
+  };
   const map = new Map<string, AssignedAvatar>();
+  // 기존 핀을 먼저 심고(유지), 사용된 멤버를 표시해 중복 배정을 막는다.
+  const seed = existing instanceof Map ? existing : new Map(Object.entries(existing ?? {}));
+  for (const [s, a] of seed) {
+    map.set(s, a);
+    if (a.member) usedNames[a.group].add(a.member);
+  }
   let gi = 0;
   for (const slug of slugs) {
+    if (map.has(slug)) continue; // 이미 핀됨 — 유지
     // 현재 그룹(도비 제외)이 소진됐으면 다음 그룹으로.
-    while (order[gi] !== "dobby" && used[order[gi]] >= pool[order[gi]].length) gi++;
+    while (order[gi] !== "dobby" && usedNames[order[gi]].size >= pool[order[gi]].length) gi++;
     const g = order[gi];
     if (g === "dobby") {
       map.set(slug, { group: "dobby" });
     } else {
-      map.set(slug, { group: g, member: pool[g][used[g]] });
-      used[g] += 1;
+      const member = pool[g].find((n) => !usedNames[g].has(n)) ?? pool[g][0];
+      map.set(slug, { group: g, member });
+      usedNames[g].add(member);
     }
   }
   return map;

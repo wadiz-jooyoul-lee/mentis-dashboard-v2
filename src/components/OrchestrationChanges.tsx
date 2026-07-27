@@ -14,7 +14,6 @@ import { isJiraIssueKey } from "@/lib/keys";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
-import { assignOrderAvatars } from "@/lib/avatarAssign";
 import type { QuipsFile, QuipEntry } from "@/lib/quips";
 import "./markdown.css";
 
@@ -184,7 +183,8 @@ export default function OrchestrationChanges({
   quips?: QuipsFile | null;
 }) {
   const agents: AgentRow[] = epic?.orchestration?.agents ?? [];
-  const avatarMap = assignOrderAvatars(epicKey, agents.map((a) => a.agent));
+  // 핀 고정 아바타(서버 avatars.json). 에이전트가 추가돼도 기존 담당은 안 바뀐다.
+  const avatarMap = new Map(Object.entries(epic?.avatars ?? {}));
   const works = epic?.agentWorks ?? [];
   const contracts = epic?.contracts ?? [];
 
