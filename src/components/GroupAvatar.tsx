@@ -26,12 +26,15 @@ const MOOD_EMOJI: Record<string, string> = {
  */
 export default function GroupAvatar({
   slug,
+  name,
   avatar,
   state,
   size = 34,
   quip,
 }: {
   slug: string;
+  /** 말풍선 상단에 표시할 에이전트 이름. 있으면 소감이 없어도 이름만 말풍선으로 띄운다. */
+  name?: string;
   avatar?: AssignedAvatar;
   state?: string;
   size?: number;
@@ -48,16 +51,24 @@ export default function GroupAvatar({
       <DobbyIcon size={size} expression={dobbyExpression(state ?? "")} color={dobbyColor(slug)} />
     );
 
-  if (!quip?.text) return icon;
+  // 이름도 소감도 없으면 그냥 아이콘(말풍선 X).
+  if (!quip?.text && !name) return icon;
 
   return (
     <Popover
       trigger="hover"
       overlayStyle={{ maxWidth: 240 }}
       content={
-        <span style={{ fontSize: 13, lineHeight: 1.4 }}>
-          {MOOD_EMOJI[quip.mood] ?? "💬"} {quip.text}
-        </span>
+        <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+          {name && (
+            <div style={{ fontWeight: 600, marginBottom: quip?.text ? 4 : 0 }}>{name}</div>
+          )}
+          {quip?.text && (
+            <div>
+              {MOOD_EMOJI[quip.mood] ?? "💬"} {quip.text}
+            </div>
+          )}
+        </div>
       }
     >
       <span style={{ display: "inline-flex", cursor: "help" }}>{icon}</span>

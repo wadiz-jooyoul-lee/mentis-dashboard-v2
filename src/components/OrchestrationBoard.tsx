@@ -172,7 +172,7 @@ function AgentCard({
     >
       <Space direction="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <GroupAvatar slug={a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
+          <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
             <Tooltip title={a.desc || undefined}>
               <Tag
@@ -244,7 +244,7 @@ export default function OrchestrationBoard({
   const orchAvatar = epic?.avatars?.[ORCHESTRATOR_SLUG];
   const orchQuip = quips?.board?.[ORCHESTRATOR_SLUG] ?? null;
   const orchestratorAvatar = (size: number) => (
-    <GroupAvatar slug={ORCHESTRATOR_SLUG} avatar={orchAvatar} quip={orchQuip} size={size} />
+    <GroupAvatar slug={ORCHESTRATOR_SLUG} name="오케스트레이터" avatar={orchAvatar} quip={orchQuip} size={size} />
   );
 
   // slug → 에이전트 표시 이름. **상태표(orchestration.md '이름')가 실제(카드에 뜨는) 이름**이며 최우선.
@@ -496,6 +496,7 @@ export default function OrchestrationBoard({
                 <Space size={8} align="center">
                   <GroupAvatar
                     slug={g.agent}
+                    name={nameBySlug.get(g.agent) ?? g.agent}
                     avatar={avatarMap.get(g.agent)}
                     state={o?.agents.find((x) => x.agent === g.agent)?.state}
                     size={24}
