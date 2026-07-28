@@ -13,7 +13,7 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
-import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
+import { assignOrderAvatars, type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
@@ -217,12 +217,14 @@ export type EpicSummary = {
   phaseLabel: string;
 };
 
-// "일하는 중"인 상태 + 착수 후 STALE_MIN분 이상 경과면 정체(대시보드 보드와 동일 기준).
+// "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
 const CARD_ACTIVE_STATES = ["분석", "구현", "리뷰"];
-const CARD_STALE_MIN = 15;
-function agentStalled(startedAt: string): boolean {
-  if (!/\d{1,2}:\d{2}/.test(startedAt)) return false; // 시:분 없으면 경과 못 잼 → 판정 안 함
-  const d = new Date(startedAt.replace(" ", "T"));
+const CARD_STALE_MIN = 30;
+function agentStalled(a: { updatedAt: string; startedAt: string }): boolean {
+  // 기준 = 마지막 상태 변경(갱신). 시:분 없으면 착수로 폴백, 그것도 없으면 판정 안 함(오탐 방지).
+  const base = /\d{1,2}:\d{2}/.test(a.updatedAt) ? a.updatedAt : a.startedAt;
+  if (!/\d{1,2}:\d{2}/.test(base)) return false;
+  const d = new Date(base.replace(" ", "T"));
   if (isNaN(d.getTime())) return false;
   return Math.floor((Date.now() - d.getTime()) / 60000) >= CARD_STALE_MIN;
 }
@@ -234,7 +236,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     : [];
   const st = statusMd ? parseOrderStatus(statusMd, key) : null;
   const stalled = !!o?.agents.some(
-    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a.startedAt)
+    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a)
   );
   return {
     epicKey: key,
@@ -272,8 +274,21 @@ export function agentSigs(key: string): Record<string, string> {
   const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
   const o = orchestrationOf(key, statusMd);
   const out: Record<string, string> = {};
-  if (o) for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+  if (o) {
+    for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+    // 오케스트레이터 브리핑 서명 = 전체 상태 "모양"(상태 목록 정렬 + 최대 라운드).
+    // 에이전트 추가·상태 전이·라운드 증가 때마다 바뀜 → avatar-quips가 브리핑 재생성.
+    // ⛔ avatar-quips 스킬도 동일 공식으로 sig를 계산해야 매칭됨(SKILL 참조).
+    out[ORCHESTRATOR_SLUG] = orchestratorSig(o);
+  }
   return out;
+}
+
+/** 오케스트레이터 브리핑 재생성 서명. 상태표만 근거(본문 X). avatar-quips와 공식 일치 필수. */
+export function orchestratorSig(o: Orchestration): string {
+  const states = o.agents.map((a) => a.state).sort().join("|");
+  const maxRound = o.agents.reduce((m, a) => Math.max(m, Number(a.round) || 0), 0);
+  return `${states}#r${maxRound}`;
 }
 
 export type Contract = { slug: string; role: string; raw: string };
@@ -694,6 +709,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
 
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
   const avatars = epicAvatars(epicKey, dir, [
+    ORCHESTRATOR_SLUG, // 오케스트레이터도 에픽 그룹 멤버 하나로 핀 고정
     ...orchestration.agents.map((a) => a.agent),
     ...contracts.map((c) => c.slug),
     ...agentWorks.map((w) => w.slug),

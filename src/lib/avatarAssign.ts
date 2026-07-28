@@ -13,6 +13,9 @@ import { IVE_AVATARS } from "@/lib/ive";
 export type AvatarGroup = "bts" | "fromis" | "ive" | "dobby";
 export type AssignedAvatar = { group: AvatarGroup; member?: string };
 
+/** 오케스트레이터(오더를 지휘하는 메인 세션) 전용 슬러그. 에픽 그룹 멤버 하나로 핀 고정된다. */
+export const ORCHESTRATOR_SLUG = "__orchestrator__";
+
 const BTS = Object.keys(BTS_AVATARS); // 7명
 const FROMIS = Object.keys(FROMIS_AVATARS); // 5명
 const IVE = Object.keys(IVE_AVATARS); // 6명
