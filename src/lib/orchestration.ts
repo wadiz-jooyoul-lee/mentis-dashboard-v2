@@ -632,16 +632,55 @@ function readPinnedAvatars(dir: string): Record<string, AssignedAvatar> {
   }
 }
 
+function sameAvatars(a: Record<string, AssignedAvatar>, b: Record<string, AssignedAvatar>): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => b[k] && a[k].group === b[k].group && a[k].member === b[k].member);
+}
+
+/**
+ * status.md `## 세션`의 오케스트레이터 세션 ID를 가리키는 에이전트 슬러그를 찾는다.
+ * = 오케스트레이터가 인라인(light/K=1 인라인)으로 직접 구현한 에이전트. 없으면 null.
+ * (인라인 에이전트의 agent-logs 경로는 메인 세션 전사(…/{세션ID}.jsonl)를 가리킨다.)
+ */
+function inlineOrchestratorSlug(dir: string, statusMd: string | null): string | null {
+  const sid = statusMd?.match(/세션 ID[^\n]*?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1];
+  if (!sid) return null;
+  const raw = readFileSafe(path.join(dir, "agent-logs.json"));
+  if (!raw) return null;
+  let logs: Record<string, unknown>;
+  try {
+    logs = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  for (const [slug, v] of Object.entries(logs)) {
+    const paths = typeof v === "string" ? [v] : Object.values(v ?? {});
+    if (paths.some((p) => typeof p === "string" && p.includes(sid))) return slug;
+  }
+  return null;
+}
+
 /**
  * 에픽 아바타를 `avatars.json`에 1회 핀(고정)하고 반환한다.
- * 최초엔 현재 계산값을 그대로 저장하고, 이후 신규 슬러그가 생기면 그 에픽 그룹의
- * 미사용 멤버로 이어 배정해 저장한다(기존 담당은 불변 — 에이전트 추가로 안 바뀜).
+ * 실제 에이전트 슬러그는 그룹 응집으로 배정·고정(추가돼도 기존 불변).
+ * 오케스트레이터(`__orchestrator__`)는 슬롯을 소비하지 않고 파생한다:
+ *  - 인라인 구현이면 그 에이전트와 **같은 아바타 공유**, 아니면 **에픽 대표(primary 그룹 #0)**.
  */
-function epicAvatars(epicKey: string, dir: string, slugs: string[]): Record<string, AssignedAvatar> {
+function epicAvatars(
+  epicKey: string,
+  dir: string,
+  slugs: string[],
+  inlineSlug: string | null
+): Record<string, AssignedAvatar> {
   const existing = readPinnedAvatars(dir);
   const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing));
-  // 신규 배정이 생겼을 때만 저장(읽기 경로의 불필요한 쓰기 방지).
-  if (Object.keys(obj).length !== Object.keys(existing).length) {
+  // 오케스트레이터 아바타 파생(핀 슬롯 미소비).
+  const rep = assignOrderAvatars(epicKey, [epicKey]).get(epicKey);
+  const orch = inlineSlug && obj[inlineSlug] ? obj[inlineSlug] : rep;
+  if (orch) obj[ORCHESTRATOR_SLUG] = orch;
+  // 배정이 실제로 바뀌었을 때만 저장(읽기 경로의 불필요한 쓰기 방지).
+  if (!sameAvatars(obj, existing)) {
     try {
       fs.writeFileSync(path.join(dir, "avatars.json"), JSON.stringify(obj, null, 2));
     } catch {
@@ -708,12 +747,16 @@ export function getEpic(epicKey: string): EpicDetail | null {
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
-  const avatars = epicAvatars(epicKey, dir, [
-    ORCHESTRATOR_SLUG, // 오케스트레이터도 에픽 그룹 멤버 하나로 핀 고정
-    ...orchestration.agents.map((a) => a.agent),
-    ...contracts.map((c) => c.slug),
-    ...agentWorks.map((w) => w.slug),
-  ]);
+  const avatars = epicAvatars(
+    epicKey,
+    dir,
+    [
+      ...orchestration.agents.map((a) => a.agent),
+      ...contracts.map((c) => c.slug),
+      ...agentWorks.map((w) => w.slug),
+    ],
+    inlineOrchestratorSlug(dir, statusMd)
+  );
   return {
     epicKey,
     orchestration,
