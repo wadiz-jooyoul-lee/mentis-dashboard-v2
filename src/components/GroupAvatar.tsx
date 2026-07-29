@@ -33,7 +33,7 @@ export default function GroupAvatar({
   quip,
 }: {
   slug: string;
-  /** 말풍선 상단에 표시할 에이전트 이름. 있으면 소감이 없어도 이름만 말풍선으로 띄운다. */
+  /** 에이전트 역할 이름(예: 리뷰어, 개발자·지면). 말풍선 상단에 "{역할}: {멤버}"로 표시. */
   name?: string;
   avatar?: AssignedAvatar;
   state?: string;
@@ -51,8 +51,13 @@ export default function GroupAvatar({
       <DobbyIcon size={size} expression={dobbyExpression(state ?? "")} color={dobbyColor(slug)} />
     );
 
-  // 이름도 소감도 없으면 그냥 아이콘(말풍선 X).
-  if (!quip?.text && !name) return icon;
+  // 아바타 캐릭터(멤버) 이름. 도비 그룹은 "도비".
+  const member = avatar?.member ?? (avatar?.group === "dobby" ? "도비" : undefined);
+  // 말풍선 상단 헤더 = "{역할}: {멤버}"(둘 다 있으면), 아니면 있는 쪽만.
+  const header = name && member ? `${name}: ${member}` : member ?? name;
+
+  // 헤더도 소감도 없으면 그냥 아이콘(말풍선 X).
+  if (!quip?.text && !header) return icon;
 
   return (
     <Popover
@@ -60,8 +65,8 @@ export default function GroupAvatar({
       overlayStyle={{ maxWidth: 240 }}
       content={
         <div style={{ fontSize: 13, lineHeight: 1.4 }}>
-          {name && (
-            <div style={{ fontWeight: 600, marginBottom: quip?.text ? 4 : 0 }}>{name}</div>
+          {header && (
+            <div style={{ fontWeight: 600, marginBottom: quip?.text ? 4 : 0 }}>{header}</div>
           )}
           {quip?.text && (
             <div>
