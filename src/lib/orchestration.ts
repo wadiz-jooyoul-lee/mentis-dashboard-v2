@@ -13,7 +13,15 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
-import { assignOrderAvatars, type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
+import {
+  assignOrderAvatars,
+  type AssignedAvatar,
+  type AvatarGroup,
+  ORCHESTRATOR_SLUG,
+  AVATAR_GROUPS,
+  avatarHash,
+  groupFirstMember,
+} from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
@@ -198,6 +206,8 @@ function worktreesGone(worktrees: { path: string }[]): boolean {
 export type EpicSummary = {
   epicKey: string;
   mode: string | null;
+  /** 에픽 대표 아바타(핀된 오케스트레이터/최빈 그룹 기준). 리스트 "에픽" 컬럼 앞 표시용. */
+  avatar: AssignedAvatar | null;
   counts: Counts;
   agentCount: number;
   latestEventTime: string | null;
@@ -238,9 +248,16 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
   const stalled = !!o?.agents.some(
     (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a)
   );
+  // 대표 아바타: 핀된 오케스트레이터 → 최빈 그룹 대표 → (미핀) 해시 대표.
+  const pinned = readPinnedAvatars(orderDir(key));
+  const domG = dominantGroup(pinned);
+  const avatar =
+    pinned[ORCHESTRATOR_SLUG] ??
+    (domG ? groupFirstMember(domG) : assignOrderAvatars(key, [key]).get(key) ?? null);
   return {
     epicKey: key,
     mode: o?.mode ?? null,
+    avatar,
     counts,
     agentCount: o?.agents.length ?? 0,
     latestEventTime: o?.events[0]?.time ?? null,
@@ -661,11 +678,46 @@ function inlineOrchestratorSlug(dir: string, statusMd: string | null): string | 
   return null;
 }
 
+/** 핀된 아바타 맵에서 이 에픽의 대표 그룹(에이전트 최빈 그룹). 오케스트레이터 슬롯은 제외. */
+function dominantGroup(avatars: Record<string, AssignedAvatar>): AvatarGroup | null {
+  const tally: Partial<Record<AvatarGroup, number>> = {};
+  for (const [k, v] of Object.entries(avatars)) {
+    if (k === ORCHESTRATOR_SLUG || !v) continue;
+    tally[v.group] = (tally[v.group] ?? 0) + 1;
+  }
+  const entries = Object.entries(tally) as [AvatarGroup, number][];
+  if (!entries.length) return null;
+  return entries.sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/** 이미 핀된 다른 에픽들의 대표 그룹 사용 횟수. 그룹 균형(decay) 계산용. */
+function groupUsageCounts(excludeKey: string): Record<AvatarGroup, number> {
+  const counts: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, dobby: 0 };
+  for (const k of epicKeys()) {
+    if (k === excludeKey) continue;
+    const g = dominantGroup(readPinnedAvatars(orderDir(k)));
+    if (g) counts[g] += 1;
+  }
+  return counts;
+}
+
+/**
+ * 그룹 균형(decay): 지금까지 **가장 적게 쓰인 그룹**을 고른다(동률은 에픽 키 해시로 결정적).
+ * → 이미 많이 나온 그룹은 가중치가 떨어지고, 비노출 그룹의 출현율이 올라간다.
+ */
+function pickBalancedGroup(epicKey: string): AvatarGroup {
+  const counts = groupUsageCounts(epicKey);
+  const min = Math.min(...AVATAR_GROUPS.map((g) => counts[g]));
+  const cands = AVATAR_GROUPS.filter((g) => counts[g] === min);
+  return cands[avatarHash(epicKey) % cands.length];
+}
+
 /**
  * 에픽 아바타를 `avatars.json`에 1회 핀(고정)하고 반환한다.
- * 실제 에이전트 슬러그는 그룹 응집으로 배정·고정(추가돼도 기존 불변).
- * 오케스트레이터(`__orchestrator__`)는 슬롯을 소비하지 않고 파생한다:
- *  - 인라인 구현이면 그 에이전트와 **같은 아바타 공유**, 아니면 **에픽 대표(primary 그룹 #0)**.
+ * - **최초 핀**: 그룹 균형(decay)으로 primary 그룹을 정해(비노출 그룹 우선) 배정.
+ * - 실제 에이전트 슬러그는 그룹 응집으로 배정·고정(추가돼도 기존 불변).
+ * - 오케스트레이터(`__orchestrator__`)는 슬롯을 소비하지 않고 파생: 인라인 구현이면 그
+ *   에이전트와 **같은 아바타 공유**, 아니면 **에픽 대표 그룹 멤버 #0**(팀과 같은 그룹).
  */
 function epicAvatars(
   epicKey: string,
@@ -674,9 +726,12 @@ function epicAvatars(
   inlineSlug: string | null
 ): Record<string, AssignedAvatar> {
   const existing = readPinnedAvatars(dir);
-  const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing));
-  // 오케스트레이터 아바타 파생(핀 슬롯 미소비).
-  const rep = assignOrderAvatars(epicKey, [epicKey]).get(epicKey);
+  const firstPin = Object.keys(existing).length === 0;
+  const forced = firstPin ? pickBalancedGroup(epicKey) : undefined;
+  const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing, forced));
+  // 오케스트레이터 아바타 파생(핀 슬롯 미소비). 대표는 이 에픽 실제 그룹 기준으로 팀과 일치시킨다.
+  const epicGroup = dominantGroup(obj) ?? forced ?? "dobby";
+  const rep = groupFirstMember(epicGroup);
   const orch = inlineSlug && obj[inlineSlug] ? obj[inlineSlug] : rep;
   if (orch) obj[ORCHESTRATOR_SLUG] = orch;
   // 배정이 실제로 바뀌었을 때만 저장(읽기 경로의 불필요한 쓰기 방지).

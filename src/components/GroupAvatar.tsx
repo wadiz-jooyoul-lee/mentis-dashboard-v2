@@ -9,6 +9,14 @@ import { dobbyColor } from "@/lib/dobby";
 import type { AssignedAvatar } from "@/lib/avatarAssign";
 import type { Quip } from "@/lib/quips";
 
+/** 그룹 표시 이름(에픽 대표 아바타 말풍선용). */
+const GROUP_NAME: Record<string, string> = {
+  bts: "방탄소년단",
+  fromis: "프로미스나인",
+  ive: "아이브",
+  dobby: "도비",
+};
+
 const MOOD_EMOJI: Record<string, string> = {
   happy: "😊",
   cheer: "🎉",
@@ -31,6 +39,7 @@ export default function GroupAvatar({
   state,
   size = 34,
   quip,
+  showGroup = false,
 }: {
   slug: string;
   /** 에이전트 역할 이름(예: 리뷰어, 개발자·지면). 말풍선 상단에 "{역할}: {멤버}"로 표시. */
@@ -39,6 +48,8 @@ export default function GroupAvatar({
   state?: string;
   size?: number;
   quip?: Quip | null;
+  /** true면 말풍선 헤더를 멤버/역할 대신 **그룹 이름**(방탄소년단·프로미스나인·아이브·도비)으로 표시. */
+  showGroup?: boolean;
 }) {
   const icon =
     avatar?.group === "bts" && avatar.member ? (
@@ -53,8 +64,14 @@ export default function GroupAvatar({
 
   // 아바타 캐릭터(멤버) 이름. 도비 그룹은 "도비".
   const member = avatar?.member ?? (avatar?.group === "dobby" ? "도비" : undefined);
-  // 말풍선 상단 헤더 = "{역할}: {멤버}"(둘 다 있으면), 아니면 있는 쪽만.
-  const header = name && member ? `${name}: ${member}` : member ?? name;
+  // 말풍선 상단 헤더: showGroup이면 그룹 이름, 아니면 "{역할}: {멤버}"(둘 다 있으면)·있는 쪽만.
+  const header = showGroup
+    ? avatar
+      ? GROUP_NAME[avatar.group]
+      : undefined
+    : name && member
+    ? `${name}: ${member}`
+    : member ?? name;
 
   // 헤더도 소감도 없으면 그냥 아이콘(말풍선 X).
   if (!quip?.text && !header) return icon;

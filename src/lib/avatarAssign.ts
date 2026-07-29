@@ -19,8 +19,13 @@ export const ORCHESTRATOR_SLUG = "__orchestrator__";
 const BTS = Object.keys(BTS_AVATARS); // 7명
 const FROMIS = Object.keys(FROMIS_AVATARS); // 5명
 const IVE = Object.keys(IVE_AVATARS); // 6명
+const POOL: Record<AvatarGroup, string[]> = { bts: BTS, fromis: FROMIS, ive: IVE, dobby: [] };
 
-function hash(s: string): number {
+/** 전체 그룹 목록. 그룹 균형(decay) 계산·순회용. */
+export const AVATAR_GROUPS: AvatarGroup[] = ["bts", "fromis", "ive", "dobby"];
+
+/** FNV-1a 해시(결정적 tiebreak용). */
+export function avatarHash(s: string): number {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -29,9 +34,14 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-// 25:25:25:25 균등 primary 그룹(오더키로 결정적).
+/** 그룹 대표 아바타(멤버 #0). 에픽 대표·오케스트레이터 폴백용. */
+export function groupFirstMember(g: AvatarGroup): AssignedAvatar {
+  return POOL[g].length ? { group: g, member: POOL[g][0] } : { group: "dobby" };
+}
+
+// 25:25:25:25 균등 primary 그룹(오더키로 결정적). 그룹 균형 강제 시 forcedPrimary로 대체.
 function primaryGroup(epicKey: string): AvatarGroup {
-  const r = hash(epicKey) % 100;
+  const r = avatarHash(epicKey) % 100;
   return r < 25 ? "bts" : r < 50 ? "fromis" : r < 75 ? "ive" : "dobby";
 }
 
@@ -54,11 +64,12 @@ const FILL_ORDER: Record<AvatarGroup, AvatarGroup[]> = {
 export function assignOrderAvatars(
   epicKey: string,
   agentSlugs: string[],
-  existing?: Map<string, AssignedAvatar> | Record<string, AssignedAvatar>
+  existing?: Map<string, AssignedAvatar> | Record<string, AssignedAvatar>,
+  forcedPrimary?: AvatarGroup
 ): Map<string, AssignedAvatar> {
   const slugs = Array.from(new Set(agentSlugs.filter((s) => s && s !== "-"))).sort();
-  const order = FILL_ORDER[primaryGroup(epicKey)];
-  const pool: Record<AvatarGroup, string[]> = { bts: BTS, fromis: FROMIS, ive: IVE, dobby: [] };
+  const order = FILL_ORDER[forcedPrimary ?? primaryGroup(epicKey)];
+  const pool = POOL;
   const usedNames: Record<AvatarGroup, Set<string>> = {
     bts: new Set(),
     fromis: new Set(),

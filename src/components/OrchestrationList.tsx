@@ -11,12 +11,6 @@ import DobbyIcon from "@/components/DobbyIcon";
 import OrderLauncher from "@/components/OrderLauncher";
 import DateFoldedTable from "@/components/DateFoldedTable";
 import GroupAvatar from "@/components/GroupAvatar";
-import { assignOrderAvatars } from "@/lib/avatarAssign";
-
-/** 에픽별 대표 아바타 1개(에픽 키 해시로 결정적). */
-function epicAvatar(key: string) {
-  return assignOrderAvatars(key, [key]).get(key);
-}
 import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 
@@ -81,9 +75,9 @@ export default function OrchestrationList({
       title: "에픽",
       dataIndex: "epicKey",
       key: "epicKey",
-      render: (key: string) => (
+      render: (key: string, r: EpicSummary) => (
         <Space size={8}>
-          <GroupAvatar slug={key} avatar={epicAvatar(key)} size={28} />
+          <GroupAvatar slug={key} avatar={r.avatar ?? undefined} size={28} showGroup />
           <Text strong>{key}</Text>
           <a
             href={jiraUrl(key)}
