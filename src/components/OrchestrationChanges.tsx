@@ -212,6 +212,7 @@ export default function OrchestrationChanges({
         title={epic?.title ?? null}
         mode={epic?.orchestration?.mode ?? null}
         worktreeRemoved={epic?.worktreeRemoved}
+        resolved={epic?.resolved ?? false}
         hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
         extra={<QuipsControl epicKey={epicKey} />}
       />

@@ -12,6 +12,7 @@ export default function ArtifactPage({ params }: { params: { key: string } }) {
     <ArtifactTabView
       epicKey={params.key}
       title={epic?.title ?? null}
+      resolved={epic?.resolved ?? false}
       hasExplainer={!!epic?.explainerMd}
       shareUrl={epic?.artifactShareUrl ?? null}
       mode={epic?.orchestration?.mode ?? null}

@@ -58,6 +58,7 @@ export default function ArtifactTabView({
   shareUrl,
   mode,
   worktreeRemoved,
+  resolved = false,
   hasJira,
 }: {
   epicKey: string;
@@ -66,6 +67,7 @@ export default function ArtifactTabView({
   shareUrl: string | null;
   mode: string | null;
   worktreeRemoved: boolean;
+  resolved?: boolean;
   hasJira: boolean;
 }) {
   // window.location.origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
@@ -80,6 +82,7 @@ export default function ArtifactTabView({
         title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
+        resolved={resolved}
         hasJira={hasJira}
       />
 

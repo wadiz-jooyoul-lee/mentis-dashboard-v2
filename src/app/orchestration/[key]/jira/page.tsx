@@ -18,6 +18,7 @@ export default function JiraPage({ params }: { params: { key: string } }) {
     <JiraTabView
       epicKey={params.key}
       title={epic?.title ?? null}
+      resolved={epic?.resolved ?? false}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       canEnrich={canEnrich}

@@ -14,6 +14,7 @@ type Props = {
   title?: string | null;
   mode: string | null;
   worktreeRemoved: boolean;
+  resolved?: boolean;
   /** 구현 산출물이 있어 ③ 업데이트 생성이 가능한지(=작업이 진행돼 정리할 내용이 있음). */
   canEnrich: boolean;
   jiraIssueMd: string | null;
@@ -311,6 +312,7 @@ export default function JiraTabView(props: Props) {
         title={props.title ?? null}
         mode={props.mode}
         worktreeRemoved={props.worktreeRemoved}
+        resolved={props.resolved ?? false}
         hasJira
       />
       <Alert

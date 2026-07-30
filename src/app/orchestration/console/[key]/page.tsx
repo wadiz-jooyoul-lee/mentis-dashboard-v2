@@ -23,6 +23,7 @@ export default function OrderConsolePage({
     <ConsoleTabs
       orderKey={params.key}
       title={epic?.title ?? null}
+      resolved={epic?.resolved ?? false}
       agents={agents}
       height={480}
       mode={epic?.orchestration?.mode ?? null}

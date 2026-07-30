@@ -6,6 +6,7 @@ import { Breadcrumb, Typography, Space, Tag, Button, Tabs } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
+import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
 
@@ -50,6 +51,7 @@ export default function OrderHeader({
   title = null,
   mode = null,
   worktreeRemoved = false,
+  resolved = false,
   hasJira = false,
   extra,
 }: {
@@ -58,6 +60,8 @@ export default function OrderHeader({
   title?: string | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  /** 해결/종료 상태 — "해결 처리"/"해결 취소" 토글. */
+  resolved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
   hasJira?: boolean;
   extra?: React.ReactNode;
@@ -155,6 +159,7 @@ export default function OrderHeader({
             Jira에서 열기
           </Button>
           <PrLinkButton epicKey={epicKey} />
+          <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>
       <Tabs

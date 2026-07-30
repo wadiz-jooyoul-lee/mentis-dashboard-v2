@@ -425,6 +425,8 @@ export type EpicDetail = {
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
   worktreeRemoved: boolean;
+  /** 해결/종료 상태(해결 처리 버튼 토글용). 단계 해결·종료 또는 워크트리 삭제. */
+  resolved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
   analysisMd: string | null;
@@ -822,6 +824,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
+    resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),

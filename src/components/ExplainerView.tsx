@@ -127,6 +127,7 @@ export default function ExplainerView({
   job = null,
   mode = null,
   worktreeRemoved = false,
+  resolved = false,
   hasJira = false,
 }: {
   epicKey: string;
@@ -135,6 +136,7 @@ export default function ExplainerView({
   job?: ExplainJob | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  resolved?: boolean;
   hasJira?: boolean;
 }) {
   return (
@@ -144,6 +146,7 @@ export default function ExplainerView({
         title={title}
         mode={mode}
         worktreeRemoved={worktreeRemoved}
+        resolved={resolved}
         hasJira={hasJira}
       />
       {!md ? (
