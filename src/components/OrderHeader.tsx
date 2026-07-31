@@ -28,6 +28,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
   if (tab === "artifact") return `/orchestration/${key}/artifact`;
+  if (tab === "retro") return `/orchestration/${key}/retro`;
   return `/orchestration/${key}`;
 }
 
@@ -38,6 +39,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/verify")) return "verify";
   if (pathname.endsWith("/jira")) return "jira";
   if (pathname.endsWith("/artifact")) return "artifact";
+  if (pathname.endsWith("/retro")) return "retro";
   return "board";
 }
 
@@ -73,6 +75,7 @@ export default function OrderHeader({
     ...TABS,
     ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
     { key: "artifact", label: "아티팩트" },
+    { key: "retro", label: "회고" },
   ];
 
   return (

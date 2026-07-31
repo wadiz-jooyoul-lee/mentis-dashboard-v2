@@ -1,0 +1,187 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Typography, Empty, Button, Collapse, Badge, Space } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
+import FeedView from "@/components/FeedView";
+import MarkdownDoc from "@/components/MarkdownDoc";
+import OrderHeader from "@/components/OrderHeader";
+import type { FeedItem, JobState } from "@/lib/jobs";
+
+const { Paragraph } = Typography;
+
+type RetroJob = { state: JobState; feed: FeedItem[] };
+
+/** 이미 생성된 회고 아래에 그 생성 잡(=retro-{키})의 기록을 접어서 보여준다. */
+function JobRecord({ job }: { job: RetroJob }) {
+  const badge =
+    job.state === "running"
+      ? { status: "processing" as const, text: "생성 중" }
+      : job.state === "done"
+      ? { status: "success" as const, text: "생성 완료" }
+      : job.state === "failed"
+      ? { status: "error" as const, text: "실패" }
+      : { status: "default" as const, text: job.state };
+  return (
+    <Collapse
+      style={{ marginTop: 24 }}
+      items={[
+        {
+          key: "log",
+          label: (
+            <span>
+              회고 생성 기록{" "}
+              <Badge status={badge.status} text={badge.text} style={{ marginLeft: 8 }} />
+            </span>
+          ),
+          children: <FeedView feed={job.feed} height={360} alwaysBottom />,
+        },
+      ]}
+    />
+  );
+}
+
+/**
+ * /dobby-retro 실행 + 진행 표시(완료 시 새로고침). 최초 생성·재생성 공용.
+ * jobKey는 retro-{키}. regen이면 기존 retro.md를 다시 작성한다.
+ */
+function RetroRunner({
+  epicKey,
+  label,
+  regen = false,
+  small = false,
+}: {
+  epicKey: string;
+  label: string;
+  regen?: boolean;
+  small?: boolean;
+}) {
+  const [state, setState] = useState<"idle" | "running" | "done" | "failed">("idle");
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jobKey = `retro-${epicKey}`;
+
+  const poll = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/orders?key=${encodeURIComponent(jobKey)}`, { cache: "no-store" });
+      const s = await r.json();
+      if (s.state && s.state !== "none") {
+        setFeed(s.feed ?? []);
+        setState(s.state === "running" ? "running" : s.state === "done" ? "done" : "failed");
+      }
+    } catch {
+      /* 무시 */
+    }
+  }, [jobKey]);
+
+  useEffect(() => {
+    if (state === "running") {
+      timer.current = setInterval(poll, 2000);
+      return () => {
+        if (timer.current) clearInterval(timer.current);
+      };
+    }
+    if (state === "done") {
+      const t = setTimeout(() => window.location.reload(), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [state, poll]);
+
+  // 마운트 시 진행 중인 잡이 있으면 진행 표시로 복원(탭 이동 후 중복 요청 방지).
+  useEffect(() => {
+    poll();
+  }, [poll]);
+
+  const gen = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ retro: true, key: epicKey, regen }),
+      });
+      if (r.ok) {
+        setState("running");
+        poll();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (state === "idle") {
+    return (
+      <Button
+        type={small ? "default" : "primary"}
+        size={small ? "small" : "middle"}
+        icon={small ? <ReloadOutlined /> : undefined}
+        loading={busy}
+        onClick={gen}
+      >
+        {label}
+      </Button>
+    );
+  }
+  return (
+    <div>
+      <Paragraph type="secondary">
+        {state === "done"
+          ? "생성 완료 — 새로고침합니다…"
+          : state === "failed"
+          ? "생성이 중단되었습니다. 로그를 확인하세요."
+          : "회고 생성 중… (go-dobby dobby-retro 실행)"}
+      </Paragraph>
+      <FeedView feed={feed} height={360} />
+    </div>
+  );
+}
+
+export default function RetroView({
+  epicKey,
+  title = null,
+  md,
+  job = null,
+  mode = null,
+  worktreeRemoved = false,
+  resolved = false,
+  hasJira = false,
+}: {
+  epicKey: string;
+  title?: string | null;
+  md: string | null;
+  job?: RetroJob | null;
+  mode?: string | null;
+  worktreeRemoved?: boolean;
+  resolved?: boolean;
+  hasJira?: boolean;
+}) {
+  return (
+    <div>
+      <OrderHeader
+        epicKey={epicKey}
+        title={title}
+        mode={mode}
+        worktreeRemoved={worktreeRemoved}
+        resolved={resolved}
+        hasJira={hasJira}
+      />
+      {!md ? (
+        <Empty
+          style={{ marginTop: 24 }}
+          description="아직 회고가 없습니다. 이 오더에서 발생한 버그·디자인 불일치의 원인을 에이전트별로 정리하고 개선안을 제안합니다."
+        >
+          <RetroRunner epicKey={epicKey} label="회고 생성" />
+        </Empty>
+      ) : (
+        <>
+          <Space style={{ margin: "12px 0" }}>
+            <RetroRunner epicKey={epicKey} label="다시 생성" regen small />
+          </Space>
+          <MarkdownDoc md={md} />
+          {job && <JobRecord job={job} />}
+        </>
+      )}
+    </div>
+  );
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   startOrder,
   startExplain,
+  startRetro,
   startQuips,
   resumeOrder,
   stopOrder,
@@ -42,6 +43,13 @@ export async function POST(req: NextRequest) {
   // 구현 내용(explainer.md) 생성: /dobby-explain {키}
   if (body?.explain) {
     const r = startExplain(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 회고(retro.md) 생성: /dobby-retro {키} [regen]
+  if (body?.retro) {
+    const r = startRetro(String(body?.key ?? ""), !!body?.regen);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
