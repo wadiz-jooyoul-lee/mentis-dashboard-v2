@@ -88,10 +88,26 @@ function RetroRunner({
     }
   }, [state, poll]);
 
-  // 마운트 시 진행 중인 잡이 있으면 진행 표시로 복원(탭 이동 후 중복 요청 방지).
+  // 마운트 시 "진행 중"인 잡만 복원한다. 이미 끝난(done) 잡까지 복원하면
+  // done→reload 이펙트가 매 로드마다 재발동해 무한 새로고침이 된다.
   useEffect(() => {
-    poll();
-  }, [poll]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/orders?key=${encodeURIComponent(jobKey)}`, { cache: "no-store" });
+        const s = await r.json();
+        if (!cancelled && s.state === "running") {
+          setFeed(s.feed ?? []);
+          setState("running");
+        }
+      } catch {
+        /* 무시 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobKey]);
 
   const gen = async () => {
     setBusy(true);

@@ -74,11 +74,27 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
     }
   }, [state, poll]);
 
-  // 마운트 시 서버 잡 상태 확인 — 이미 진행 중이면 버튼 대신 진행 표시로 복원한다.
-  // (탭 이동 후 돌아오면 state가 idle로 리셋돼 버튼이 다시 눌리고 중복 요청되던 문제 방지.)
+  // 마운트 시 "진행 중"인 잡만 복원한다. 이미 끝난(done) 잡까지 복원하면
+  // done→reload 이펙트가 매 로드마다 재발동해 무한 새로고침이 된다.
+  // (탭 이동 후 돌아오면 state가 idle로 리셋돼 버튼이 다시 눌리고 중복 요청되던 문제도 함께 방지.)
   useEffect(() => {
-    poll();
-  }, [poll]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/orders?key=${encodeURIComponent(jobKey)}`, { cache: "no-store" });
+        const s = await r.json();
+        if (!cancelled && s.state === "running") {
+          setFeed(s.feed ?? []);
+          setState("running");
+        }
+      } catch {
+        /* 무시 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobKey]);
 
   const gen = async () => {
     setBusy(true);
