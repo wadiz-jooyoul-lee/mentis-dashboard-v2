@@ -248,12 +248,14 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
   const stalled = !!o?.agents.some(
     (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a)
   );
-  // 대표 아바타: 핀된 오케스트레이터 → 최빈 그룹 대표 → (미핀) 해시 대표.
+  // 대표 아바타: 핀된 오케스트레이터 → 최빈 그룹 대표 → (미핀) 균형 배정 대표.
+  // 미핀 폴백도 epicAvatars가 실제로 핀할 그룹(pickBalancedGroup)과 같은 규칙을 써야
+  // 핀 전/후 대표가 일치한다. (해시 primaryGroup을 쓰면 핀 순간 BTS→도비처럼 바뀜)
   const pinned = readPinnedAvatars(orderDir(key));
   const domG = dominantGroup(pinned);
   const avatar =
     pinned[ORCHESTRATOR_SLUG] ??
-    (domG ? groupFirstMember(domG) : assignOrderAvatars(key, [key]).get(key) ?? null);
+    (domG ? groupFirstMember(domG) : groupFirstMember(pickBalancedGroup(key)));
   return {
     epicKey: key,
     mode: o?.mode ?? null,
