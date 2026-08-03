@@ -56,6 +56,7 @@ export default function ArtifactTabView({
   title = null,
   hasExplainer,
   shareUrl,
+  lanHost = null,
   mode,
   worktreeRemoved,
   resolved = false,
@@ -65,14 +66,22 @@ export default function ArtifactTabView({
   title?: string | null;
   hasExplainer: boolean;
   shareUrl: string | null;
+  /** 서버가 계산한 LAN IPv4. 있으면 localhost 대신 이 IP로 링크를 만든다(타 기기에서 열 수 있게). */
+  lanHost?: string | null;
   mode: string | null;
   worktreeRemoved: boolean;
   resolved?: boolean;
   hasJira: boolean;
 }) {
-  // window.location.origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
+  // origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
+  // localhost 접속이어도 서버가 준 LAN IP가 있으면 그 IP로 바꿔(프로토콜·포트는 유지) 링크를 노출한다.
   const [origin, setOrigin] = useState<string>("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    const loc = window.location;
+    const host = lanHost || loc.hostname;
+    const port = loc.port ? `:${loc.port}` : "";
+    setOrigin(`${loc.protocol}//${host}${port}`);
+  }, [lanHost]);
   const localUrl = origin ? `${origin}/api/orders/artifact-html?key=${encodeURIComponent(epicKey)}` : "";
 
   return (

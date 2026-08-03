@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getEpic } from "@/lib/orchestration";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
+import { lanIpv4 } from "@/lib/lanHost";
 import ArtifactTabView from "@/components/ArtifactTabView";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default function ArtifactPage({ params }: { params: { key: string } }) {
       resolved={epic?.resolved ?? false}
       hasExplainer={!!epic?.explainerMd}
       shareUrl={epic?.artifactShareUrl ?? null}
+      lanHost={lanIpv4()}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
