@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   startOrder,
   startExplain,
+  startRetro,
   startQuips,
   resumeOrder,
   stopOrder,
@@ -22,7 +23,7 @@ import {
   startResolve,
   JOB_ID_RE,
 } from "@/lib/jobs";
-import { saveJiraEnrichDraft, prTargets } from "@/lib/orchestration";
+import { saveJiraEnrichDraft, prTargets, readOrderSession } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
@@ -42,6 +43,13 @@ export async function POST(req: NextRequest) {
   // 구현 내용(explainer.md) 생성: /dobby-explain {키}
   if (body?.explain) {
     const r = startExplain(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 회고(retro.md) 생성: /dobby-retro {키} [regen]
+  if (body?.retro) {
+    const r = startRetro(String(body?.key ?? ""), !!body?.regen);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
@@ -188,6 +196,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
     return NextResponse.json({ targets: prTargets(prKey) });
+  }
+
+  // 세션 이어가기: ?session={오더키} → { sessionId, cwd } (status.md ## 세션)
+  const sessionKey = (sp.get("session") ?? "").trim();
+  if (sessionKey) {
+    if (!ORDER_KEY_RE.test(sessionKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    return NextResponse.json(readOrderSession(sessionKey));
   }
 
   const key = (sp.get("key") ?? "").trim();

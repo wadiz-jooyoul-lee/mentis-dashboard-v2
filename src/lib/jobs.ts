@@ -218,6 +218,19 @@ export function startExplain(key: string): { ok: boolean; reason?: string; jobId
   return { ok: true, jobId };
 }
 
+/** 회고(retro.md) 생성: `/dobby-retro {키} [regen]`를 백그라운드로 실행. 잡 id는 `retro-{키}`. */
+export function startRetro(
+  key: string,
+  regen = false
+): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `retro-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  spawnClaude(jobId, ["-p", `/dobby-retro ${k}${regen ? " regen" : ""}`], false);
+  return { ok: true, jobId };
+}
+
 /** 잡 run.log의 마지막 result 텍스트(실패 원인 표시용). 없으면 null. */
 export function jobResultText(key: string): string | null {
   try {

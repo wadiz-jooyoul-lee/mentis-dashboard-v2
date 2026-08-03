@@ -1,24 +1,24 @@
-import { notFound } from "next/navigation";
 import { getEpic } from "@/lib/orchestration";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
-import { lanIpv4 } from "@/lib/lanHost";
-import ArtifactTabView from "@/components/ArtifactTabView";
+import { getJobStatus } from "@/lib/jobs";
+import { notFound } from "next/navigation";
+import RetroView from "@/components/RetroView";
 
 export const dynamic = "force-dynamic";
 
-export default function ArtifactPage({ params }: { params: { key: string } }) {
+export default function RetroPage({ params }: { params: { key: string } }) {
   if (!ORDER_KEY_RE.test(params.key)) notFound();
   const epic = getEpic(params.key);
+  const job = getJobStatus(`retro-${params.key}`);
   return (
-    <ArtifactTabView
+    <RetroView
       epicKey={params.key}
       title={epic?.title ?? null}
-      resolved={epic?.resolved ?? false}
-      hasExplainer={!!epic?.explainerMd}
-      shareUrl={epic?.artifactShareUrl ?? null}
-      lanHost={lanIpv4()}
+      md={epic?.retroMd ?? null}
+      job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
+      resolved={epic?.resolved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
     />
   );

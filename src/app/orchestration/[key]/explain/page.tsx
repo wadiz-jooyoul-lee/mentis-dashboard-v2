@@ -14,6 +14,7 @@ export default function ExplainPage({ params }: { params: { key: string } }) {
     <ExplainerView
       epicKey={params.key}
       title={epic?.title ?? null}
+      resolved={epic?.resolved ?? false}
       md={epic?.explainerMd ?? null}
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}

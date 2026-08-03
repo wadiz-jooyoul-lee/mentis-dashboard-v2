@@ -26,7 +26,7 @@ import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import type { QuipsFile, Quip } from "@/lib/quips";
-import { assignOrderAvatars, type AssignedAvatar } from "@/lib/avatarAssign";
+import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
 import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
@@ -50,14 +50,18 @@ function minutesSince(v: string | null | undefined): number | null {
 
 // 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·완료 제외)
 const ACTIVE_STATES = ["분석", "구현", "리뷰"];
-const STALE_MIN = 15;
+const STALE_MIN = 30;
+/** 정체 판정 기준 시각 = 마지막 상태 변경(갱신). 없으면 착수로 폴백. */
+function staleBase(a: AgentRow): string | null {
+  return hasTimeOfDay(a.updatedAt) ? a.updatedAt : a.startedAt;
+}
 /**
- * 정체 의심 = 활성 상태 + "작업 시작(착수) 시각"으로부터 STALE_MIN분 이상 경과.
- * 착수 시각이 없거나 날짜만이면(시:분 없음) 경과를 못 재므로 판정하지 않는다(오탐 방지).
+ * 정체 의심 = 활성 상태 + "마지막 상태 변경(갱신) 시각"으로부터 STALE_MIN분 이상 경과.
+ * 시각이 없거나 날짜만이면(시:분 없음) 경과를 못 재므로 판정하지 않는다(오탐 방지).
  */
 function isStale(a: AgentRow): boolean {
   if (!ACTIVE_STATES.includes(a.state)) return false;
-  const m = minutesSince(a.startedAt);
+  const m = minutesSince(staleBase(a));
   return m != null && m >= STALE_MIN;
 }
 
@@ -168,7 +172,7 @@ function AgentCard({
     >
       <Space direction="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <GroupAvatar slug={a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
+          <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
             <Tooltip title={a.desc || undefined}>
               <Tag
@@ -204,7 +208,7 @@ function AgentCard({
         </Space>
         {stale && (
           <Tag color="error" icon={<WarningOutlined />}>
-            정체 의심 (착수 후 {minutesSince(a.startedAt)}분 경과)
+            정체 의심 (마지막 변경 후 {minutesSince(staleBase(a))}분 경과)
           </Tag>
         )}
         {clickable && (
@@ -233,7 +237,15 @@ export default function OrchestrationBoard({
   const o = epic?.orchestration ?? null;
 
   // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
-  const avatarMap = assignOrderAvatars(epicKey, (o?.agents ?? []).map((a) => a.agent));
+  // 핀 고정 아바타(서버 avatars.json). 에이전트가 추가돼도 기존 담당은 안 바뀐다.
+  const avatarMap = new Map(Object.entries(epic?.avatars ?? {}));
+
+  // 오케스트레이터(오더 지휘 메인 세션) 아바타 + 브리핑 소감.
+  const orchAvatar = epic?.avatars?.[ORCHESTRATOR_SLUG];
+  const orchQuip = quips?.board?.[ORCHESTRATOR_SLUG] ?? null;
+  const orchestratorAvatar = (size: number) => (
+    <GroupAvatar slug={ORCHESTRATOR_SLUG} name="오케스트레이터" avatar={orchAvatar} quip={orchQuip} size={size} />
+  );
 
   // slug → 에이전트 표시 이름. **상태표(orchestration.md '이름')가 실제(카드에 뜨는) 이름**이며 최우선.
   // 계약서만 있는 경우엔 계약 헤딩("계약 — {슬러그} (역할)")에서 접두 "계약 —"·접미 "계약"을 떼어 fallback.
@@ -269,6 +281,7 @@ export default function OrchestrationBoard({
       title={epic?.title ?? null}
       mode={o?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved}
+      resolved={epic?.resolved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
       extra={<QuipsControl epicKey={epicKey} />}
     />
@@ -348,10 +361,11 @@ export default function OrchestrationBoard({
         <Alert
           type="warning"
           showIcon
+          icon={orchestratorAvatar(24)}
           style={{ marginBottom: 16 }}
           message={`정체 의심 ${staleAgents.length}건`}
           description={staleAgents
-            .map((a) => `${a.agent}(${a.issue}) 착수 후 ${minutesSince(a.startedAt)}분`)
+            .map((a) => `${a.agent}(${a.issue}) 마지막 변경 후 ${minutesSince(staleBase(a))}분`)
             .join(" · ")}
         />
       )}
@@ -425,7 +439,12 @@ export default function OrchestrationBoard({
           items={[
             {
               key: "event-log",
-              label: "이벤트 로그",
+              label: (
+                <Space size={8}>
+                  {orchestratorAvatar(22)}
+                  오케스트레이터 브리핑
+                </Space>
+              ),
               children: (
                 <>
                   <Timeline items={o.events.slice(0, 5).map(eventItem)} />
@@ -478,6 +497,7 @@ export default function OrchestrationBoard({
                 <Space size={8} align="center">
                   <GroupAvatar
                     slug={g.agent}
+                    name={nameBySlug.get(g.agent) ?? g.agent}
                     avatar={avatarMap.get(g.agent)}
                     state={o?.agents.find((x) => x.agent === g.agent)?.state}
                     size={24}

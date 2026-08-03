@@ -6,6 +6,8 @@ import { Breadcrumb, Typography, Space, Tag, Button, Tabs } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
+import ResumeButton from "@/components/ResumeButton";
+import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
 
@@ -27,6 +29,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
   if (tab === "artifact") return `/orchestration/${key}/artifact`;
+  if (tab === "retro") return `/orchestration/${key}/retro`;
   return `/orchestration/${key}`;
 }
 
@@ -37,6 +40,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/verify")) return "verify";
   if (pathname.endsWith("/jira")) return "jira";
   if (pathname.endsWith("/artifact")) return "artifact";
+  if (pathname.endsWith("/retro")) return "retro";
   return "board";
 }
 
@@ -50,6 +54,7 @@ export default function OrderHeader({
   title = null,
   mode = null,
   worktreeRemoved = false,
+  resolved = false,
   hasJira = false,
   extra,
 }: {
@@ -58,6 +63,8 @@ export default function OrderHeader({
   title?: string | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  /** 해결/종료 상태 — "해결 처리"/"해결 취소" 토글. */
+  resolved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
   hasJira?: boolean;
   extra?: React.ReactNode;
@@ -69,6 +76,7 @@ export default function OrderHeader({
     ...TABS,
     ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
     { key: "artifact", label: "아티팩트" },
+    { key: "retro", label: "회고" },
   ];
 
   return (
@@ -155,6 +163,8 @@ export default function OrderHeader({
             Jira에서 열기
           </Button>
           <PrLinkButton epicKey={epicKey} />
+          <ResumeButton epicKey={epicKey} />
+          <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>
       <Tabs

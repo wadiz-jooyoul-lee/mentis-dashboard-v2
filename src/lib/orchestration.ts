@@ -13,6 +13,15 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
+import {
+  assignOrderAvatars,
+  type AssignedAvatar,
+  type AvatarGroup,
+  ORCHESTRATOR_SLUG,
+  AVATAR_GROUPS,
+  avatarHash,
+  groupFirstMember,
+} from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 
@@ -32,6 +41,22 @@ function readFileSafe(p: string): string | null {
 /** 오더 폴더 경로. */
 function orderDir(key: string): string {
   return path.join(getMetaDir(), key);
+}
+
+/**
+ * status.md `## 세션`에서 오케스트레이터 세션 ID·작업 경로(cwd)를 뽑는다.
+ * 사용자가 터미널에서 `cd <cwd> && claude --resume <세션ID>`로 그 세션을 이어가기 위함.
+ * 둘 다 없을 수 있다(방어적). 세션 섹션이 없으면 문서 전체에서 찾는다.
+ */
+export function readOrderSession(key: string): { sessionId: string | null; cwd: string | null } {
+  const md = readFileSafe(path.join(orderDir(key), "status.md"));
+  if (!md) return { sessionId: null, cwd: null };
+  const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
+  const sessionId =
+    sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
+  const cwdRaw = sec.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1] ?? null;
+  const cwd = cwdRaw ? cwdRaw.trim().replace(/^`|`$/g, "").trim() || null : null;
+  return { sessionId, cwd };
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
@@ -54,20 +79,19 @@ function epicKeys(): string[] {
     .map((d) => d.name);
 }
 
-/** work-type: produce.md/deliverables → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
+/** work-type: produce.md → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
-  // 코드 구현 증거(implementation.md)를 deliverables보다 먼저 본다.
-  // 개발 오더도 감사·분석 에이전트가 deliverables/에 보고서를 남기므로,
-  // deliverables를 먼저 보면 코드 오더가 비개발로 오분류된다(FE-10884 사례).
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
-  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
+  // deliverables/는 비소스 신호로 쓰지 않는다 — 개발 오더도 감사·분석 에이전트가
+  // deliverables/에 분석·보고서를 남기므로(FE1-1406·FE-10884), 있다는 것만으로
+  // 비개발로 보면 코드 오더가 오분류된다. 비소스 판정은 produce.md(dobby-produce)만.
   if (statusMd) {
     const wt = parseOrderStatus(statusMd, key).workTypeHint;
     if (wt) return wt;
   }
-  // 명시적으로 비소스(produce.md·deliverables·힌트)라는 근거가 없으면 개발(code)로 본다.
+  // 명시적 비소스 근거(produce.md·힌트)가 없으면 개발(code)로 본다.
   // → 분석 초기라 산출물이 아직 없는 오더도 개발 카드/필터에 잡힌다(미분류로 사라지지 않음).
   return "code";
 }
@@ -197,6 +221,8 @@ function worktreesGone(worktrees: { path: string }[]): boolean {
 export type EpicSummary = {
   epicKey: string;
   mode: string | null;
+  /** 에픽 대표 아바타(핀된 오케스트레이터/최빈 그룹 기준). 리스트 "에픽" 컬럼 앞 표시용. */
+  avatar: AssignedAvatar | null;
   counts: Counts;
   agentCount: number;
   latestEventTime: string | null;
@@ -216,12 +242,14 @@ export type EpicSummary = {
   phaseLabel: string;
 };
 
-// "일하는 중"인 상태 + 착수 후 STALE_MIN분 이상 경과면 정체(대시보드 보드와 동일 기준).
+// "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
 const CARD_ACTIVE_STATES = ["분석", "구현", "리뷰"];
-const CARD_STALE_MIN = 15;
-function agentStalled(startedAt: string): boolean {
-  if (!/\d{1,2}:\d{2}/.test(startedAt)) return false; // 시:분 없으면 경과 못 잼 → 판정 안 함
-  const d = new Date(startedAt.replace(" ", "T"));
+const CARD_STALE_MIN = 30;
+function agentStalled(a: { updatedAt: string; startedAt: string }): boolean {
+  // 기준 = 마지막 상태 변경(갱신). 시:분 없으면 착수로 폴백, 그것도 없으면 판정 안 함(오탐 방지).
+  const base = /\d{1,2}:\d{2}/.test(a.updatedAt) ? a.updatedAt : a.startedAt;
+  if (!/\d{1,2}:\d{2}/.test(base)) return false;
+  const d = new Date(base.replace(" ", "T"));
   if (isNaN(d.getTime())) return false;
   return Math.floor((Date.now() - d.getTime()) / 60000) >= CARD_STALE_MIN;
 }
@@ -233,11 +261,20 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     : [];
   const st = statusMd ? parseOrderStatus(statusMd, key) : null;
   const stalled = !!o?.agents.some(
-    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a.startedAt)
+    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a)
   );
+  // 대표 아바타: 핀된 오케스트레이터 → 최빈 그룹 대표 → (미핀) 균형 배정 대표.
+  // 미핀 폴백도 epicAvatars가 실제로 핀할 그룹(pickBalancedGroup)과 같은 규칙을 써야
+  // 핀 전/후 대표가 일치한다. (해시 primaryGroup을 쓰면 핀 순간 BTS→도비처럼 바뀜)
+  const pinned = readPinnedAvatars(orderDir(key));
+  const domG = dominantGroup(pinned);
+  const avatar =
+    pinned[ORCHESTRATOR_SLUG] ??
+    (domG ? groupFirstMember(domG) : groupFirstMember(pickBalancedGroup(key)));
   return {
     epicKey: key,
     mode: o?.mode ?? null,
+    avatar,
     counts,
     agentCount: o?.agents.length ?? 0,
     latestEventTime: o?.events[0]?.time ?? null,
@@ -271,8 +308,21 @@ export function agentSigs(key: string): Record<string, string> {
   const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
   const o = orchestrationOf(key, statusMd);
   const out: Record<string, string> = {};
-  if (o) for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+  if (o) {
+    for (const a of o.agents) out[a.agent] = `${a.state}#${a.round}`;
+    // 오케스트레이터 브리핑 서명 = 전체 상태 "모양"(상태 목록 정렬 + 최대 라운드).
+    // 에이전트 추가·상태 전이·라운드 증가 때마다 바뀜 → avatar-quips가 브리핑 재생성.
+    // ⛔ avatar-quips 스킬도 동일 공식으로 sig를 계산해야 매칭됨(SKILL 참조).
+    out[ORCHESTRATOR_SLUG] = orchestratorSig(o);
+  }
   return out;
+}
+
+/** 오케스트레이터 브리핑 재생성 서명. 상태표만 근거(본문 X). avatar-quips와 공식 일치 필수. */
+export function orchestratorSig(o: Orchestration): string {
+  const states = o.agents.map((a) => a.state).sort().join("|");
+  const maxRound = o.agents.reduce((m, a) => Math.max(m, Number(a.round) || 0), 0);
+  return `${states}#r${maxRound}`;
 }
 
 export type Contract = { slug: string; role: string; raw: string };
@@ -385,11 +435,15 @@ export type EpicDetail = {
   contracts: Contract[];
   reviews: ReviewFile[];
   agentWorks: AgentWork[];
+  /** 슬러그별 핀 고정 아바타(avatars.json). 에이전트 추가돼도 기존은 불변. */
+  avatars: Record<string, AssignedAvatar>;
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
   worktreeRemoved: boolean;
+  /** 해결/종료 상태(해결 처리 버튼 토글용). 단계 해결·종료 또는 워크트리 삭제. */
+  resolved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
   analysisMd: string | null;
@@ -408,6 +462,7 @@ export type EpicDetail = {
   hasJob: boolean;
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
+  retroMd: string | null;
   /** 아티팩트 탭 — dobby-share가 게시한 claude.ai 공개 아티팩트 URL(artifact-share.md에서 추출). 없으면 null. */
   artifactShareUrl: string | null;
   /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
@@ -603,6 +658,121 @@ export function prTargets(key: string): PrTarget[] {
   return out;
 }
 
+function readPinnedAvatars(dir: string): Record<string, AssignedAvatar> {
+  const raw = readFileSafe(path.join(dir, "avatars.json"));
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? (o as Record<string, AssignedAvatar>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function sameAvatars(a: Record<string, AssignedAvatar>, b: Record<string, AssignedAvatar>): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => b[k] && a[k].group === b[k].group && a[k].member === b[k].member);
+}
+
+/**
+ * status.md `## 세션`의 오케스트레이터 세션 ID를 가리키는 에이전트 슬러그를 찾는다.
+ * = 오케스트레이터가 인라인(light/K=1 인라인)으로 직접 구현한 에이전트. 없으면 null.
+ * (인라인 에이전트의 agent-logs 경로는 메인 세션 전사(…/{세션ID}.jsonl)를 가리킨다.)
+ */
+function inlineOrchestratorSlug(dir: string, statusMd: string | null): string | null {
+  const sid = statusMd?.match(/세션 ID[^\n]*?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1];
+  if (!sid) return null;
+  const raw = readFileSafe(path.join(dir, "agent-logs.json"));
+  if (!raw) return null;
+  let logs: Record<string, unknown>;
+  try {
+    logs = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  for (const [slug, v] of Object.entries(logs)) {
+    const paths = typeof v === "string" ? [v] : Object.values(v ?? {});
+    if (paths.some((p) => typeof p === "string" && p.includes(sid))) return slug;
+  }
+  return null;
+}
+
+/** 핀된 아바타 맵에서 이 에픽의 대표 그룹(에이전트 최빈 그룹). 오케스트레이터 슬롯은 제외. */
+function dominantGroup(avatars: Record<string, AssignedAvatar>): AvatarGroup | null {
+  const tally: Partial<Record<AvatarGroup, number>> = {};
+  for (const [k, v] of Object.entries(avatars)) {
+    if (k === ORCHESTRATOR_SLUG || !v) continue;
+    tally[v.group] = (tally[v.group] ?? 0) + 1;
+  }
+  const entries = Object.entries(tally) as [AvatarGroup, number][];
+  if (!entries.length) return null;
+  return entries.sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/** 이미 핀된 다른 에픽들의 대표 그룹 사용 횟수. 그룹 균형(decay) 계산용. */
+function groupUsageCounts(excludeKey: string): Record<AvatarGroup, number> {
+  const counts: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, dobby: 0 };
+  for (const k of epicKeys()) {
+    if (k === excludeKey) continue;
+    const g = dominantGroup(readPinnedAvatars(orderDir(k)));
+    if (g) counts[g] += 1;
+  }
+  return counts;
+}
+
+/**
+ * 그룹 균형(decay): 지금까지 **가장 적게 쓰인 그룹**을 고른다(동률은 에픽 키 해시로 결정적).
+ * → 이미 많이 나온 그룹은 가중치가 떨어지고, 비노출 그룹의 출현율이 올라간다.
+ */
+function pickBalancedGroup(epicKey: string): AvatarGroup {
+  const counts = groupUsageCounts(epicKey);
+  const min = Math.min(...AVATAR_GROUPS.map((g) => counts[g]));
+  const cands = AVATAR_GROUPS.filter((g) => counts[g] === min);
+  return cands[avatarHash(epicKey) % cands.length];
+}
+
+/**
+ * 에픽 아바타를 `avatars.json`에 1회 핀(고정)하고 반환한다.
+ * - **최초 핀**: 그룹 균형(decay)으로 primary 그룹을 정해(비노출 그룹 우선) 배정.
+ * - 실제 에이전트 슬러그는 그룹 응집으로 배정·고정(추가돼도 기존 불변).
+ * - 오케스트레이터(`__orchestrator__`)는 슬롯을 소비하지 않고 파생: 인라인 구현이면 그
+ *   에이전트와 **같은 아바타 공유**, 아니면 **에픽 대표 그룹 멤버 #0**(팀과 같은 그룹).
+ */
+function epicAvatars(
+  epicKey: string,
+  dir: string,
+  slugs: string[],
+  inlineSlug: string | null
+): Record<string, AssignedAvatar> {
+  const existing = readPinnedAvatars(dir);
+  const realSlugs = slugs.filter((s) => s && s !== "-");
+  // 실제 에이전트가 아직 없고 핀도 없으면: 핀하지 않고 임시 대표만 계산해 반환한다.
+  // (여기서 오케스트레이터를 먼저 핀해버리면 firstPin이 소진돼, 나중에 생긴 에이전트는
+  //  해시 그룹(primaryGroup)으로 배정되고 대표가 그 그룹으로 재파생돼 뒤집힌다 —
+  //  균형그룹→에이전트그룹 플리커(FE1-1421 류). 에이전트가 생긴 뒤 한 번에 핀한다.)
+  if (Object.keys(existing).length === 0 && realSlugs.length === 0) {
+    return { [ORCHESTRATOR_SLUG]: groupFirstMember(pickBalancedGroup(epicKey)) };
+  }
+  const firstPin = Object.keys(existing).length === 0;
+  const forced = firstPin ? pickBalancedGroup(epicKey) : undefined;
+  const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing, forced));
+  // 오케스트레이터 아바타 파생(핀 슬롯 미소비). 대표는 이 에픽 실제 그룹 기준으로 팀과 일치시킨다.
+  const epicGroup = dominantGroup(obj) ?? forced ?? "dobby";
+  const rep = groupFirstMember(epicGroup);
+  const orch = inlineSlug && obj[inlineSlug] ? obj[inlineSlug] : rep;
+  if (orch) obj[ORCHESTRATOR_SLUG] = orch;
+  // 배정이 실제로 바뀌었을 때만 저장(읽기 경로의 불필요한 쓰기 방지).
+  if (!sameAvatars(obj, existing)) {
+    try {
+      fs.writeFileSync(path.join(dir, "avatars.json"), JSON.stringify(obj, null, 2));
+    } catch {
+      /* 저장 실패는 무시 — 다음 로드에서 재시도 */
+    }
+  }
+  return obj;
+}
+
 export function getEpic(epicKey: string): EpicDetail | null {
   const dir = orderDir(epicKey);
   if (!fs.existsSync(dir)) return null;
@@ -660,15 +830,27 @@ export function getEpic(epicKey: string): EpicDetail | null {
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
+  const avatars = epicAvatars(
+    epicKey,
+    dir,
+    [
+      ...orchestration.agents.map((a) => a.agent),
+      ...contracts.map((c) => c.slug),
+      ...agentWorks.map((w) => w.slug),
+    ],
+    inlineOrchestratorSlug(dir, statusMd)
+  );
   return {
     epicKey,
     orchestration,
     contracts,
     reviews,
     agentWorks,
+    avatars,
     workType: workTypeOf(epicKey, statusMd),
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
+    resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
@@ -683,6 +865,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
+    retroMd: readFileSafe(path.join(dir, "retro.md")),
     artifactShareUrl:
       (readFileSafe(path.join(dir, "artifact-share.md")) ?? "").match(
         /https?:\/\/[^\s)>\]]+/

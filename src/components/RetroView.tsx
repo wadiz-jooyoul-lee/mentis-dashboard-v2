@@ -1,18 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Typography, Empty, Button, Collapse, Badge } from "antd";
+import { Typography, Empty, Button, Collapse, Badge, Space } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import FeedView from "@/components/FeedView";
 import MarkdownDoc from "@/components/MarkdownDoc";
 import OrderHeader from "@/components/OrderHeader";
 import type { FeedItem, JobState } from "@/lib/jobs";
 
-const { Title, Paragraph } = Typography;
+const { Paragraph } = Typography;
 
-type ExplainJob = { state: JobState; feed: FeedItem[] };
+type RetroJob = { state: JobState; feed: FeedItem[] };
 
-/** 이미 생성된 구현 내용 아래에 그 생성 잡(=explain-{키})의 기록을 접어서 보여준다. */
-function JobRecord({ job }: { job: ExplainJob }) {
+/** 이미 생성된 회고 아래에 그 생성 잡(=retro-{키})의 기록을 접어서 보여준다. */
+function JobRecord({ job }: { job: RetroJob }) {
   const badge =
     job.state === "running"
       ? { status: "processing" as const, text: "생성 중" }
@@ -29,7 +30,7 @@ function JobRecord({ job }: { job: ExplainJob }) {
           key: "log",
           label: (
             <span>
-              구현 내용 생성 기록{" "}
+              회고 생성 기록{" "}
               <Badge status={badge.status} text={badge.text} style={{ marginLeft: 8 }} />
             </span>
           ),
@@ -40,13 +41,26 @@ function JobRecord({ job }: { job: ExplainJob }) {
   );
 }
 
-/** explainer.md가 없을 때: /dobby-explain 생성 실행 + 진행 표시(완료 시 새로고침). */
-function GenerateExplainer({ epicKey }: { epicKey: string }) {
+/**
+ * /dobby-retro 실행 + 진행 표시(완료 시 새로고침). 최초 생성·재생성 공용.
+ * jobKey는 retro-{키}. regen이면 기존 retro.md를 다시 작성한다.
+ */
+function RetroRunner({
+  epicKey,
+  label,
+  regen = false,
+  small = false,
+}: {
+  epicKey: string;
+  label: string;
+  regen?: boolean;
+  small?: boolean;
+}) {
   const [state, setState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const jobKey = `explain-${epicKey}`;
+  const jobKey = `retro-${epicKey}`;
 
   const poll = useCallback(async () => {
     try {
@@ -76,7 +90,6 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
 
   // 마운트 시 "진행 중"인 잡만 복원한다. 이미 끝난(done) 잡까지 복원하면
   // done→reload 이펙트가 매 로드마다 재발동해 무한 새로고침이 된다.
-  // (탭 이동 후 돌아오면 state가 idle로 리셋돼 버튼이 다시 눌리고 중복 요청되던 문제도 함께 방지.)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -102,7 +115,7 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
       const r = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ explain: true, key: epicKey }),
+        body: JSON.stringify({ retro: true, key: epicKey, regen }),
       });
       if (r.ok) {
         setState("running");
@@ -115,11 +128,15 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
 
   if (state === "idle") {
     return (
-      <Empty description="아직 구현 내용 문서가 없습니다. 구현 산출물로 생성할 수 있습니다.">
-        <Button type="primary" loading={busy} onClick={gen}>
-          구현 내용 생성
-        </Button>
-      </Empty>
+      <Button
+        type={small ? "default" : "primary"}
+        size={small ? "small" : "middle"}
+        icon={small ? <ReloadOutlined /> : undefined}
+        loading={busy}
+        onClick={gen}
+      >
+        {label}
+      </Button>
     );
   }
   return (
@@ -129,14 +146,14 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
           ? "생성 완료 — 새로고침합니다…"
           : state === "failed"
           ? "생성이 중단되었습니다. 로그를 확인하세요."
-          : "구현 내용 생성 중… (go-dobby dobby-explain 실행)"}
+          : "회고 생성 중… (go-dobby dobby-retro 실행)"}
       </Paragraph>
       <FeedView feed={feed} height={360} />
     </div>
   );
 }
 
-export default function ExplainerView({
+export default function RetroView({
   epicKey,
   title = null,
   md,
@@ -149,7 +166,7 @@ export default function ExplainerView({
   epicKey: string;
   title?: string | null;
   md: string | null;
-  job?: ExplainJob | null;
+  job?: RetroJob | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
   resolved?: boolean;
@@ -166,9 +183,17 @@ export default function ExplainerView({
         hasJira={hasJira}
       />
       {!md ? (
-        <GenerateExplainer epicKey={epicKey} />
+        <Empty
+          style={{ marginTop: 24 }}
+          description="아직 회고가 없습니다. 이 오더에서 발생한 버그·디자인 불일치의 원인을 에이전트별로 정리하고 개선안을 제안합니다."
+        >
+          <RetroRunner epicKey={epicKey} label="회고 생성" />
+        </Empty>
       ) : (
         <>
+          <Space style={{ margin: "12px 0" }}>
+            <RetroRunner epicKey={epicKey} label="다시 생성" regen small />
+          </Space>
           <MarkdownDoc md={md} />
           {job && <JobRecord job={job} />}
         </>

@@ -40,3 +40,4 @@ next-env.d.ts
 
 # oh-my-claudecode 로컬 상태
 /.omc
+/.next-*

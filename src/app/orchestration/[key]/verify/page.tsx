@@ -14,6 +14,7 @@ export default function VerifyPage({ params }: { params: { key: string } }) {
     <VerifyView
       epicKey={params.key}
       title={epic.title ?? null}
+      resolved={epic.resolved}
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved}
       hasJira={!!epic.jiraIssueMd || isJiraIssueKey(params.key)}
