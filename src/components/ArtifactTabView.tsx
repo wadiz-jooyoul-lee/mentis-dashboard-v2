@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Typography, Space, Button, Card, Tag, Alert, message } from "antd";
+import { Typography, Space, Button, Card, Tag, Alert, Collapse, message } from "antd";
 import { CopyOutlined, ExportOutlined } from "@ant-design/icons";
 import OrderHeader from "@/components/OrderHeader";
 
@@ -105,10 +105,22 @@ export default function ArtifactTabView({
               </Text>
               {localUrl && <LinkRow url={localUrl} />}
               {localUrl && (
-                <iframe
-                  title="구현 내용 미리보기"
-                  src={localUrl}
-                  style={{ width: "100%", height: 560, border: "1px solid #f0f0f0", borderRadius: 6 }}
+                <Collapse
+                  size="small"
+                  style={{ width: "100%" }}
+                  items={[
+                    {
+                      key: "preview",
+                      label: "미리보기",
+                      children: (
+                        <iframe
+                          title="구현 내용 미리보기"
+                          src={localUrl}
+                          style={{ width: "100%", height: 560, border: "none", borderRadius: 6 }}
+                        />
+                      ),
+                    },
+                  ]}
                 />
               )}
             </Space>
