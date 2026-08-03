@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Progress, Badge, Popover, Tabs, Tooltip } from "antd";
-import { LinkOutlined } from "@ant-design/icons";
+import { Breadcrumb, Tag, Typography, Space, Progress, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
+import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
@@ -54,6 +55,9 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
   return { text: "작업중", color: "processing" };
 }
 
+/** 작업상태 필터 값. "전체"는 필터 없음. */
+type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
+
 export default function OrchestrationList({
   epics,
   sourceDir,
@@ -67,8 +71,21 @@ export default function OrchestrationList({
 }) {
   const router = useRouter();
 
-  // 작업중(미해결)만 모아 상단에 노출한다. epics는 이미 lastActivity 내림차순(최근 활동순)이라 그 순서를 그대로 쓴다.
+  // 검색(에픽 키·제목) + 작업상태 필터. 이미 로드된 epics를 클라이언트에서 좁힌다.
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("전체");
+  const q = query.trim().toLowerCase();
+  const hasFilter = q !== "" || status !== "전체";
+  const filtered = epics.filter((r) => {
+    const matchQ =
+      !q || r.epicKey.toLowerCase().includes(q) || (r.title ?? "").toLowerCase().includes(q);
+    const matchS = status === "전체" || workStatus(r).text === status;
+    return matchQ && matchS;
+  });
+  // 검색·필터 결과는 "최상위 테이블에만" 반영한다. 필터가 없으면 원래대로 작업중(미해결)만.
+  // 하단 날짜별 전체 목록(epics)은 검색·필터의 영향을 받지 않는다.
   const active = epics.filter((r) => workStatus(r).text === "작업중");
+  const topItems = hasFilter ? filtered : active;
 
   const columns = [
     {
@@ -224,18 +241,42 @@ export default function OrchestrationList({
             label: "오더 목록",
             children: (
               <>
-                {/* 상단: 작업중(미해결)만 모아서 — 아래 날짜별과 동일한 폴드(단일 그룹, 기본 펼침) */}
+                {/* 검색(에픽 키·제목) + 작업상태 필터 */}
+                <Space style={{ marginBottom: 16 }} wrap>
+                  <Input
+                    allowClear
+                    prefix={<SearchOutlined />}
+                    placeholder="에픽 키 · 제목 검색"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    style={{ width: 260 }}
+                  />
+                  <Select<StatusFilter>
+                    value={status}
+                    onChange={(v) => setStatus(v)}
+                    style={{ width: 140 }}
+                    options={[
+                      { value: "전체", label: "전체 상태" },
+                      { value: "작업중", label: "작업중" },
+                      { value: "해결됨", label: "해결됨" },
+                      { value: "종료", label: "종료" },
+                    ]}
+                  />
+                  {hasFilter && <Text type="secondary">{filtered.length}건</Text>}
+                </Space>
+
+                {/* 상단: 검색·필터 결과만 반영(필터 없으면 작업중). 하단 전체 목록은 건드리지 않는다. */}
                 <DateFoldedTable<EpicSummary>
-                  items={active}
+                  items={topItems}
                   dateOf={() => null}
-                  groupLabel="작업중"
+                  groupLabel={hasFilter ? "검색 결과" : "작업중"}
                   columns={columns}
                   rowKey="epicKey"
                   onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
-                  emptyText="작업중인 오더가 없습니다"
+                  emptyText={hasFilter ? "조건에 맞는 오더가 없습니다" : "작업중인 오더가 없습니다"}
                 />
 
-                {/* 하단: 현재의 날짜별 목록(전체 — 작업중 포함) */}
+                {/* 하단: 날짜별 전체 목록 — 검색·필터의 영향을 받지 않는다. */}
                 <div style={{ marginTop: 24 }}>
                   <Text type="secondary">읽는 경로: {sourceDir}</Text>
                   <div style={{ marginTop: 16 }}>
