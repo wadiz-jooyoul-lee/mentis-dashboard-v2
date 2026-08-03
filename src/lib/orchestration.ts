@@ -746,6 +746,14 @@ function epicAvatars(
   inlineSlug: string | null
 ): Record<string, AssignedAvatar> {
   const existing = readPinnedAvatars(dir);
+  const realSlugs = slugs.filter((s) => s && s !== "-");
+  // 실제 에이전트가 아직 없고 핀도 없으면: 핀하지 않고 임시 대표만 계산해 반환한다.
+  // (여기서 오케스트레이터를 먼저 핀해버리면 firstPin이 소진돼, 나중에 생긴 에이전트는
+  //  해시 그룹(primaryGroup)으로 배정되고 대표가 그 그룹으로 재파생돼 뒤집힌다 —
+  //  균형그룹→에이전트그룹 플리커(FE1-1421 류). 에이전트가 생긴 뒤 한 번에 핀한다.)
+  if (Object.keys(existing).length === 0 && realSlugs.length === 0) {
+    return { [ORCHESTRATOR_SLUG]: groupFirstMember(pickBalancedGroup(epicKey)) };
+  }
   const firstPin = Object.keys(existing).length === 0;
   const forced = firstPin ? pickBalancedGroup(epicKey) : undefined;
   const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing, forced));
