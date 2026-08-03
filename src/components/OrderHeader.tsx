@@ -6,6 +6,7 @@ import { Breadcrumb, Typography, Space, Tag, Button, Tabs } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
+import ResumeButton from "@/components/ResumeButton";
 import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
@@ -162,6 +163,7 @@ export default function OrderHeader({
             Jira에서 열기
           </Button>
           <PrLinkButton epicKey={epicKey} />
+          <ResumeButton epicKey={epicKey} />
           <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>

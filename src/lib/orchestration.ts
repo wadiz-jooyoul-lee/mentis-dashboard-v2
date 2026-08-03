@@ -43,6 +43,22 @@ function orderDir(key: string): string {
   return path.join(getMetaDir(), key);
 }
 
+/**
+ * status.md `## 세션`에서 오케스트레이터 세션 ID·작업 경로(cwd)를 뽑는다.
+ * 사용자가 터미널에서 `cd <cwd> && claude --resume <세션ID>`로 그 세션을 이어가기 위함.
+ * 둘 다 없을 수 있다(방어적). 세션 섹션이 없으면 문서 전체에서 찾는다.
+ */
+export function readOrderSession(key: string): { sessionId: string | null; cwd: string | null } {
+  const md = readFileSafe(path.join(orderDir(key), "status.md"));
+  if (!md) return { sessionId: null, cwd: null };
+  const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
+  const sessionId =
+    sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
+  const cwdRaw = sec.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1] ?? null;
+  const cwd = cwdRaw ? cwdRaw.trim().replace(/^`|`$/g, "").trim() || null : null;
+  return { sessionId, cwd };
+}
+
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
 function epicKeys(): string[] {
   const root = getMetaDir();

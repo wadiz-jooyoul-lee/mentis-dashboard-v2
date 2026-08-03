@@ -23,7 +23,7 @@ import {
   startResolve,
   JOB_ID_RE,
 } from "@/lib/jobs";
-import { saveJiraEnrichDraft, prTargets } from "@/lib/orchestration";
+import { saveJiraEnrichDraft, prTargets, readOrderSession } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
@@ -196,6 +196,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
     return NextResponse.json({ targets: prTargets(prKey) });
+  }
+
+  // 세션 이어가기: ?session={오더키} → { sessionId, cwd } (status.md ## 세션)
+  const sessionKey = (sp.get("session") ?? "").trim();
+  if (sessionKey) {
+    if (!ORDER_KEY_RE.test(sessionKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    return NextResponse.json(readOrderSession(sessionKey));
   }
 
   const key = (sp.get("key") ?? "").trim();
