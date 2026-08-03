@@ -63,20 +63,19 @@ function epicKeys(): string[] {
     .map((d) => d.name);
 }
 
-/** work-type: produce.md/deliverables → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
+/** work-type: produce.md → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
   if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
-  // 코드 구현 증거(implementation.md)를 deliverables보다 먼저 본다.
-  // 개발 오더도 감사·분석 에이전트가 deliverables/에 보고서를 남기므로,
-  // deliverables를 먼저 보면 코드 오더가 비개발로 오분류된다(FE-10884 사례).
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
-  if (fs.existsSync(path.join(dir, "deliverables"))) return "nonsource";
+  // deliverables/는 비소스 신호로 쓰지 않는다 — 개발 오더도 감사·분석 에이전트가
+  // deliverables/에 분석·보고서를 남기므로(FE1-1406·FE-10884), 있다는 것만으로
+  // 비개발로 보면 코드 오더가 오분류된다. 비소스 판정은 produce.md(dobby-produce)만.
   if (statusMd) {
     const wt = parseOrderStatus(statusMd, key).workTypeHint;
     if (wt) return wt;
   }
-  // 명시적으로 비소스(produce.md·deliverables·힌트)라는 근거가 없으면 개발(code)로 본다.
+  // 명시적 비소스 근거(produce.md·힌트)가 없으면 개발(code)로 본다.
   // → 분석 초기라 산출물이 아직 없는 오더도 개발 카드/필터에 잡힌다(미분류로 사라지지 않음).
   return "code";
 }
