@@ -18,6 +18,7 @@ export default function VerifyPage({ params }: { params: { key: string } }) {
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved}
       hasJira={!!epic.jiraIssueMd || isJiraIssueKey(params.key)}
+      orderKind={epic.orderKind ?? null}
       runs={epic.runs}
       testGuideMd={epic.testGuideMd}
     />

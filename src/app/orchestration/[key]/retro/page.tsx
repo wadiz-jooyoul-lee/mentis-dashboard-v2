@@ -20,6 +20,7 @@ export default function RetroPage({ params }: { params: { key: string } }) {
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       resolved={epic?.resolved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
+      orderKind={epic?.orderKind ?? null}
     />
   );
 }

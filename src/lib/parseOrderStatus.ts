@@ -133,6 +133,12 @@ export type OrderStatus = {
   k: number | null;
   /** work-type 힌트(status.md에 명시된 경우). 파일 추론이 우선. */
   workTypeHint: "code" | "nonsource" | null;
+  /**
+   * 오더 종류(status.md `## 현재 단계`의 `- **종류**:`). 대시보드 탭 구성 분기용.
+   * - `development` 개발 · `deliverable` 비개발 산출물 · `summary` 작업 내용 정리.
+   * 없으면 null(구형 오더 — 파일 추론에 맡긴다).
+   */
+  orderKind: "development" | "deliverable" | "summary" | null;
   agents: AgentRow[];
   progress: PhaseProgressRow[];
   testHistory: TestHistoryRow[];
@@ -380,11 +386,25 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     (kvGet(kv, "팬아웃", "에이전트 수", "K)") ?? "").match(/\d+/)?.[0] ??
     null;
 
-  // work-type 힌트: 상단표 "work-type"/"작업 유형".
+  // 오더 종류: "## 현재 단계"의 "- **종류**: 개발|산출물|작업 정리".
+  const kindRaw = field(md, "종류") ?? kvGet(kv, "종류") ?? "";
+  const orderKind: "development" | "deliverable" | "summary" | null = /작업\s*정리|정리/.test(kindRaw)
+    ? "summary"
+    : /산출/.test(kindRaw)
+    ? "deliverable"
+    : /개발/.test(kindRaw)
+    ? "development"
+    : null;
+
+  // work-type 힌트: 상단표 "work-type"/"작업 유형". 없으면 종류에서 유도(정리·산출물=비소스, 개발=코드).
   const wtRaw = kvGet(kv, "work-type", "worktype", "작업 유형", "유형") ?? "";
   const workTypeHint: "code" | "nonsource" | null = /비소스|non.?source|문서|리서치|분석/i.test(wtRaw)
     ? "nonsource"
     : /code|코드|소스/i.test(wtRaw)
+    ? "code"
+    : orderKind === "summary" || orderKind === "deliverable"
+    ? "nonsource"
+    : orderKind === "development"
     ? "code"
     : null;
 
@@ -400,6 +420,7 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
         null),
     k: kText ? Number(kText) : null,
     workTypeHint,
+    orderKind,
     agents: parseAgents(md),
     progress: parseProgress(md),
     testHistory: parseTestHistory(md),

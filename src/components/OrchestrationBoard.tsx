@@ -283,6 +283,7 @@ export default function OrchestrationBoard({
       worktreeRemoved={epic?.worktreeRemoved}
       resolved={epic?.resolved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
+      orderKind={epic?.orderKind ?? null}
       extra={<QuipsControl epicKey={epicKey} />}
     />
   );

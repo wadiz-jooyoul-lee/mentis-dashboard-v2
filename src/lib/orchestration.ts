@@ -82,7 +82,12 @@ function epicKeys(): string[] {
 /** work-type: produce.md → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
-  if (fs.existsSync(path.join(dir, "produce.md"))) return "nonsource";
+  // produce.md는 최상위(repo에 들어가는 산출물) 또는 deliverables/(repo 밖 리포트)에 있을 수 있다 — 둘 다 비소스 신호.
+  if (
+    fs.existsSync(path.join(dir, "produce.md")) ||
+    fs.existsSync(path.join(dir, "deliverables", "produce.md"))
+  )
+    return "nonsource";
   if (fs.existsSync(path.join(dir, "implementation.md"))) return "code";
   // deliverables/는 비소스 신호로 쓰지 않는다 — 개발 오더도 감사·분석 에이전트가
   // deliverables/에 분석·보고서를 남기므로(FE1-1406·FE-10884), 있다는 것만으로
@@ -234,6 +239,8 @@ export type EpicSummary = {
   stalled: boolean;
   /** go-dobby 확장: 개발/비개발 구분 + 제목 */
   workType: WorkType;
+  /** 오더 종류(status.md `종류`) — 상세 탭 구성 분기용. summary=작업 내용 정리. */
+  orderKind: "development" | "deliverable" | "summary" | null;
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). status.md 워크트리 표 경로 존재로 판단. */
   worktreeRemoved: boolean;
@@ -283,6 +290,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     firstActivity: (times.length ? times[0] : null) ?? null,
     stalled,
     workType: workTypeOf(key, statusMd),
+    orderKind: st?.orderKind ?? null,
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
@@ -439,6 +447,8 @@ export type EpicDetail = {
   avatars: Record<string, AssignedAvatar>;
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
   workType: WorkType;
+  /** 오더 종류(status.md `종류`) — 상세 탭 구성 분기용. summary=작업 내용 정리. */
+  orderKind: "development" | "deliverable" | "summary" | null;
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
   worktreeRemoved: boolean;
@@ -848,6 +858,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
     agentWorks,
     avatars,
     workType: workTypeOf(epicKey, statusMd),
+    orderKind: st?.orderKind ?? null,
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
