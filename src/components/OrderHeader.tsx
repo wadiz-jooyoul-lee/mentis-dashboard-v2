@@ -10,6 +10,7 @@ import ResumeButton from "@/components/ResumeButton";
 import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
+import { isJiraIssueKey } from "@/lib/keys";
 
 const { Title, Text } = Typography;
 
@@ -19,6 +20,13 @@ const TABS = [
   { key: "changes", label: "코드 변경" },
   { key: "explain", label: "구현 내용" },
   { key: "verify", label: "검증" },
+  { key: "console", label: "콘솔" },
+];
+
+// "작업 내용 정리"(summary) 오더 전용 탭. 에이전트 1명·코드 없음이라
+// 보드·코드 변경·검증·Jira는 빼고, explain을 "작업 내용"으로 라벨링한다.
+const SUMMARY_TABS = [
+  { key: "explain", label: "작업 내용" },
   { key: "console", label: "콘솔" },
 ];
 
@@ -56,6 +64,7 @@ export default function OrderHeader({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  orderKind = null,
   extra,
 }: {
   epicKey: string;
@@ -67,17 +76,26 @@ export default function OrderHeader({
   resolved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
   hasJira?: boolean;
+  /** 오더 종류. "summary"(작업 내용 정리)면 탭을 축소하고 explain을 "작업 내용"으로 라벨링. */
+  orderKind?: "development" | "deliverable" | "summary" | null;
   extra?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
-  const active = activeTab(pathname);
-  const items = [
-    ...TABS,
-    ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
-    { key: "artifact", label: "아티팩트" },
-    { key: "retro", label: "회고" },
-  ];
+  const isSummary = orderKind === "summary";
+  // Jira 이슈가 아니면(문서 전용 TASK-) Jira에서 열기·PR 링크는 성립하지 않는다.
+  const hasJiraIssue = isJiraIssueKey(epicKey);
+  // summary 오더는 보드 탭이 없으므로, 보드 경로(베이스 URL) 진입도 "작업 내용"으로 활성 표시.
+  const rawActive = activeTab(pathname);
+  const active = isSummary && rawActive === "board" ? "explain" : rawActive;
+  const items = isSummary
+    ? [...SUMMARY_TABS, { key: "artifact", label: "아티팩트" }, { key: "retro", label: "회고" }]
+    : [
+        ...TABS,
+        ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
+        { key: "artifact", label: "아티팩트" },
+        { key: "retro", label: "회고" },
+      ];
 
   return (
     <div
@@ -154,15 +172,17 @@ export default function OrderHeader({
           )}
         </Space>
         <Space align="center" size={4} style={{ flexShrink: 0 }}>
-          <Button
-            type="link"
-            icon={<LinkOutlined />}
-            href={jiraUrl(epicKey)}
-            target="_blank"
-          >
-            Jira에서 열기
-          </Button>
-          <PrLinkButton epicKey={epicKey} />
+          {hasJiraIssue && (
+            <Button
+              type="link"
+              icon={<LinkOutlined />}
+              href={jiraUrl(epicKey)}
+              target="_blank"
+            >
+              Jira에서 열기
+            </Button>
+          )}
+          {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
           <ResumeButton epicKey={epicKey} />
           <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>

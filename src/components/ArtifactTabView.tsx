@@ -61,6 +61,7 @@ export default function ArtifactTabView({
   worktreeRemoved,
   resolved = false,
   hasJira,
+  orderKind = null,
 }: {
   epicKey: string;
   title?: string | null;
@@ -72,6 +73,7 @@ export default function ArtifactTabView({
   worktreeRemoved: boolean;
   resolved?: boolean;
   hasJira: boolean;
+  orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   // origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
   // localhost 접속이어도 서버가 준 LAN IP가 있으면 그 IP로 바꿔(프로토콜·포트는 유지) 링크를 노출한다.
@@ -93,6 +95,7 @@ export default function ArtifactTabView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        orderKind={orderKind}
       />
 
       <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: 20 }}>

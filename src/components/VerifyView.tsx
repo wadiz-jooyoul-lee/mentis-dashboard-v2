@@ -16,6 +16,7 @@ export default function VerifyView({
   worktreeRemoved,
   resolved = false,
   hasJira,
+  orderKind = null,
   runs,
   testGuideMd,
 }: {
@@ -25,6 +26,7 @@ export default function VerifyView({
   worktreeRemoved: boolean;
   resolved?: boolean;
   hasJira: boolean;
+  orderKind?: "development" | "deliverable" | "summary" | null;
   runs: ReportRun[];
   testGuideMd: string | null;
 }) {
@@ -37,6 +39,7 @@ export default function VerifyView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        orderKind={orderKind}
       />
       <div style={{ marginTop: 16 }}>
         <Title level={4}>검증</Title>

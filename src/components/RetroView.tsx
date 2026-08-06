@@ -162,6 +162,7 @@ export default function RetroView({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  orderKind = null,
 }: {
   epicKey: string;
   title?: string | null;
@@ -171,6 +172,7 @@ export default function RetroView({
   worktreeRemoved?: boolean;
   resolved?: boolean;
   hasJira?: boolean;
+  orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   return (
     <div>
@@ -181,6 +183,7 @@ export default function RetroView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        orderKind={orderKind}
       />
       {!md ? (
         <Empty

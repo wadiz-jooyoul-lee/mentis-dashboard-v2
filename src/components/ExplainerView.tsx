@@ -12,7 +12,7 @@ const { Title, Paragraph } = Typography;
 type ExplainJob = { state: JobState; feed: FeedItem[] };
 
 /** 이미 생성된 구현 내용 아래에 그 생성 잡(=explain-{키})의 기록을 접어서 보여준다. */
-function JobRecord({ job }: { job: ExplainJob }) {
+function JobRecord({ job, label = "구현 내용" }: { job: ExplainJob; label?: string }) {
   const badge =
     job.state === "running"
       ? { status: "processing" as const, text: "생성 중" }
@@ -29,7 +29,7 @@ function JobRecord({ job }: { job: ExplainJob }) {
           key: "log",
           label: (
             <span>
-              구현 내용 생성 기록{" "}
+              {label} 생성 기록{" "}
               <Badge status={badge.status} text={badge.text} style={{ marginLeft: 8 }} />
             </span>
           ),
@@ -41,7 +41,7 @@ function JobRecord({ job }: { job: ExplainJob }) {
 }
 
 /** explainer.md가 없을 때: /dobby-explain 생성 실행 + 진행 표시(완료 시 새로고침). */
-function GenerateExplainer({ epicKey }: { epicKey: string }) {
+function GenerateExplainer({ epicKey, docLabel = "구현 내용" }: { epicKey: string; docLabel?: string }) {
   const [state, setState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -115,9 +115,9 @@ function GenerateExplainer({ epicKey }: { epicKey: string }) {
 
   if (state === "idle") {
     return (
-      <Empty description="아직 구현 내용 문서가 없습니다. 구현 산출물로 생성할 수 있습니다.">
+      <Empty description={`아직 ${docLabel} 문서가 없습니다. 산출물로 생성할 수 있습니다.`}>
         <Button type="primary" loading={busy} onClick={gen}>
-          구현 내용 생성
+          {docLabel} 생성
         </Button>
       </Empty>
     );
@@ -145,6 +145,7 @@ export default function ExplainerView({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  orderKind = null,
 }: {
   epicKey: string;
   title?: string | null;
@@ -154,6 +155,7 @@ export default function ExplainerView({
   worktreeRemoved?: boolean;
   resolved?: boolean;
   hasJira?: boolean;
+  orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   return (
     <div>
@@ -164,13 +166,14 @@ export default function ExplainerView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        orderKind={orderKind}
       />
       {!md ? (
-        <GenerateExplainer epicKey={epicKey} />
+        <GenerateExplainer epicKey={epicKey} docLabel={orderKind === "summary" ? "작업 내용" : "구현 내용"} />
       ) : (
         <>
           <MarkdownDoc md={md} />
-          {job && <JobRecord job={job} />}
+          {job && <JobRecord job={job} label={orderKind === "summary" ? "작업 내용" : "구현 내용"} />}
         </>
       )}
     </div>
