@@ -765,7 +765,12 @@ function epicAvatars(
     return { [ORCHESTRATOR_SLUG]: groupFirstMember(pickBalancedGroup(epicKey)) };
   }
   const firstPin = Object.keys(existing).length === 0;
-  const forced = firstPin ? pickBalancedGroup(epicKey) : undefined;
+  // 최초 핀은 균형 그룹으로, 이후 핀은 **이미 확정된 그룹(기존 핀의 dominant)** 을 이어 쓴다.
+  // undefined로 두면 assignOrderAvatars가 해시 primaryGroup으로 폴백해, 뒤늦게 붙는 에이전트
+  // (예: review-agent)가 팀과 다른 그룹으로 튄다(FE1-1518: 팀=프로미스인데 리뷰어만 아이브).
+  const forced = firstPin
+    ? pickBalancedGroup(epicKey)
+    : dominantGroup(existing) ?? pickBalancedGroup(epicKey);
   const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing, forced));
   // 오케스트레이터 아바타 파생(핀 슬롯 미소비). 대표는 이 에픽 실제 그룹 기준으로 팀과 일치시킨다.
   const epicGroup = dominantGroup(obj) ?? forced ?? "dobby";
