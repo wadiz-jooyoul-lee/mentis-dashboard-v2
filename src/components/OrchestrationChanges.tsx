@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline, Tooltip } from "antd";
@@ -205,6 +205,23 @@ export default function OrchestrationChanges({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  // 에이전트 이동 바의 sticky top = 앱 상단바(64) + 오더 헤더의 실제 높이.
+  // 헤더 높이는 제목 줄바꿈·태그 수·화면 폭에 따라 달라지므로 매직넘버(197) 대신 실측해 맞춘다.
+  const [navTop, setNavTop] = useState(197);
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>("[data-order-header]");
+    if (!header) return;
+    const update = () => setNavTop(64 + header.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(header);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
   return (
     <div>
       <OrderHeader
@@ -225,11 +242,11 @@ export default function OrchestrationChanges({
         <Empty description="에이전트 정보가 없습니다" />
       ) : (
         <>
-          {/* 에이전트 이동 버튼 — 스크롤해도 헤더(sticky, top64+height133=197) 바로 아래 고정 */}
+          {/* 에이전트 이동 버튼 — 스크롤해도 헤더(sticky) 바로 아래 고정. top은 헤더 높이 실측값. */}
           <div
             style={{
               position: "sticky",
-              top: 197,
+              top: navTop,
               zIndex: 80,
               background: "#fff",
               padding: "8px 0 10px",
