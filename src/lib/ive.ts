@@ -42,7 +42,7 @@ export function iveColor(member: string): string | null {
 export function iveExpr(state?: string): IveExpr {
   const s = (state ?? "").replace(/\s/g, "");
   if (/완료/.test(s)) return "smile";
-  if (/수정/.test(s)) return "surprise";
+  if (/구현|산출|수정/.test(s)) return "surprise";
   return "base";
 }
 
