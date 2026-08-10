@@ -249,7 +249,7 @@ export default function OrchestrationChanges({
               top: navTop,
               zIndex: 80,
               background: "#fff",
-              padding: "8px 0 10px",
+              padding: "8px 0 10px 12px",
               marginBottom: 12,
               borderBottom: "1px solid #f5f5f5",
             }}
