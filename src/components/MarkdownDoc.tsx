@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeSlug from "rehype-slug";
 
 // mermaid는 무거워서(≈3MB) 필요할 때만 동적 로드. 클라이언트 전용.
 let mermaidP: Promise<typeof import("mermaid").default> | null = null;
@@ -59,6 +60,7 @@ export default function MarkdownDoc({ md }: { md: string }) {
     <div className="markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSlug]}
         components={{
           code(props) {
             const { className, children } = props as {
