@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Breadcrumb, Tag, Typography, Space, Progress, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
 import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
@@ -58,6 +58,14 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
 /** 작업상태 필터 값. "전체"는 필터 없음. */
 type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
 
+/** 개발/비개발(work-type) 스코프. "전체"는 스코프 없음. code=개발·nonsource=비개발. */
+type KindFilter = "전체" | "code" | "nonsource";
+const KIND_TAGS: Array<{ value: KindFilter; label: string }> = [
+  { value: "전체", label: "전체" },
+  { value: "code", label: "개발" },
+  { value: "nonsource", label: "비개발" },
+];
+
 export default function OrchestrationList({
   epics,
   sourceDir,
@@ -71,7 +79,17 @@ export default function OrchestrationList({
 }) {
   const router = useRouter();
 
-  // 검색(에픽 키·제목) + 작업상태 필터. 이미 로드된 epics를 클라이언트에서 좁힌다.
+  // 개발/비개발 스코프는 URL ?type= 로 관리한다(공유·북마크 가능; 서버가 page.tsx에서 이 값으로 필터해 epics를 넘긴다).
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get("type");
+  const kind: KindFilter =
+    typeParam === "code" || typeParam === "nonsource" ? typeParam : "전체";
+  // 태그 클릭 → URL type 갱신(전체=all). 서버가 새 값으로 목록을 다시 필터한다.
+  const setKind = (value: KindFilter) => {
+    router.push(`/orchestration?type=${value === "전체" ? "all" : value}`);
+  };
+
+  // 검색(에픽 키·제목) + 작업상태 필터. 서버가 이미 type으로 좁혀 넘긴 epics를 클라이언트에서 더 좁힌다.
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("전체");
   const q = query.trim().toLowerCase();
@@ -82,8 +100,7 @@ export default function OrchestrationList({
     const matchS = status === "전체" || workStatus(r).text === status;
     return matchQ && matchS;
   });
-  // 검색·필터 결과는 "최상위 테이블에만" 반영한다. 필터가 없으면 원래대로 작업중(미해결)만.
-  // 하단 날짜별 전체 목록(epics)은 검색·필터의 영향을 받지 않는다.
+  // 검색·상태 결과는 "최상위 테이블에만" 반영한다. 그게 없으면 작업중(미해결)만.
   const active = epics.filter((r) => workStatus(r).text === "작업중");
   const topItems = hasFilter ? filtered : active;
 
@@ -241,29 +258,51 @@ export default function OrchestrationList({
             label: "오더 목록",
             children: (
               <>
-                {/* 검색(에픽 키·제목) + 작업상태 필터 */}
-                <Space style={{ marginBottom: 16 }} wrap>
-                  <Input
-                    allowClear
-                    prefix={<SearchOutlined />}
-                    placeholder="에픽 키 · 제목 검색"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    style={{ width: 260 }}
-                  />
-                  <Select<StatusFilter>
-                    value={status}
-                    onChange={(v) => setStatus(v)}
-                    style={{ width: 140 }}
-                    options={[
-                      { value: "전체", label: "전체 상태" },
-                      { value: "작업중", label: "작업중" },
-                      { value: "해결됨", label: "해결됨" },
-                      { value: "종료", label: "종료" },
-                    ]}
-                  />
-                  {hasFilter && <Text type="secondary">{filtered.length}건</Text>}
-                </Space>
+                {/* 검색·상태 필터(좌) ↔ 개발/비개발 스코프 태그(우) — space-between */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 16,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Space wrap>
+                    <Input
+                      allowClear
+                      prefix={<SearchOutlined />}
+                      placeholder="에픽 키 · 제목 검색"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      style={{ width: 260 }}
+                    />
+                    <Select<StatusFilter>
+                      value={status}
+                      onChange={(v) => setStatus(v)}
+                      style={{ width: 140 }}
+                      options={[
+                        { value: "전체", label: "전체 상태" },
+                        { value: "작업중", label: "작업중" },
+                        { value: "해결됨", label: "해결됨" },
+                        { value: "종료", label: "종료" },
+                      ]}
+                    />
+                    {hasFilter && <Text type="secondary">{filtered.length}건</Text>}
+                  </Space>
+                  <Space size={4}>
+                    {KIND_TAGS.map(({ value, label }) => (
+                      <Tag.CheckableTag
+                        key={value}
+                        checked={kind === value}
+                        onChange={() => setKind(value)}
+                      >
+                        {label}
+                      </Tag.CheckableTag>
+                    ))}
+                  </Space>
+                </div>
 
                 {/* 상단: 검색·필터 결과만 반영(필터 없으면 작업중). 하단 전체 목록은 건드리지 않는다. */}
                 <DateFoldedTable<EpicSummary>

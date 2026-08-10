@@ -11,7 +11,9 @@ const { Title, Paragraph, Text } = Typography;
 
 // 에이전트 상태 어휘(순서). 표정이 바뀌는 상태만 캡션을 붙인다.
 const STATES = ["대기", "분석", "구현", "리뷰", "완료"];
-const CAPTION: Record<string, string> = { 대기: "심심", 구현: "집중/헐레벌떡(랜덤)" };
+// BTS는 실사진 5표정(5상태 전부), 프로미스는 SVG로 대기·구현만 바뀐다.
+const CAPTION_BTS: Record<string, string> = { 대기: "졸림", 분석: "생각", 구현: "집중", 리뷰: "호기심", 완료: "기쁨" };
+const CAPTION_FROMIS: Record<string, string> = { 대기: "심심", 구현: "집중/헐레벌떡(랜덤)" };
 
 function MemberRow({
   member,
@@ -22,6 +24,7 @@ function MemberRow({
   color: string;
   kind: "bts" | "fromis";
 }) {
+  const caption = kind === "bts" ? CAPTION_BTS : CAPTION_FROMIS;
   return (
     <Card size="small" style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -44,8 +47,8 @@ function MemberRow({
                 <Fromis9Avatar member={member} size={52} state={s} />
               )}
               <div style={{ fontSize: 12, marginTop: 2 }}>{s}</div>
-              {CAPTION[s] && (
-                <div style={{ fontSize: 11, color, fontWeight: 600 }}>{CAPTION[s]}</div>
+              {caption[s] && (
+                <div style={{ fontSize: 11, color, fontWeight: 600 }}>{caption[s]}</div>
               )}
             </div>
           ))}
@@ -72,8 +75,9 @@ export default function AllAvatarsView() {
         전체 에이전트 · 상태별 표정
       </Title>
       <Paragraph type="secondary">
-        도비를 제외한 그룹 아바타(BTS·프로미스나인)의 상태별 표정입니다. <b>대기(심심) · 구현(집중/헐레벌떡
-        — 에이전트별 랜덤)</b>만 표정이 바뀌고, 나머지 상태(분석·리뷰·완료)는 멤버 기본 표정을 유지합니다.
+        도비를 제외한 그룹 아바타(BTS·프로미스나인)의 상태별 표정입니다. <b>BTS는 실사진으로 5상태 전부</b>
+        (졸림·생각·집중·호기심·기쁨 → 대기·분석·구현·리뷰·완료) 바뀌고, <b>프로미스나인은 SVG로 대기·구현만</b>
+        바뀌며 나머지 상태(분석·리뷰·완료)는 멤버 기본 표정을 유지합니다.
       </Paragraph>
 
       <Title level={3}>방탄소년단 (BTS)</Title>

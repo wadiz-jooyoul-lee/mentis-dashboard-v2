@@ -99,6 +99,7 @@ export default function OrderHeader({
 
   return (
     <div
+      data-order-header
       style={{
         position: "sticky",
         top: 64,
@@ -188,10 +189,11 @@ export default function OrderHeader({
         </Space>
       </div>
       <Tabs
+        type="card"
         activeKey={active}
         items={items}
         onChange={(k) => router.push(routeFor(epicKey, k))}
-        style={{ marginBottom: 0 }}
+        style={{ marginTop: 24, marginBottom: 0 }}
         tabBarStyle={{ marginBottom: 0, paddingLeft: 12 }}
       />
       </div>

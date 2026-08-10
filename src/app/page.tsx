@@ -17,7 +17,10 @@ export default function Home() {
     <>
       <BackupStatus initial={backup} />
       <SectionGrid sections={sections} stats={stats} />
-      <div style={{ textAlign: "center", marginTop: 40 }}>
+      <div style={{ textAlign: "center", marginTop: 40, display: "flex", gap: 20, justifyContent: "center" }}>
+        <Link href="/about" style={{ fontSize: 12, color: "#8c8c8c" }}>
+          소개(ABOUT) — 동기·아키텍처·기능 →
+        </Link>
         <Link href="/map" style={{ fontSize: 12, color: "#8c8c8c" }}>
           대시보드 구성도 — 스킬·파일·화면 관계 →
         </Link>
