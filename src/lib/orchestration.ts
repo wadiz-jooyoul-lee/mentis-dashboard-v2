@@ -483,19 +483,49 @@ function gitBranchChanges(wt: string): { files: string[]; diffs: FileDiff[] } | 
   if (names.length === 0) return null;
   const diffs: FileDiff[] = [];
   for (const name of names) {
-    const before = git(wt, ["show", `${fork}:${name}`]) ?? ""; // 신규 파일이면 빈 문자열
-    let after = "";
-    try {
-      const abs = path.join(wt, name);
-      after = fs.statSync(abs).size > GIT_DIFF_MAX_BYTES ? "" : fs.readFileSync(abs, "utf8");
-    } catch {
-      after = ""; // 삭제된 파일
-    }
-    if (before.length > GIT_DIFF_MAX_BYTES) continue; // 목록에는 남고 diff만 생략
-    if (before === after) continue;
-    diffs.push({ file: name, hunks: [{ old: before, new: after }] });
+    const patch = git(wt, ["diff", "--unified=3", fork, "--", name]) ?? "";
+    if (!patch || patch.length > GIT_DIFF_MAX_BYTES) continue; // 목록에는 남고 diff만 생략
+    const hunks = parseUnifiedDiff(patch);
+    if (hunks.length > 0) diffs.push({ file: name, hunks });
   }
   return { files: names, diffs };
+}
+
+/**
+ * `git diff --unified=0` 출력을 변경 덩어리(@@ …)별 `{old, new}`로 자른다.
+ *
+ * ⛔ 파일 전체를 한 덩어리로 넣지 않는다: 화면(DiffView)은 `old`를 전부 빨강, `new`를 전부 초록으로
+ * 그리므로, 전체 내용을 담으면 203줄 파일이 "203줄 삭제 + 228줄 추가"로 보여 무엇이 바뀌었는지
+ * 읽을 수 없다(실제 변경은 6곳 +53/−28). 컨텍스트(공백 접두) 줄은 양쪽 모두에 들어가 빨강·초록으로
+ * 이중 표시되므로 담지 않고 삭제(-)·추가(+) 줄만 짝지어 넣는다(`--unified=3`으로 받아 인접 변경을
+ * 한 덩어리로 묶는다 — `0`이면 27곳으로 잘게 쪼개져 오히려 읽기 어렵다).
+ * 이 형태는 Edit 도구의 `old_string`/`new_string` 짝과 같은 모양이라 기존 렌더와 일관된다.
+ */
+function parseUnifiedDiff(patch: string): EditHunk[] {
+  const hunks: EditHunk[] = [];
+  let old: string[] = [];
+  let neu: string[] = [];
+  let inHunk = false;
+  const flush = () => {
+    if (inHunk && (old.length > 0 || neu.length > 0)) {
+      hunks.push({ old: old.join("\n"), new: neu.join("\n") });
+    }
+    old = [];
+    neu = [];
+  };
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("@@")) {
+      flush();
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue; // 헤더(diff --git·index·---·+++)
+    if (line.startsWith("-")) old.push(line.slice(1));
+    else if (line.startsWith("+")) neu.push(line.slice(1));
+    // 그 밖(`\ No newline at end of file` 등)은 무시
+  }
+  flush();
+  return hunks;
 }
 
 /**
