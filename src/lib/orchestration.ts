@@ -722,7 +722,7 @@ function dominantGroup(avatars: Record<string, AssignedAvatar>): AvatarGroup | n
 
 /** 이미 핀된 다른 에픽들의 대표 그룹 사용 횟수. 그룹 균형(decay) 계산용. */
 function groupUsageCounts(excludeKey: string): Record<AvatarGroup, number> {
-  const counts: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, dobby: 0 };
+  const counts: Record<AvatarGroup, number> = { bts: 0, fromis: 0, ive: 0, rescene: 0, dobby: 0 };
   for (const k of epicKeys()) {
     if (k === excludeKey) continue;
     const g = dominantGroup(readPinnedAvatars(orderDir(k)));
