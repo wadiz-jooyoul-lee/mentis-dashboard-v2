@@ -4,6 +4,10 @@ import Link from "next/link";
 import { Breadcrumb, Typography, Card, Tag } from "antd";
 import BtsAvatar, { BTS_AVATARS, btsColor } from "@/components/BtsAvatar";
 import Fromis9Avatar, { FROMIS_AVATARS, fromisColor } from "@/components/Fromis9Avatar";
+import IveAvatar, { IVE_AVATARS } from "@/components/IveAvatar";
+import { iveColor } from "@/lib/ive";
+import ResceneAvatar, { RESCENE_AVATARS } from "@/components/ResceneAvatar";
+import { resceneColor } from "@/lib/rescene";
 import DobbyIcon, { dobbyExpression } from "@/components/DobbyIcon";
 import { dobbyColor } from "@/lib/dobby";
 
@@ -11,9 +15,19 @@ const { Title, Paragraph, Text } = Typography;
 
 // 에이전트 상태 어휘(순서). 표정이 바뀌는 상태만 캡션을 붙인다.
 const STATES = ["대기", "분석", "구현", "리뷰", "완료"];
-// BTS는 실사진 5표정(5상태 전부), 프로미스는 SVG로 대기·구현만 바뀐다.
+// BTS·IVE·리센느는 실사진 5표정(5상태 전부), 프로미스는 SVG로 대기·구현만 바뀐다.
 const CAPTION_BTS: Record<string, string> = { 대기: "졸림", 분석: "생각", 구현: "집중", 리뷰: "호기심", 완료: "기쁨" };
 const CAPTION_FROMIS: Record<string, string> = { 대기: "심심", 구현: "집중/헐레벌떡(랜덤)" };
+const CAPTION_IVE: Record<string, string> = { 대기: "기본", 분석: "생각", 구현: "놀람", 리뷰: "호기심", 완료: "활짝" };
+const CAPTION_RESCENE: Record<string, string> = { 대기: "기본", 분석: "생각", 구현: "미소", 리뷰: "호기심", 완료: "세리머니" };
+
+type Kind = "bts" | "fromis" | "ive" | "rescene";
+const CAPTIONS: Record<Kind, Record<string, string>> = {
+  bts: CAPTION_BTS,
+  fromis: CAPTION_FROMIS,
+  ive: CAPTION_IVE,
+  rescene: CAPTION_RESCENE,
+};
 
 function MemberRow({
   member,
@@ -22,9 +36,9 @@ function MemberRow({
 }: {
   member: string;
   color: string;
-  kind: "bts" | "fromis";
+  kind: Kind;
 }) {
-  const caption = kind === "bts" ? CAPTION_BTS : CAPTION_FROMIS;
+  const caption = CAPTIONS[kind];
   return (
     <Card size="small" style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -43,6 +57,10 @@ function MemberRow({
             <div key={s} style={{ textAlign: "center", flexShrink: 0, width: 60 }}>
               {kind === "bts" ? (
                 <BtsAvatar member={member} size={52} state={s} />
+              ) : kind === "ive" ? (
+                <IveAvatar member={member} size={52} state={s} />
+              ) : kind === "rescene" ? (
+                <ResceneAvatar member={member} size={52} state={s} />
               ) : (
                 <Fromis9Avatar member={member} size={52} state={s} />
               )}
@@ -61,6 +79,8 @@ function MemberRow({
 export default function AllAvatarsView() {
   const bts = Object.keys(BTS_AVATARS);
   const fromis = Object.keys(FROMIS_AVATARS);
+  const ive = Object.keys(IVE_AVATARS);
+  const rescene = Object.keys(RESCENE_AVATARS);
   return (
     <div>
       <Breadcrumb
@@ -75,9 +95,9 @@ export default function AllAvatarsView() {
         전체 에이전트 · 상태별 표정
       </Title>
       <Paragraph type="secondary">
-        도비를 제외한 그룹 아바타(BTS·프로미스나인)의 상태별 표정입니다. <b>BTS는 실사진으로 5상태 전부</b>
-        (졸림·생각·집중·호기심·기쁨 → 대기·분석·구현·리뷰·완료) 바뀌고, <b>프로미스나인은 SVG로 대기·구현만</b>
-        바뀌며 나머지 상태(분석·리뷰·완료)는 멤버 기본 표정을 유지합니다.
+        도비를 제외한 그룹 아바타(BTS·프로미스나인·IVE·리센느)의 상태별 표정입니다.{" "}
+        <b>BTS·IVE·리센느는 실사진으로 5상태 전부</b> 바뀌고(대기·분석·구현·리뷰·완료),{" "}
+        <b>프로미스나인은 SVG로 대기·구현만</b> 바뀌며 나머지 상태(분석·리뷰·완료)는 멤버 기본 표정을 유지합니다.
       </Paragraph>
 
       <Title level={3}>방탄소년단 (BTS)</Title>
@@ -90,6 +110,20 @@ export default function AllAvatarsView() {
       </Title>
       {fromis.map((m) => (
         <MemberRow key={m} member={m} color={fromisColor(m) ?? "#888"} kind="fromis" />
+      ))}
+
+      <Title level={3} style={{ marginTop: 24 }}>
+        아이브 (IVE)
+      </Title>
+      {ive.map((m) => (
+        <MemberRow key={m} member={m} color={iveColor(m) ?? "#888"} kind="ive" />
+      ))}
+
+      <Title level={3} style={{ marginTop: 24 }}>
+        리센느 (RESCENE)
+      </Title>
+      {rescene.map((m) => (
+        <MemberRow key={m} member={m} color={resceneColor(m) ?? "#888"} kind="rescene" />
       ))}
 
       <Title level={3} style={{ marginTop: 24 }}>
