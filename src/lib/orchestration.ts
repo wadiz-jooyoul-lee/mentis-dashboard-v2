@@ -8,9 +8,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
+import { spawnSync } from "node:child_process";
+import { getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { parseOrchestration, type Orchestration, type AgentState } from "@/lib/parseOrchestration";
+import {
+  parseOrchestration,
+  type Orchestration,
+  type AgentState,
+  type AgentRow,
+} from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import {
@@ -346,6 +352,8 @@ export type AgentWork = {
   diffs: FileDiff[];
   commits: string[];
   summary: string;
+  /** 코드 변경의 출처. 기본은 대화 로그(Edit/Write 호출), "git"이면 워크트리 브랜치 diff로 보강한 것. */
+  source?: "log" | "git";
 };
 
 function expandHome(p: string): string {
@@ -373,13 +381,22 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
     return empty;
   }
   const metaRoot = getMetaDir();
-  // 메타(진행 기록) 경로는 코드 변경이 아니므로 제외한다.
-  // 현재 v2 메타 루트뿐 아니라, 알려진 메타 루트 이름(orchestration-meta·dobby-meta)과
-  // v1 work-dobby 분리 트리(.issue-start/.issue-test/.issue-end/.agent-start)까지 잡는다.
-  const isMeta = (p: string) =>
+  const claudeHome = path.join(os.homedir(), ".claude");
+  // 코드가 아닌 경로는 코드 변경에서 제외한다.
+  // ① 메타(진행 기록): 현재 v2 메타 루트뿐 아니라, 알려진 메타 루트 이름(orchestration-meta·
+  //    dobby-meta)과 v1 work-dobby 분리 트리(.issue-start/.issue-test/.issue-end/.agent-start).
+  // ② `~/.claude/**`: 기억 파일(projects/{슬러그}/memory/*.md)·개인 스킬·커맨드·settings.json.
+  //    오더 진행 중 기억을 저장하는 건 정상 동작인데, 이게 "코드 변경"으로 잡히면 실제 구현과
+  //    섞여 화면이 오염된다(사례 FE1-1681: 실제 코드 변경은 셸로 이뤄져 로그에 없고, 남은
+  //    Write 1건이 기억 파일이라 그것만 코드 변경으로 표시됐다).
+  // ③ 세션 임시 경로(`/tmp/claude-{pid}/…`): 스크래치패드·태스크 산출물.
+  const isNonCode = (p: string) =>
     p.startsWith(metaRoot) ||
     /\/(orchestration-meta|dobby-meta)\//.test(p) ||
-    /\/\.(issue-start|issue-test|issue-end|agent-start)\//.test(p);
+    /\/\.(issue-start|issue-test|issue-end|agent-start)\//.test(p) ||
+    p === claudeHome ||
+    p.startsWith(claudeHome + path.sep) ||
+    /\/tmp\/claude-\d+\//.test(p);
   const fileSet = new Set<string>();
   const diffMap = new Map<string, EditHunk[]>();
   const commits: string[] = [];
@@ -406,7 +423,7 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
           const fp = input.file_path;
           // 메타 파일($ORCHESTRATION_META 하위: status.md·implementation.md 등)은
           // 코드 구현이 아니라 진행 기록이므로 파일 목록·diff 모두에서 제외한다.
-          if (typeof fp === "string" && !isMeta(fp)) {
+          if (typeof fp === "string" && !isNonCode(fp)) {
             fileSet.add(fp);
             const hunk: EditHunk =
               name === "Write"
@@ -433,6 +450,77 @@ function parseAgentLog(rawPath: string): Omit<AgentWork, "slug"> {
   const rel = (f: string) => (base && f.startsWith(base) ? f.slice(base.length + 1) : f);
   const diffs: FileDiff[] = Array.from(diffMap.entries()).map(([f, hunks]) => ({ file: rel(f), hunks }));
   return { logPath, found: true, baseDir: base, files: files.map(rel), diffs, commits, summary };
+}
+
+/** diff 본문을 만들지 않고 파일 목록에만 남기는 크기 상한(lock 파일 등 거대 텍스트 방어). */
+const GIT_DIFF_MAX_BYTES = 256 * 1024;
+
+function git(wt: string, args: string[]): string | null {
+  const r = spawnSync("git", ["-C", wt, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (r.error || r.status !== 0) return null;
+  return r.stdout;
+}
+
+/**
+ * 워크트리의 브랜치 변경(= 스킬 리뷰 규약과 같은 `git diff {merge-base origin/base HEAD}`).
+ * 커밋된 변경 + 미커밋 변경을 모두 포함한다.
+ *
+ * 왜 필요한가: 로그 기반 추출은 `Edit`/`Write` 도구 호출만 읽으므로, 에이전트가 셸(sed·python
+ * heredoc 등)로 파일을 고치면 코드 변경이 통째로 누락된다(사례 FE1-1681: 실제로 3파일 71줄이
+ * 바뀌었는데 화면엔 0건). git은 도구 사용 방식과 무관한 정본이라 이 누락을 메운다.
+ */
+function gitBranchChanges(wt: string): { files: string[]; diffs: FileDiff[] } | null {
+  if (!wt || !fs.existsSync(wt)) return null;
+  const base = getDefaultBase();
+  const fork =
+    git(wt, ["merge-base", `origin/${base}`, "HEAD"])?.trim() ||
+    git(wt, ["merge-base", base, "HEAD"])?.trim();
+  if (!fork) return null;
+  const names = (git(wt, ["diff", "--name-only", fork]) ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  const diffs: FileDiff[] = [];
+  for (const name of names) {
+    const before = git(wt, ["show", `${fork}:${name}`]) ?? ""; // 신규 파일이면 빈 문자열
+    let after = "";
+    try {
+      const abs = path.join(wt, name);
+      after = fs.statSync(abs).size > GIT_DIFF_MAX_BYTES ? "" : fs.readFileSync(abs, "utf8");
+    } catch {
+      after = ""; // 삭제된 파일
+    }
+    if (before.length > GIT_DIFF_MAX_BYTES) continue; // 목록에는 남고 diff만 생략
+    if (before === after) continue;
+    diffs.push({ file: name, hunks: [{ old: before, new: after }] });
+  }
+  return { files: names, diffs };
+}
+
+/**
+ * 로그에서 코드 변경이 안 나온 구현 에이전트에게 브랜치 diff를 채워 준다.
+ * 귀속을 틀리게 하지 않기 위해 **구현 롤이 정확히 1명**일 때만 채운다(여럿이면 어느 에이전트가
+ * 어느 파일을 고쳤는지 git만으로는 알 수 없어 그대로 비워 둔다).
+ */
+function fillGitChanges(
+  works: AgentWork[],
+  agents: AgentRow[],
+  worktrees: { repo: string; path: string }[]
+): void {
+  const isImplName = (n: string) => /개발자|산출자/.test(n);
+  const implSlugs = agents.filter((a) => isImplName(a.name ?? "")).map((a) => a.agent);
+  if (implSlugs.length !== 1) return;
+  const target = works.find((w) => w.slug === implSlugs[0]);
+  if (!target || target.diffs.length > 0 || target.files.length > 0) return;
+  for (const wt of worktrees) {
+    const changed = gitBranchChanges(wt.path);
+    if (!changed) continue;
+    target.files.push(...changed.files);
+    target.diffs.push(...changed.diffs);
+    target.baseDir = target.baseDir || wt.path;
+    target.source = "git";
+  }
 }
 
 export type Deliverable = { name: string; content: string; kind: "md" | "html" | "other" };
@@ -845,6 +933,8 @@ export function getEpic(epicKey: string): EpicDetail | null {
   agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
 
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
+  // 로그(Edit/Write)에 코드 변경이 없으면 워크트리 브랜치 diff로 보강한다(셸로 수정한 경우).
+  if (st) fillGitChanges(agentWorks, orchestration.agents, st.worktrees);
   const avatars = epicAvatars(
     epicKey,
     dir,

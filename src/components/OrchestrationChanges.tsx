@@ -138,6 +138,11 @@ function WorkBody({ w }: { w: AgentWork }) {
           <Text strong>
             <CodeOutlined /> 코드 변경 diff ({w.diffs.length}개 파일)
           </Text>
+          {w.source === "git" && (
+            <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+              출처: 브랜치 diff(git) — 대화 로그에 편집 기록이 없어 워크트리에서 읽었습니다
+            </Text>
+          )}
           <Collapse
             ghost
             size="small"
