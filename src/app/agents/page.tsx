@@ -7,6 +7,8 @@ import BtsAvatar, { btsColor } from "@/components/BtsAvatar";
 import Fromis9Avatar, { fromisColor } from "@/components/Fromis9Avatar";
 import IveAvatar from "@/components/IveAvatar";
 import { iveColor } from "@/lib/ive";
+import ResceneAvatar from "@/components/ResceneAvatar";
+import { resceneColor } from "@/lib/rescene";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Paragraph, Text } = Typography;
@@ -20,8 +22,8 @@ type Agent = {
   realName?: string;
   birth?: string;
   position?: string;
-  // 지정 시 도비 아이콘 대신 이름(멤버)에 맞는 그룹 아바타를 그린다(IVE는 실사진).
-  avatar?: "bts" | "fromis" | "ive";
+  // 지정 시 도비 아이콘 대신 이름(멤버)에 맞는 그룹 아바타를 그린다(IVE·리센느는 실사진).
+  avatar?: "bts" | "fromis" | "ive" | "rescene";
 };
 
 // hue가 골고루 퍼지도록 선정(20~336). 성격·좋아하는 것은 재미로 붙인 소개용.
@@ -65,11 +67,21 @@ const FROMIS: Agent[] = [
 // 육안 검증한 실사진(로컬 전용). 성격 한 줄은 대표 이미지에서 재미로 각색.
 const IVE: Agent[] = [
   { name: "가을", avatar: "ive", realName: "김가을", birth: "2002-09-24", position: "메인댄서 · 리드래퍼", expression: "thinking", personality: "무대를 휘어잡는 시크한 댄스 리더. 겉은 쿨해도 팀엔 누구보다 다정하다.", likes: "칼같이 맞아떨어지는 안무" },
-  { name: "안유진", avatar: "ive", realName: "안유진", birth: "2003-09-01", position: "리더 · 메인보컬", expression: "happy", personality: "‘완전 럭키비키🍀’ 초긍정 리더. 무슨 일이든 좋은 쪽으로 해석하는 행운의 아이콘.", likes: "행운으로 뒤집히는 상황" },
+  { name: "안유진", avatar: "ive", realName: "안유진", birth: "2003-09-01", position: "리더 · 메인보컬", expression: "happy", personality: "성실하고 유쾌한 리더. 긍정 에너지와 예능감으로 팀을 든든하게 끌고 간다.", likes: "무대와 팀원 챙기기" },
   { name: "레이", avatar: "ive", realName: "나오이 레이", birth: "2004-02-03", position: "메인래퍼", expression: "curious", personality: "깜찍한 비주얼에 반전 래핑을 얹는 마이페이스 분위기 메이커.", likes: "예상 못 한 반전" },
-  { name: "장원영", avatar: "ive", realName: "장원영", birth: "2004-08-31", position: "비주얼 · 센터", expression: "happy", personality: "타고난 센터이자 비주얼. 우아함 뒤에 지독한 완벽주의가 숨어 있다.", likes: "1mm도 안 어긋난 라인" },
+  { name: "장원영", avatar: "ive", realName: "장원영", birth: "2004-08-31", position: "비주얼 · 센터", expression: "happy", personality: "타고난 센터이자 비주얼. 우아함 뒤의 지독한 완벽주의, 뭐든 좋게 해석하는 ‘원영적 사고’(완전 럭키비키🍀).", likes: "독서와 1mm도 안 어긋난 라인" },
   { name: "리즈", avatar: "ive", realName: "김지원", birth: "2004-11-21", position: "메인보컬", expression: "happy", personality: "청아한 음색의 메인보컬. 단단하고 성실한 노력파.", likes: "흔들림 없는 라이브 고음" },
   { name: "이서", avatar: "ive", realName: "이현서", birth: "2007-02-21", position: "리드댄서 · 막내", expression: "happy", personality: "에너지 넘치는 막내. 뭐든 씩씩하게 도전하는 팀의 비타민.", likes: "새로 도전하는 모든 것" },
+];
+
+// RESCENE(리센느) 멤버 — 본명·생년월일·포지션은 실제 프로필. 아바타는 웹에서 수집해 본인·표정을
+// 육안 검증한 실사진(로컬 전용). 성격 한 줄·좋아하는 것은 공개 팩트(src/lib/personas.ts)에서 각색.
+const RESCENE: Agent[] = [
+  { name: "원이", avatar: "rescene", realName: "정원이", birth: "2004-05-25", position: "리더", expression: "happy", personality: "그룹의 보스형 리더. 종잡을 수 없는 엉뚱 매력, 새벽 라이브로 소통하는 게으른 부지런쟁이(‘우이!’).", likes: "방 꾸미기 · 말라탕 · 동물의 숲" },
+  { name: "리브", avatar: "rescene", realName: "진경은", birth: "2006-10-11", position: "보컬", expression: "happy", personality: "덜렁대고 장난기 많은 4차원(‘너도? 나도!’). 운동 만능에 특기는 양궁, 옷장은 온통 회색.", likes: "사진 찍기 · 눈오리 만들기 · 쿠로미" },
+  { name: "미나미", avatar: "rescene", realName: "이토 미나미", birth: "2006-11-29", position: "메인보컬 · 메인댄서", expression: "happy", personality: "자존감·도전정신 강하고 정 많은 올라운더. 갸루 컨셉 장인(‘거제, 야호!’).", likes: "서예 · 하프물범 · 스티치 성대모사" },
+  { name: "메이", avatar: "rescene", realName: "이예빈", birth: "2008-08-19", position: "보컬(킬링파트)", expression: "thinking", personality: "낯가림 심한데 친해지면 수다쟁이(‘메라디오’ DJ). 남다른 음색으로 킬링파트를 채가는 마피아 게임 고수.", likes: "스티커 수집 · 파인애플 피자" },
+  { name: "제나", avatar: "rescene", realName: "김가영", birth: "2008-11-27", position: "비주얼 센터 · 막내", expression: "happy", personality: "경주 출신 ‘신라공주’ 막내. 트로트를 사랑하고 스포일러를 흘리는 스포 요정.", likes: "트로트 · 틱톡 찍기 · 핑크골드" },
 ];
 
 function AgentCard({ a }: { a: Agent }) {
@@ -81,6 +93,8 @@ function AgentCard({ a }: { a: Agent }) {
       ? fromisColor(a.name)
       : a.avatar === "ive"
       ? iveColor(a.name)
+      : a.avatar === "rescene"
+      ? resceneColor(a.name)
       : null;
   const color = sig || dobbyColor(a.name);
   return (
@@ -92,6 +106,8 @@ function AgentCard({ a }: { a: Agent }) {
           <Fromis9Avatar member={a.name} size={56} />
         ) : a.avatar === "ive" ? (
           <IveAvatar member={a.name} size={56} />
+        ) : a.avatar === "rescene" ? (
+          <ResceneAvatar member={a.name} size={56} />
         ) : (
           <DobbyIcon size={56} expression={a.expression} color={color} />
         )}
@@ -189,6 +205,21 @@ export default function AgentsPage() {
 
       <Row gutter={[16, 16]}>
         {IVE.map((a) => (
+          <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
+            <AgentCard a={a} />
+          </Col>
+        ))}
+      </Row>
+
+      <Title level={3} style={{ marginTop: 40 }}>
+        리센느 (RESCENE)
+      </Title>
+      <Paragraph type="secondary">
+        재미로 추가한 RESCENE 멤버 에이전트. 본명·생년월일·포지션은 실제 프로필을 담았고, 아바타는 웹에서 수집해 본인·표정을 확인한 실사진(로컬 전용)입니다.
+      </Paragraph>
+
+      <Row gutter={[16, 16]}>
+        {RESCENE.map((a) => (
           <Col key={a.name} xs={24} sm={12} md={8} lg={6}>
             <AgentCard a={a} />
           </Col>

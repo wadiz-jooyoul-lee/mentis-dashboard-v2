@@ -4,6 +4,7 @@ import { Popover } from "antd";
 import BtsAvatar from "@/components/BtsAvatar";
 import Fromis9Avatar from "@/components/Fromis9Avatar";
 import IveAvatar from "@/components/IveAvatar";
+import ResceneAvatar from "@/components/ResceneAvatar";
 import DobbyIcon, { dobbyExpression } from "@/components/DobbyIcon";
 import { dobbyColor } from "@/lib/dobby";
 import type { AssignedAvatar } from "@/lib/avatarAssign";
@@ -14,6 +15,7 @@ const GROUP_NAME: Record<string, string> = {
   bts: "방탄소년단",
   fromis: "프로미스나인",
   ive: "아이브",
+  rescene: "리센느",
   dobby: "도비",
 };
 
@@ -58,6 +60,8 @@ export default function GroupAvatar({
       <Fromis9Avatar member={avatar.member} size={size} state={state} />
     ) : avatar?.group === "ive" && avatar.member ? (
       <IveAvatar member={avatar.member} size={size} state={state} />
+    ) : avatar?.group === "rescene" && avatar.member ? (
+      <ResceneAvatar member={avatar.member} size={size} state={state} />
     ) : (
       <DobbyIcon size={size} expression={dobbyExpression(state ?? "")} color={dobbyColor(slug)} />
     );
