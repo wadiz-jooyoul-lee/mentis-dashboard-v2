@@ -1,5 +1,5 @@
 // IVE 멤버 에이전트용 실사진 아바타. 원형 크롭 + 시그니처 색 링, 작업 상태에 따라
-// base/smile/surprise 표정 사진을 스왑한다(BTS·프로미스의 표정 오버라이드를 사진으로 옮긴 것).
+// base/think/surprise/curious/smile 5표정 사진을 스왑한다(BTS와 같은 5상태 전대응).
 // 사진은 로컬 전용(public/avatars/ive/). 알 수 없는 멤버면 null(호출부에서 폴백).
 
 import { IVE_AVATARS, iveExpr, iveSrc } from "@/lib/ive";
@@ -13,7 +13,7 @@ export default function IveAvatar({
 }: {
   member: string;
   size?: number;
-  /** 있으면 상태에 맞는 표정 사진으로 스왑(완료→smile·수정→surprise). 없으면 base. */
+  /** 있으면 상태에 맞는 표정 사진으로 스왑(분석→think·구현→surprise·리뷰→curious·완료→smile). 없으면 base. */
   state?: string;
 }) {
   const cfg = IVE_AVATARS[member];
