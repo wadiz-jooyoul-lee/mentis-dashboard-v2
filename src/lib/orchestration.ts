@@ -694,6 +694,23 @@ function repoFromSubtree(key: string, branch?: string): string {
  *  ① 워크트리 표(`| repo | 브랜치 | 경로 |`)  ② 라벨 불릿(`- **브랜치**: …`)  ③ `## 브랜치` 아래 브랜치 불릿.
  * repo는 표의 repo 컬럼 → 워크트리 경로 basename → subtree 폴더 글롭 순으로 도출한다.
  */
+/**
+ * status.md `## 세션`의 작업 경로에서 저장소 이름을 추론한다(마지막 단서).
+ * 워크트리가 정리되고(`dobby-end`) `## 브랜치` 줄에도 저장소가 안 적혀 있으면
+ * 다른 단서가 없어 PR 링크가 통째로 사라진다(사례 QA-22718: 괄호에 저장소 대신 커밋 메모).
+ * 경로 세그먼트 중 `$ORCHESTRATION_REPOS_ROOT` 아래 실제 git 저장소인 이름을 택한다.
+ */
+function repoFromSessionCwd(statusMd: string): string {
+  const cwd =
+    statusMd.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1]?.trim().replace(/^`|`$/g, "") ?? "";
+  if (!cwd) return "";
+  const root = getReposRoot();
+  for (const seg of cwd.split("/").filter(Boolean)) {
+    if (fs.existsSync(path.join(root, seg, ".git"))) return seg;
+  }
+  return "";
+}
+
 export function prTargets(key: string): PrTarget[] {
   const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
   if (!statusMd) return [];
@@ -761,6 +778,8 @@ export function prTargets(key: string): PrTarget[] {
         st.worktrees.length === 1
           ? st.worktrees[0].repo || repoFromPath(st.worktrees[0].path)
           : repoFromSubtree(key, branch);
+      // 워크트리가 정리돼 subtree에도 단서가 없으면 세션 작업 경로에서 추론한다.
+      if (!repo) repo = repoFromSessionCwd(statusMd);
     }
     const dk = `${repo}|${branch}`;
     if (seen.has(dk)) continue;
