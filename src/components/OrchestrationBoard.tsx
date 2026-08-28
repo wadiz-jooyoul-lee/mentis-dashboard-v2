@@ -281,6 +281,7 @@ export default function OrchestrationBoard({
       title={epic?.title ?? null}
       mode={o?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved}
+      logOnlyAgents={epic?.logOnlyAgents ?? []}
       resolved={epic?.resolved ?? false}
       hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
       orderKind={epic?.orderKind ?? null}
