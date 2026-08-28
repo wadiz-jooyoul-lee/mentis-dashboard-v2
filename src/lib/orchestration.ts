@@ -664,14 +664,24 @@ function branchFromWorktree(dir: string): string {
 }
 
 /** {workspace}/subtree/ 에서 `{repo}-{키}[...]` 폴더를 찾아 repo명을 얻는다(status.md에 워크트리 미기록 시). */
-function repoFromSubtree(key: string): string {
+function repoFromSubtree(key: string, branch?: string): string {
   try {
     const subtree = path.join(getWorkspaceDir(), "subtree");
     const re = new RegExp(`^(.+)-${key}(?:-.*)?$`);
+    const matched: { repo: string; dir: string }[] = [];
     for (const name of fs.readdirSync(subtree)) {
       const m = name.match(re);
-      if (m) return m[1];
+      if (m) matched.push({ repo: m[1], dir: path.join(subtree, name) });
     }
+    if (matched.length === 0) return "";
+    // ⛔ 첫 폴더를 그냥 집지 않는다: 한 오더에 워크트리가 여럿이면(FE·BE) 이름순 첫 폴더가
+    // 그 브랜치의 저장소가 아닐 수 있다(사례 FE1-1320: 브랜치는 wadiz-frontend 것인데
+    // com.wadiz.web-… 폴더가 이름순으로 앞서 잘못된 저장소로 PR 링크가 만들어졌다).
+    if (branch) {
+      const hit = matched.find((m) => branchFromWorktree(m.dir) === branch);
+      if (hit) return hit.repo;
+    }
+    return matched[0].repo;
   } catch {
     /* subtree 없음 */
   }
@@ -684,6 +694,23 @@ function repoFromSubtree(key: string): string {
  *  ① 워크트리 표(`| repo | 브랜치 | 경로 |`)  ② 라벨 불릿(`- **브랜치**: …`)  ③ `## 브랜치` 아래 브랜치 불릿.
  * repo는 표의 repo 컬럼 → 워크트리 경로 basename → subtree 폴더 글롭 순으로 도출한다.
  */
+/**
+ * status.md `## 세션`의 작업 경로에서 저장소 이름을 추론한다(마지막 단서).
+ * 워크트리가 정리되고(`dobby-end`) `## 브랜치` 줄에도 저장소가 안 적혀 있으면
+ * 다른 단서가 없어 PR 링크가 통째로 사라진다(사례 QA-22718: 괄호에 저장소 대신 커밋 메모).
+ * 경로 세그먼트 중 `$ORCHESTRATION_REPOS_ROOT` 아래 실제 git 저장소인 이름을 택한다.
+ */
+function repoFromSessionCwd(statusMd: string): string {
+  const cwd =
+    statusMd.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1]?.trim().replace(/^`|`$/g, "") ?? "";
+  if (!cwd) return "";
+  const root = getReposRoot();
+  for (const seg of cwd.split("/").filter(Boolean)) {
+    if (fs.existsSync(path.join(root, seg, ".git"))) return seg;
+  }
+  return "";
+}
+
 export function prTargets(key: string): PrTarget[] {
   const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
   if (!statusMd) return [];
@@ -704,7 +731,10 @@ export function prTargets(key: string): PrTarget[] {
     const wm = statusMd.match(/^\s*[-*]\s*\*{0,2}워크트리\*{0,2}\s*[:：]\s*`?(\S+)/m);
     if (bm) pairs.push({ repo: wm ? repoFromPath(wm[1]) : "", branch: bm[1] });
   }
-  // ③ "## 브랜치" 섹션의 브랜치 불릿(예: "- bugfix/QA-22718 (커밋 …)")
+  // ③ "## 브랜치" 섹션의 브랜치 불릿(예: "- bugfix/QA-22718 (커밋 …)", "- feature/FE1-1320 (wadiz-frontend)")
+  //    ⛔ 첫 줄에서 멈추지 않는다: 멀티 repo 오더는 저장소마다 한 줄씩 적히므로, 하나만 읽으면
+  //    나머지 저장소의 PR 링크가 통째로 사라진다(사례 FE1-1320: FE·BE 두 워크트리인데 링크 1개).
+  //    줄 뒤 괄호에 저장소 이름이 있으면(`(wadiz-frontend)`) 그것을 repo로 쓴다 — 없으면 나중에 추론.
   if (pairs.length === 0) {
     const lines = statusMd.split("\n");
     let inSec = false;
@@ -712,10 +742,11 @@ export function prTargets(key: string): PrTarget[] {
       if (/^##\s/.test(line)) inSec = /브랜치/.test(line.replace(/[#*]/g, ""));
       else if (inSec) {
         const m = line.match(/^\s*[-*]\s*`?([A-Za-z0-9._-]+\/[A-Za-z0-9._\/-]+)/);
-        if (m) {
-          pairs.push({ repo: "", branch: m[1] });
-          break;
-        }
+        if (!m) continue;
+        // 괄호 안이 저장소 이름처럼 보이면 채택(커밋 해시·설명 문구는 제외).
+        const paren = line.match(/\(([^)]+)\)/)?.[1]?.trim() ?? "";
+        const repo = /^[A-Za-z][A-Za-z0-9._-]*$/.test(paren) && !/^[0-9a-f]{7,40}$/.test(paren) ? paren : "";
+        pairs.push({ repo, branch: m[1] });
       }
     }
   }
@@ -746,7 +777,9 @@ export function prTargets(key: string): PrTarget[] {
       repo =
         st.worktrees.length === 1
           ? st.worktrees[0].repo || repoFromPath(st.worktrees[0].path)
-          : repoFromSubtree(key);
+          : repoFromSubtree(key, branch);
+      // 워크트리가 정리돼 subtree에도 단서가 없으면 세션 작업 경로에서 추론한다.
+      if (!repo) repo = repoFromSessionCwd(statusMd);
     }
     const dk = `${repo}|${branch}`;
     if (seen.has(dk)) continue;
