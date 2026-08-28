@@ -157,34 +157,17 @@ function applyDeliverableCompletion(key: string, o: Orchestration): Orchestratio
 }
 
 /**
- * 스폰됐지만(agent-logs.json에 있음) 상태표에는 없는 에이전트를 보드에 병합한다.
- * 오케스트레이터가 새 에이전트 행 추가를 누락해도 대시보드에 보이게 한다.
- * 상태는 항상 5-state 중 하나로 추정한다(옛 "진행중" 금지):
- *   산출물 있음→완료 / 리뷰 에이전트+리뷰파일 있음→완료(끝난 라운드 잔재) / 리뷰 에이전트→리뷰 / 그 외→구현.
+ * 상태표에 없는데 `agent-logs.json`에만 있는 슬러그 = **메타 불일치**(유령 후보).
+ *
+ * 예전에는 이런 슬러그로 보드에 행을 만들어 주고 상태를 "구현"으로 **추측**했다. 그 보정이
+ * 오히려 규약 위반을 감췄다 — 끝난 오더에 일하는 에이전트가 남아 보였고(사례 FE1-1301
+ * `impl-fe-r6`), "상태표에 없으면 안 보인다"는 C4의 근거 자체가 사실이 아니게 됐다.
+ * 지금은 스폰 훅(go-dobby G10)이 등록을 자동화해 애초에 누락이 생기지 않으므로,
+ * 대시보드는 **만들어 주지 않고 그대로 드러낸다**(추측한 상태를 보여주지 않는다).
  */
-function mergeSpawnedAgents(key: string, o: Orchestration): Orchestration {
+function logOnlySlugs(key: string, o: Orchestration): string[] {
   const have = new Set(o.agents.map((a) => a.agent));
-  for (const slug of agentLogSlugs(key)) {
-    if (have.has(slug)) continue;
-    const isReview = /review|리뷰/i.test(slug);
-    const state: AgentState = completedByDeliverable(key, slug)
-      ? "완료"
-      : isReview
-      ? hasAnyReview(key)
-        ? "완료"
-        : "리뷰"
-      : "구현";
-    o.agents.push({
-      agent: slug,
-      issue: "",
-      branch: "",
-      state,
-      round: "",
-      updatedAt: "",
-      startedAt: "",
-    });
-  }
-  return o;
+  return agentLogSlugs(key).filter((s) => !have.has(s));
 }
 
 /** orchestration.md가 있으면 파싱, 없으면 status.md 에이전트 표로 합성. 이후 산출물·스폰로그로 보정. */
@@ -200,12 +183,9 @@ function orchestrationOf(key: string, statusMd: string | null): Orchestration | 
       o = { epicKey: key, mode: null, agents: st.agents, scope: [], conflicts: "", events: [], restMarkdown: "" };
     }
   }
-  // 상태표가 없어도 스폰된 에이전트가 있으면 보드를 만든다.
-  if (!o) {
-    if (agentLogSlugs(key).length === 0) return null;
-    o = { epicKey: key, mode: null, agents: [], scope: [], conflicts: "", events: [], restMarkdown: "" };
-  }
-  return mergeSpawnedAgents(key, applyDeliverableCompletion(key, o));
+  // 상태표가 아예 없으면 보드를 만들지 않는다(로그만으로 행을 지어내지 않는다 — logOnlySlugs 주석).
+  if (!o) return null;
+  return applyDeliverableCompletion(key, o);
 }
 
 export type Counts = { total: number } & Record<string, number>;
@@ -528,6 +508,8 @@ export type Deliverable = { name: string; content: string; kind: "md" | "html" |
 export type EpicDetail = {
   epicKey: string;
   orchestration: Orchestration | null;
+  /** 상태표에 없는데 로그에만 있는 슬러그(메타 불일치). 비어 있는 게 정상. */
+  logOnlyAgents: string[];
   contracts: Contract[];
   reviews: ReviewFile[];
   agentWorks: AgentWork[];
@@ -981,6 +963,7 @@ export function getEpic(epicKey: string): EpicDetail | null {
   return {
     epicKey,
     orchestration,
+    logOnlyAgents: logOnlySlugs(epicKey, orchestration),
     contracts,
     reviews,
     agentWorks,

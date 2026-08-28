@@ -234,6 +234,7 @@ export default function OrchestrationChanges({
         title={epic?.title ?? null}
         mode={epic?.orchestration?.mode ?? null}
         worktreeRemoved={epic?.worktreeRemoved}
+      logOnlyAgents={epic?.logOnlyAgents ?? []}
         resolved={epic?.resolved ?? false}
         hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
         orderKind={epic?.orderKind ?? null}

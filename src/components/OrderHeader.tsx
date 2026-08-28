@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Breadcrumb, Typography, Space, Tag, Button, Tabs } from "antd";
+import { Breadcrumb, Typography, Space, Tag, Button, Tabs, Tooltip } from "antd";
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
@@ -62,6 +62,7 @@ export default function OrderHeader({
   title = null,
   mode = null,
   worktreeRemoved = false,
+  logOnlyAgents = [],
   resolved = false,
   hasJira = false,
   orderKind = null,
@@ -72,6 +73,8 @@ export default function OrderHeader({
   title?: string | null;
   mode?: string | null;
   worktreeRemoved?: boolean;
+  /** 상태표에 없는데 로그에만 있는 슬러그(메타 불일치). 있으면 경고 배지를 띄운다. */
+  logOnlyAgents?: string[];
   /** 해결/종료 상태 — "해결 처리"/"해결 취소" 토글. */
   resolved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
@@ -170,6 +173,13 @@ export default function OrderHeader({
             <Tag color="default" style={{ color: "#8c8c8c" }}>
               워크트리 삭제됨
             </Tag>
+          )}
+          {logOnlyAgents.length > 0 && (
+            <Tooltip
+              title={`상태표(orchestration.md)에 없는데 agent-logs.json에만 있는 슬러그입니다: ${logOnlyAgents.join(", ")} — 스폰 시 등록이 누락됐다는 뜻이라 보드에 표시하지 않습니다. 같은 슬러그의 round-N 하위 키로 병합하거나 상태표에 행을 추가하세요.`}
+            >
+              <Tag color="warning">⚠ 메타 불일치 {logOnlyAgents.length}건</Tag>
+            </Tooltip>
           )}
         </Space>
         <Space align="center" size={4} style={{ flexShrink: 0 }}>
