@@ -57,6 +57,7 @@ export default function ArtifactTabView({
   hasExplainer,
   shareUrl,
   lanHost = null,
+  exposure = "unknown",
   mode,
   worktreeRemoved,
   resolved = false,
@@ -69,6 +70,8 @@ export default function ArtifactTabView({
   shareUrl: string | null;
   /** 서버가 계산한 LAN IPv4. 있으면 localhost 대신 이 IP로 링크를 만든다(타 기기에서 열 수 있게). */
   lanHost?: string | null;
+  /** 이 서버가 다른 기기에 열려 있는지(바인드 주소 기준). */
+  exposure?: "local" | "lan" | "unknown";
   mode: string | null;
   worktreeRemoved: boolean;
   resolved?: boolean;
@@ -107,13 +110,24 @@ export default function ArtifactTabView({
                 &lsquo;구현 내용&rsquo; 탭 내용을 그대로 담은 단독 HTML 페이지입니다(이 대시보드가 서빙).
               </Text>
               <Alert
-                type="warning"
+                type={exposure === "lan" ? "warning" : "info"}
                 showIcon
                 style={{ padding: "6px 12px" }}
                 message={
                   <Text style={{ fontSize: 13 }}>
-                    <b>내부용 링크입니다.</b> 이 맥이 켜져 있고 같은 네트워크에 있을 때만 열립니다 — 사외·타인
-                    공유는 아래 <b>공개 아티팩트</b>를 쓰세요.
+                    <b>내부용 링크입니다.</b> 사외·타인 공유는 아래 <b>공개 아티팩트</b>를 쓰세요.
+                    {exposure === "lan" && (
+                      <>
+                        {" "}현재 이 서버는 <b>같은 네트워크의 다른 기기에 열려 있습니다</b>(0.0.0.0 바인드).
+                        닫으려면 <Text code>npm run lan off</Text>.
+                      </>
+                    )}
+                    {exposure === "local" && (
+                      <>
+                        {" "}현재 이 서버는 <b>이 맥에서만</b> 열립니다(127.0.0.1 바인드) — 다른 기기에서는 이
+                        링크가 열리지 않습니다. 열려면 <Text code>npm run lan on</Text>.
+                      </>
+                    )}
                   </Text>
                 }
               />
