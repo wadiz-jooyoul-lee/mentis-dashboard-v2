@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Typography, Empty, Button, Collapse, Badge } from "antd";
 import FeedView from "@/components/FeedView";
@@ -42,6 +43,7 @@ function JobRecord({ job, label = "구현 내용" }: { job: ExplainJob; label?: 
 
 /** explainer.md가 없을 때: /dobby-explain 생성 실행 + 진행 표시(완료 시 새로고침). */
 function GenerateExplainer({ epicKey, docLabel = "구현 내용" }: { epicKey: string; docLabel?: string }) {
+  const canAct = useCanAct();
   const [state, setState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -115,10 +117,12 @@ function GenerateExplainer({ epicKey, docLabel = "구현 내용" }: { epicKey: s
 
   if (state === "idle") {
     return (
-      <Empty description={`아직 ${docLabel} 문서가 없습니다. 산출물로 생성할 수 있습니다.`}>
-        <Button type="primary" loading={busy} onClick={gen}>
-          {docLabel} 생성
-        </Button>
+      <Empty description={`아직 ${docLabel} 문서가 없습니다.${canAct ? " 산출물로 생성할 수 있습니다." : ""}`}>
+        {canAct && (
+          <Button type="primary" loading={busy} onClick={gen}>
+            {docLabel} 생성
+          </Button>
+        )}
       </Empty>
     );
   }
@@ -145,6 +149,7 @@ export default function ExplainerView({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  hasDesign = false,
   orderKind = null,
 }: {
   epicKey: string;
@@ -155,6 +160,7 @@ export default function ExplainerView({
   worktreeRemoved?: boolean;
   resolved?: boolean;
   hasJira?: boolean;
+  hasDesign?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   return (
@@ -166,6 +172,7 @@ export default function ExplainerView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        hasDesign={hasDesign}
         orderKind={orderKind}
       />
       {!md ? (

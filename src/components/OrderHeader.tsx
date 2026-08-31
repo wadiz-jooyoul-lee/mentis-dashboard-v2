@@ -32,6 +32,7 @@ const SUMMARY_TABS = [
 
 function routeFor(key: string, tab: string): string {
   if (tab === "changes") return `/orchestration/${key}/changes`;
+  if (tab === "design") return `/orchestration/${key}/design`;
   if (tab === "explain") return `/orchestration/${key}/explain`;
   if (tab === "verify") return `/orchestration/${key}/verify`;
   if (tab === "console") return `/orchestration/console/${key}`;
@@ -44,6 +45,7 @@ function routeFor(key: string, tab: string): string {
 function activeTab(pathname: string): string {
   if (pathname.startsWith("/orchestration/console/")) return "console";
   if (pathname.endsWith("/changes")) return "changes";
+  if (pathname.endsWith("/design")) return "design";
   if (pathname.endsWith("/explain")) return "explain";
   if (pathname.endsWith("/verify")) return "verify";
   if (pathname.endsWith("/jira")) return "jira";
@@ -65,6 +67,7 @@ export default function OrderHeader({
   logOnlyAgents = [],
   resolved = false,
   hasJira = false,
+  hasDesign = false,
   orderKind = null,
   extra,
 }: {
@@ -79,6 +82,8 @@ export default function OrderHeader({
   resolved?: boolean;
   /** 저장된 Jira 이슈 원문이 있어 "Jira" 탭을 노출할지. */
   hasJira?: boolean;
+  /** design.md/outcome.md가 있어 "설계/결과" 탭을 노출할지(과거 오더는 문서가 없어 미노출). */
+  hasDesign?: boolean;
   /** 오더 종류. "summary"(작업 내용 정리)면 탭을 축소하고 explain을 "작업 내용"으로 라벨링. */
   orderKind?: "development" | "deliverable" | "summary" | null;
   extra?: React.ReactNode;
@@ -91,10 +96,14 @@ export default function OrderHeader({
   // summary 오더는 보드 탭이 없으므로, 보드 경로(베이스 URL) 진입도 "작업 내용"으로 활성 표시.
   const rawActive = activeTab(pathname);
   const active = isSummary && rawActive === "board" ? "explain" : rawActive;
+  // 설계/결과는 "구현 내용" 앞에 끼운다(문서가 있을 때만 — 과거 오더 미노출).
+  const baseTabs = hasDesign
+    ? TABS.flatMap((t) => (t.key === "explain" ? [{ key: "design", label: "설계/결과" }, t] : [t]))
+    : TABS;
   const items = isSummary
     ? [...SUMMARY_TABS, { key: "artifact", label: "아티팩트" }, { key: "retro", label: "회고" }]
     : [
-        ...TABS,
+        ...baseTabs,
         ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
         { key: "artifact", label: "아티팩트" },
         { key: "retro", label: "회고" },

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,7 @@ export default function BackupListView({
   status: Status;
   dest: string;
 }) {
+  const canAct = useCanAct();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(status.running);
@@ -132,11 +134,11 @@ export default function BackupListView({
           </Space>
           {running ? (
             <Tag color="processing" icon={<ReloadOutlined spin />}>백업 중…</Tag>
-          ) : (
+          ) : canAct ? (
             <Button type="primary" icon={<SaveOutlined />} loading={busy} onClick={runBackup}>
               지금 백업
             </Button>
-          )}
+          ) : null}
         </div>
       </Card>
 

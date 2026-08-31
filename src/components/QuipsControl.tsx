@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Popover, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
@@ -11,6 +12,7 @@ import { useRouter } from "next/navigation";
  * 수동(버튼) 실행이 실패하면 원인과 함께 에러 토스트를 띄운다. 자동 트리거 실패는 조용히 넘어간다.
  */
 export default function QuipsControl({ epicKey }: { epicKey: string }) {
+  const canAct = useCanAct();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,6 +111,7 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
     return () => stopPoll();
   }, [start]);
 
+  if (!canAct) return null; // 읽기 전용 화면에는 리프레시 버튼을 그리지 않는다
   return (
     <Popover content={busy ? "소감 생성 중…" : "소감 리프레시"}>
       <Button
