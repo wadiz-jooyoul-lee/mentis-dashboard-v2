@@ -29,7 +29,7 @@ async function copyText(text: string) {
 }
 
 /** 링크 한 줄 + 복사/열기 버튼. */
-function LinkRow({ url }: { url: string }) {
+function LinkRow({ url, copyLabel = "복사" }: { url: string; copyLabel?: string }) {
   return (
     <Space.Compact style={{ width: "100%" }}>
       <Button style={{ flex: 1, textAlign: "left", cursor: "text", overflow: "hidden" }} title={url}>
@@ -38,7 +38,7 @@ function LinkRow({ url }: { url: string }) {
         </Text>
       </Button>
       <Button icon={<CopyOutlined />} onClick={() => copyText(url)}>
-        복사
+        {copyLabel}
       </Button>
       <Button
         type="primary"
@@ -106,7 +106,18 @@ export default function ArtifactTabView({
               <Text type="secondary" style={{ fontSize: 13 }}>
                 &lsquo;구현 내용&rsquo; 탭 내용을 그대로 담은 단독 HTML 페이지입니다(이 대시보드가 서빙).
               </Text>
-              {localUrl && <LinkRow url={localUrl} />}
+              <Alert
+                type="warning"
+                showIcon
+                style={{ padding: "6px 12px" }}
+                message={
+                  <Text style={{ fontSize: 13 }}>
+                    <b>내부용 링크입니다.</b> 이 맥이 켜져 있고 같은 네트워크에 있을 때만 열립니다 — 사외·타인
+                    공유는 아래 <b>공개 아티팩트</b>를 쓰세요.
+                  </Text>
+                }
+              />
+              {localUrl && <LinkRow url={localUrl} copyLabel="내부용 복사" />}
               {localUrl && (
                 <Collapse
                   size="small"
@@ -147,7 +158,7 @@ export default function ArtifactTabView({
               <Text type="secondary" style={{ fontSize: 13 }}>
                 <code>/dobby-share {epicKey}</code> 로 게시된 공개 아티팩트 링크입니다.
               </Text>
-              <LinkRow url={shareUrl} />
+              <LinkRow url={shareUrl} copyLabel="공유용 복사" />
             </Space>
           ) : (
             <Alert
