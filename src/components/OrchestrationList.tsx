@@ -194,7 +194,7 @@ export default function OrchestrationList({
         const done = r.counts.완료 ?? 0;
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
         return (
-          <Space direction="vertical" size={2} style={{ minWidth: 160 }}>
+          <Space orientation="vertical" size={2} style={{ minWidth: 160 }}>
             <Progress
               percent={pct}
               size="small"

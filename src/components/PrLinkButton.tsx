@@ -95,7 +95,7 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
             description="이 오더의 브랜치 정보를 찾을 수 없습니다"
           />
         ) : (
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             {targets.map((t, i) => {
               const url = prUrl(t);
               return (

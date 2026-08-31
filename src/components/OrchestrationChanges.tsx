@@ -38,8 +38,8 @@ function QuipHistory({ entries }: { entries?: QuipEntry[] }) {
       <Timeline
         style={{ marginTop: 8 }}
         items={entries.map((e) => ({
-          children: (
-            <Space direction="vertical" size={2}>
+          content: (
+            <Space orientation="vertical" size={2}>
               <Space size={6} wrap align="center">
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   {(e.at ?? "").replace("T", " ").slice(0, 16)}
@@ -94,7 +94,7 @@ function WorkBody({ w }: { w: AgentWork }) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`로그 파일을 찾을 수 없음: ${w.logPath}`} />;
   }
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <div>
         <Text strong>
           <FileOutlined /> 수정·생성 파일 ({w.files.length})
@@ -305,7 +305,7 @@ export default function OrchestrationChanges({
                   {w ? (
                     <WorkBody w={w} />
                   ) : (
-                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                       <Descriptions size="small" column={1} bordered>
                         {a.issue && a.issue !== "-" && (
                           <Descriptions.Item label="이슈/작업">{a.issue}</Descriptions.Item>

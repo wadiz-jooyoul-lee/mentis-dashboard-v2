@@ -64,7 +64,7 @@ export default function ConsoleTabs({
         hasJira={hasJira}
         orderKind={orderKind}
       />
-      <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>
+      <Space orientation="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>
         <Paragraph type="secondary" style={{ margin: 0 }}>
         <b>실시간</b>은 대시보드가 띄운 <code>dobby-order</code> 진행(정지·이어서 가능),
         <b> 기록</b>은 클로드 히스토리(세션·서브에이전트)를 재생/추적합니다(읽기 전용).

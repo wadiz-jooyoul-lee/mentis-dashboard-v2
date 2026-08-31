@@ -166,7 +166,7 @@ export default function JobConsole({
       : BADGE[s.state];
 
   return (
-    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={10} style={{ width: "100%" }}>
       <Space wrap>
         {badge ? <Badge status={badge.status} text={badge.text} /> : <Text type="secondary">잡 없음</Text>}
         {nn?.label && <Tag>{nn.label}</Tag>}

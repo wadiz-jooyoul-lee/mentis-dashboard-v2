@@ -113,12 +113,12 @@ function ReportBody({ content }: { content: string }) {
   const failed = scenarios.filter((s) => s.verdict === "fail");
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       {/* 종합 요약 */}
       <Card>
         <Row gutter={[24, 16]} align="middle">
           <Col xs={24} md={6}>
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               <Text type="secondary">종합 판정</Text>
               <Tag
                 color={overall.color}

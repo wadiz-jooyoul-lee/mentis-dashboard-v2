@@ -123,8 +123,8 @@ function groupReviewsByAgent(
 /** 이벤트 하나를 타임라인 항목으로. */
 function eventItem(e: EventRow) {
   return {
-    children: (
-      <Space direction="vertical" size={0}>
+    content: (
+      <Space orientation="vertical" size={0}>
         <Text>{e.text}</Text>
         <Text type="secondary" style={{ fontSize: 12 }}>
           {e.time}
@@ -170,7 +170,7 @@ function AgentCard({
         cursor: clickable ? "pointer" : undefined,
       }}
     >
-      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
           <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
           {a.agent && (
@@ -576,7 +576,7 @@ export default function OrchestrationBoard({
       {epic!.deliverables.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <Title level={4}>산출물</Title>
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
             {epic!.deliverables.map((d) => (
               <Card
                 key={d.name}

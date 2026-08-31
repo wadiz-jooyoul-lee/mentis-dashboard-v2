@@ -105,7 +105,7 @@ export default function ArtifactTabView({
         {/* ① 로컬 HTML — 구현 내용(explainer)을 크롬 없는 HTML로 */}
         <Card size="small" title={<Space><span>구현 내용 HTML</span><Tag color="blue">로컬</Tag></Space>}>
           {hasExplainer ? (
-            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Text type="secondary" style={{ fontSize: 13 }}>
                 &lsquo;구현 내용&rsquo; 탭 내용을 그대로 담은 단독 HTML 페이지입니다(이 대시보드가 서빙).
               </Text>
@@ -168,7 +168,7 @@ export default function ArtifactTabView({
           title={<Space><span>공개 아티팩트</span><Tag color="purple">claude.ai</Tag></Space>}
         >
           {shareUrl ? (
-            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Text type="secondary" style={{ fontSize: 13 }}>
                 <code>/dobby-share {epicKey}</code> 로 게시된 공개 아티팩트 링크입니다.
               </Text>

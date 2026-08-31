@@ -106,7 +106,7 @@ export default function OrderLauncher({
       </Space>
     ),
     children: (
-      <Space direction="vertical" style={{ width: "100%" }}>
+      <Space orientation="vertical" style={{ width: "100%" }}>
         <Button size="small" onClick={() => unarchive(j.key)}>
           복원
         </Button>
@@ -117,7 +117,7 @@ export default function OrderLauncher({
 
   return (
     <Card size="small" title={<Space><PlayCircleOutlined />오더 실행 (dobby-order)</Space>}>
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Paragraph type="secondary" style={{ margin: 0 }}>
           입력을 <code>/dobby-order</code> 뒤에 그대로 전달해 백그라운드 실행합니다. 진행 로그는 아래에서 실시간 확인.
           <br />
