@@ -1,4 +1,5 @@
 "use client";
+import { useCanAct } from "@/components/CanAct";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -46,6 +47,7 @@ function isSkillMissing(result: string | null | undefined): boolean {
 }
 
 export default function JiraTabView(props: Props) {
+  const canAct = useCanAct();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +177,7 @@ export default function JiraTabView(props: Props) {
   const hasIssue = !!(props.jiraIssueMd || props.jiraIssueCleanMd);
   const issueTab = hasIssue ? (
     <div>
+      {canAct && (
       <Space style={{ marginBottom: 12 }}>
         <Button
           size="small"
@@ -185,6 +188,7 @@ export default function JiraTabView(props: Props) {
           {props.jiraIssueCleanMd ? "다시 정리" : "읽기 쉽게 정리"}
         </Button>
       </Space>
+      )}
       <MarkdownDoc md={props.jiraIssueCleanMd ?? props.jiraIssueMd ?? ""} />
       {props.jiraIssueCleanMd && (
         <Collapse
@@ -202,6 +206,7 @@ export default function JiraTabView(props: Props) {
     </div>
   ) : (
     <Empty description="이슈 내용을 아직 불러오지 않았습니다 (작업 시작 전이거나 이전 오더)">
+      {canAct && (
       <Button
         type="primary"
         loading={busy === "snapshot"}
@@ -209,12 +214,14 @@ export default function JiraTabView(props: Props) {
       >
         Jira에서 이슈 불러오기
       </Button>
+      )}
     </Empty>
   );
 
   // ② 코멘트 핵심 정리: 버튼 생성(전체 코멘트 새로 조회).
   const commentsTab = props.jiraCommentsMd ? (
     <div>
+      {canAct && (
       <Space style={{ marginBottom: 12 }}>
         <Button
           size="small"
@@ -225,10 +232,12 @@ export default function JiraTabView(props: Props) {
           다시 정리
         </Button>
       </Space>
+      )}
       <MarkdownDoc md={props.jiraCommentsMd} />
     </div>
   ) : (
     <Empty description="코멘트 핵심 정리가 아직 없습니다">
+      {canAct && (
       <Button
         type="primary"
         loading={busy === "comments"}
@@ -236,12 +245,14 @@ export default function JiraTabView(props: Props) {
       >
         코멘트 핵심 정리 생성
       </Button>
+      )}
     </Empty>
   );
 
   // ③ 업데이트 내용 정리: 편집 가능 + 게시(설명/코멘트). 게시 후 "추가됨" 배지.
   const enrichTab = props.jiraEnrichMd ? (
     <div>
+      {canAct && (
       <Space wrap style={{ marginBottom: 12 }}>
         <Button
           size="small"
@@ -279,7 +290,9 @@ export default function JiraTabView(props: Props) {
           <Tag color="success">코멘트 추가됨 · {props.jiraPosted.comment}</Tag>
         )}
       </Space>
+      )}
       <TextArea
+        readOnly={!canAct}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         autoSize={{ minRows: 10, maxRows: 30 }}
@@ -297,7 +310,7 @@ export default function JiraTabView(props: Props) {
           : "작업이 진행돼 정리할 내용이 생기면 만들 수 있습니다"
       }
     >
-      {props.canEnrich && (
+      {canAct && props.canEnrich && (
         <Button type="primary" loading={busy === "enrich"} onClick={() => trigger("enrich")}>
           업데이트 내용 정리 생성
         </Button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Popconfirm, message } from "antd";
@@ -18,6 +19,7 @@ export default function ResolveButton({
   epicKey: string;
   resolved: boolean;
 }) {
+  const canAct = useCanAct();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -95,6 +97,8 @@ export default function ResolveButton({
     }, 3000);
   };
 
+  // 다른 기기에서 열람 중이면 실행 버튼을 그리지 않는다(서버 가드는 별도).
+  if (!canAct) return null;
   return (
     <Popconfirm
       title={resolved ? "해결 표시를 취소할까요?" : "이 오더를 해결로 표시할까요?"}

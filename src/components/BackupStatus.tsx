@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card, Space, Tag, Button, Typography, message } from "antd";
@@ -29,6 +30,7 @@ function fmt(iso: string | null): string {
  * - 미백업 ≥ 자동임계(20): 페이지 진입 시 1회 백그라운드 자동 백업.
  */
 export default function BackupStatus({ initial = null }: { initial?: Status | null }) {
+  const canAct = useCanAct();
   const [st, setSt] = useState<Status | null>(initial);
   const [busy, setBusy] = useState(false);
   const autoFired = useRef(false);
@@ -108,7 +110,7 @@ export default function BackupStatus({ initial = null }: { initial?: Status | nu
           )}
         </Space>
         <Space size={8}>
-          {showButton && !st.running && (
+          {canAct && showButton && !st.running && (
             <Button type="primary" size="small" icon={<SaveOutlined />} loading={busy} onClick={() => run(false)}>
               백업하기
             </Button>

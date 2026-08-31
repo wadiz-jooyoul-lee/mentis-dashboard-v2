@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { exposureOn, setExposure, isLocalHost } from "@/lib/lanToggle";
+import { exposureOn, setExposure, isSelfRequest } from "@/lib/lanToggle";
+import { denyRemote } from "@/lib/localOnly";
 import { lanHostname, lanIpv4 } from "@/lib/lanHost";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ function shareHost(): string | null {
 export async function GET(req: Request) {
   return NextResponse.json({
     on: exposureOn(),
-    canToggle: isLocalHost(req.headers.get("host")),
+    canToggle: isSelfRequest(req), // .local·IP로 열어도 자기 맥이면 조작 가능
     host: shareHost(),
   });
 }
@@ -23,9 +24,8 @@ export async function GET(req: Request) {
  * 공개 중일 때는 다른 기기도 이 API에 닿을 수 있어, 남이 마음대로 켜고 끄는 것을 막아야 한다.
  */
 export async function POST(req: Request) {
-  if (!isLocalHost(req.headers.get("host"))) {
-    return NextResponse.json({ error: "이 맥에서만 바꿀 수 있습니다." }, { status: 403 });
-  }
+  const denied = denyRemote(req);
+  if (denied) return denied;
   const body = await req.json().catch(() => null);
   if (typeof body?.on !== "boolean") {
     return NextResponse.json({ error: "on(true/false)이 필요합니다." }, { status: 400 });

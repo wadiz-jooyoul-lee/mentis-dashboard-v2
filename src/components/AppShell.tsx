@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Layout } from "antd";
 import AutoRefresh from "@/components/AutoRefresh";
+import { CanActProvider } from "@/components/CanAct";
 import LanToggle from "@/components/LanToggle";
 import MantisIcon from "@/components/MantisIcon";
 
@@ -10,6 +11,7 @@ const { Header, Content } = Layout;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
+    <CanActProvider>
     <Layout style={{ minHeight: "100vh" }}>
       <Header
         style={{
@@ -49,5 +51,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </Content>
     </Layout>
+    </CanActProvider>
   );
 }

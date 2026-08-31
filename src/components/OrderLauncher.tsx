@@ -1,4 +1,5 @@
 "use client";
+import { useCanAct } from "@/components/CanAct";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, Input, Button, Space, Collapse, Badge, Typography, message, Empty } from "antd";
@@ -24,6 +25,7 @@ export default function OrderLauncher({
   initialJobs: JobWithKey[];
   initialArchived: JobWithKey[];
 }) {
+  const canAct = useCanAct();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState<JobWithKey[]>(initialJobs);
@@ -115,6 +117,16 @@ export default function OrderLauncher({
     ),
   }));
 
+  // 다른 기기 열람: 오더 실행은 이 맥의 Claude를 띄우는 것이라 화면 자체를 읽기 전용 안내로 대체
+  if (!canAct) {
+    return (
+      <Card size="small" title={<Space><PlayCircleOutlined />오더 실행 (dobby-order)</Space>}>
+        <Text type="secondary">
+          읽기 전용 화면입니다 — 오더 실행·정지는 대시보드가 실행 중인 맥에서만 할 수 있습니다.
+        </Text>
+      </Card>
+    );
+  }
   return (
     <Card size="small" title={<Space><PlayCircleOutlined />오더 실행 (dobby-order)</Space>}>
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Typography, Empty, Button, Collapse, Badge, Space } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
@@ -56,6 +57,7 @@ function RetroRunner({
   regen?: boolean;
   small?: boolean;
 }) {
+  const canAct = useCanAct();
   const [state, setState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -127,6 +129,7 @@ function RetroRunner({
   };
 
   if (state === "idle") {
+    if (!canAct) return null; // 읽기 전용 화면에는 생성 버튼을 그리지 않는다
     return (
       <Button
         type={small ? "default" : "primary"}

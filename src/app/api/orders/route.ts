@@ -25,6 +25,7 @@ import {
 } from "@/lib/jobs";
 import { saveJiraEnrichDraft, prTargets, readOrderSession } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
+import { denyRemote } from "@/lib/localOnly";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
 
@@ -37,6 +38,8 @@ export const runtime = "nodejs";
  * - 재개/복원: { key, resume|unarchive } — key는 잡 id.
  */
 export async function POST(req: NextRequest) {
+  const denied = denyRemote(req); // 실행·변경은 이 맥 전용(분기 13개를 입구에서 한 번에)
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const jobId = String(body?.key ?? "").trim();
 
@@ -134,6 +137,8 @@ export async function POST(req: NextRequest) {
 
 /** 정지(기본) 또는 보관(action=archive). 데이터는 삭제하지 않는다. */
 export async function DELETE(req: NextRequest) {
+  const denied = denyRemote(req); // 정지·보관도 이 맥 전용
+  if (denied) return denied;
   const key = (req.nextUrl.searchParams.get("key") ?? "").trim();
   const action = req.nextUrl.searchParams.get("action");
   if (!JOB_ID_RE.test(key)) {

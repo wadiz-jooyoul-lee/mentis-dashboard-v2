@@ -1,4 +1,5 @@
 "use client";
+import { useCanAct } from "@/components/CanAct";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Space, Button, Badge, Typography, Input, Tag, message } from "antd";
@@ -56,7 +57,9 @@ export default function JobConsole({
   const pending = nn?.pending ?? null;
   const sessionId = nn?.sessionId ?? null;
   const mode = nn?.mode ?? "job";
-  const controllable = nn ? nn.controllable ?? true : true;
+  const canAct = useCanAct();
+  // 다른 기기 열람이면 정지·재개·예약 등 조작 불가 — 기존 '읽기 전용' 경로에 합류
+  const controllable = canAct && (nn ? nn.controllable ?? true : true);
   const live = nn?.live ?? s.state === "running";
 
   const query = new URLSearchParams({ key: orderKey });
