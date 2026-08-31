@@ -22,6 +22,7 @@ export default async function JiraPage({ params }: { params: Promise<{ key: stri
       resolved={epic?.resolved ?? false}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
+      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
       canEnrich={canEnrich}
       jiraIssueMd={epic?.jiraIssueMd ?? null}
       jiraIssueCleanMd={epic?.jiraIssueCleanMd ?? null}

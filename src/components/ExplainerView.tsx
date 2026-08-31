@@ -149,6 +149,7 @@ export default function ExplainerView({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  hasDesign = false,
   orderKind = null,
 }: {
   epicKey: string;
@@ -159,6 +160,7 @@ export default function ExplainerView({
   worktreeRemoved?: boolean;
   resolved?: boolean;
   hasJira?: boolean;
+  hasDesign?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   return (
@@ -170,6 +172,7 @@ export default function ExplainerView({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        hasDesign={hasDesign}
         orderKind={orderKind}
       />
       {!md ? (

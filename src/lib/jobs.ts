@@ -202,9 +202,14 @@ export function deriveJobId(target: string): string {
 export function startOrder(target: string): { ok: boolean; reason?: string; jobId?: string } {
   const t = target.trim();
   if (!t) return { ok: false, reason: "empty" };
+  // 잡 id는 원본 target으로 계산한다 — 플래그를 붙인 문자열로 세면 같은 이슈가
+  // 다른 잡으로 잡혀 중복 실행 방지(isRunning)가 깨진다.
   const jobId = deriveJobId(t);
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
-  spawnClaude(jobId, ["-p", `/dobby-order ${t}`], false);
+  // 대시보드 잡은 헤드리스라 설계(P3.5) 컨펌을 받을 사람이 없다 → design=auto가 기본
+  // (컨펌만 건너뛰고 결정+이유를 design.md에 기록). 사용자가 직접 적은 design=/mode=는 존중.
+  const withFlag = /\b(design=(auto|confirm)|mode=[AB])\b/.test(t) ? t : `${t} design=auto`;
+  spawnClaude(jobId, ["-p", `/dobby-order ${withFlag}`], false);
   return { ok: true, jobId };
 }
 
@@ -215,6 +220,23 @@ export function startExplain(key: string): { ok: boolean; reason?: string; jobId
   const jobId = `explain-${k}`;
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
   spawnClaude(jobId, ["-p", `/dobby-explain ${k}`], false);
+  return { ok: true, jobId };
+}
+
+/** 설계/결과 문서 생성: `/dobby-design {키} [outcome] [regen]`. 잡 id는 `design-{키}`. */
+export function startDesign(
+  key: string,
+  kind: "design" | "outcome",
+  regen = false
+): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
+  const jobId = `design-${k}`;
+  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
+  // 오더 잡이 도는 중엔 오케스트레이터가 같은 파일을 쓸 수 있어 겹치지 않게 막는다.
+  if (isRunning(k)) return { ok: false, reason: "order_running" };
+  const args = `${kind === "outcome" ? " outcome" : ""}${regen ? " regen" : ""}`;
+  spawnClaude(jobId, ["-p", `/dobby-design ${k}${args}`], false);
   return { ok: true, jobId };
 }
 

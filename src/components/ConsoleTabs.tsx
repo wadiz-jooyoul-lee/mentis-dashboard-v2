@@ -23,6 +23,7 @@ export default function ConsoleTabs({
   worktreeRemoved = false,
   resolved = false,
   hasJira = false,
+  hasDesign = false,
   orderKind = null,
 }: {
   orderKey: string;
@@ -33,6 +34,7 @@ export default function ConsoleTabs({
   worktreeRemoved?: boolean;
   resolved?: boolean;
   hasJira?: boolean;
+  hasDesign?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   const items = [
@@ -62,6 +64,7 @@ export default function ConsoleTabs({
         worktreeRemoved={worktreeRemoved}
         resolved={resolved}
         hasJira={hasJira}
+        hasDesign={hasDesign}
         orderKind={orderKind}
       />
       <Space orientation="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>

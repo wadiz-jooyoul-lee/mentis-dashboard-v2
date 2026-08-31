@@ -237,6 +237,7 @@ export default function OrchestrationChanges({
       logOnlyAgents={epic?.logOnlyAgents ?? []}
         resolved={epic?.resolved ?? false}
         hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(epicKey)}
+        hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
         orderKind={epic?.orderKind ?? null}
         extra={<QuipsControl epicKey={epicKey} />}
       />
