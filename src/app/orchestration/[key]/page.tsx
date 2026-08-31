@@ -7,26 +7,27 @@ import ExplainerView from "@/components/ExplainerView";
 
 export const dynamic = "force-dynamic";
 
-export default function OrchestrationDetailPage({
+export default async function OrchestrationDetailPage({
   params,
 }: {
-  params: { key: string };
+  params: Promise<{ key: string }>;
 }) {
-  const epic = getEpic(params.key);
+  const { key } = await params;
+  const epic = getEpic(key);
 
   // "작업 내용 정리"(summary) 오더는 칸반 보드가 없다(에이전트 1명). 베이스 진입은 "작업 내용"을 바로 보여준다.
   if (epic?.orderKind === "summary") {
-    const job = getJobStatus(`explain-${params.key}`);
+    const job = getJobStatus(`explain-${key}`);
     return (
       <ExplainerView
-        epicKey={params.key}
+        epicKey={key}
         title={epic.title ?? null}
         resolved={epic.resolved}
         md={epic.explainerMd ?? null}
         job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
         mode={epic.orchestration?.mode ?? null}
         worktreeRemoved={epic.worktreeRemoved}
-        hasJira={!!epic.jiraIssueMd || isJiraIssueKey(params.key)}
+        hasJira={!!epic.jiraIssueMd || isJiraIssueKey(key)}
         orderKind={epic.orderKind}
       />
     );
@@ -34,9 +35,9 @@ export default function OrchestrationDetailPage({
 
   return (
     <OrchestrationBoard
-      epicKey={params.key}
+      epicKey={key}
       epic={epic}
-      quips={readQuips(params.key)}
+      quips={readQuips(key)}
     />
   );
 }

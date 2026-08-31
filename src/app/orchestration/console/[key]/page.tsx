@@ -6,29 +6,30 @@ import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
 
-export default function OrderConsolePage({
+export default async function OrderConsolePage({
   params,
 }: {
-  params: { key: string };
+  params: Promise<{ key: string }>;
 }) {
-  if (!ORDER_KEY_RE.test(params.key)) notFound();
+  const { key } = await params;
+  if (!ORDER_KEY_RE.test(key)) notFound();
 
-  const epic = getEpic(params.key);
-  const agents = listConsoleAgents(params.key).map((a) => ({
+  const epic = getEpic(key);
+  const agents = listConsoleAgents(key).map((a) => ({
     id: a.id,
     label: a.slug + (a.phase ? " · " + a.phase : ""),
   }));
 
   return (
     <ConsoleTabs
-      orderKey={params.key}
+      orderKey={key}
       title={epic?.title ?? null}
       resolved={epic?.resolved ?? false}
       agents={agents}
       height={480}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
       orderKind={epic?.orderKind ?? null}
     />
   );

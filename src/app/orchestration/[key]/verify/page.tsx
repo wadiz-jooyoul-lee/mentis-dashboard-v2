@@ -5,19 +5,20 @@ import VerifyView from "@/components/VerifyView";
 
 export const dynamic = "force-dynamic";
 
-export default function VerifyPage({ params }: { params: { key: string } }) {
-  if (!ORDER_KEY_RE.test(params.key)) notFound();
-  const epic = getEpic(params.key);
+export default async function VerifyPage({ params }: { params: Promise<{ key: string }> }) {
+  const { key } = await params;
+  if (!ORDER_KEY_RE.test(key)) notFound();
+  const epic = getEpic(key);
   if (!epic) notFound();
 
   return (
     <VerifyView
-      epicKey={params.key}
+      epicKey={key}
       title={epic.title ?? null}
       resolved={epic.resolved}
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved}
-      hasJira={!!epic.jiraIssueMd || isJiraIssueKey(params.key)}
+      hasJira={!!epic.jiraIssueMd || isJiraIssueKey(key)}
       orderKind={epic.orderKind ?? null}
       runs={epic.runs}
       testGuideMd={epic.testGuideMd}

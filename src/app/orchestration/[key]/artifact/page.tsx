@@ -6,12 +6,13 @@ import ArtifactTabView from "@/components/ArtifactTabView";
 
 export const dynamic = "force-dynamic";
 
-export default function ArtifactPage({ params }: { params: { key: string } }) {
-  if (!ORDER_KEY_RE.test(params.key)) notFound();
-  const epic = getEpic(params.key);
+export default async function ArtifactPage({ params }: { params: Promise<{ key: string }> }) {
+  const { key } = await params;
+  if (!ORDER_KEY_RE.test(key)) notFound();
+  const epic = getEpic(key);
   return (
     <ArtifactTabView
-      epicKey={params.key}
+      epicKey={key}
       title={epic?.title ?? null}
       resolved={epic?.resolved ?? false}
       hasExplainer={!!epic?.explainerMd}
@@ -21,7 +22,7 @@ export default function ArtifactPage({ params }: { params: { key: string } }) {
       exposure={listenExposure()}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
       orderKind={epic?.orderKind ?? null}
     />
   );

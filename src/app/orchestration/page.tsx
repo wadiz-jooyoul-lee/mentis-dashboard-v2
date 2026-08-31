@@ -5,12 +5,12 @@ import OrchestrationList from "@/components/OrchestrationList";
 
 export const dynamic = "force-dynamic";
 
-export default function OrchestrationPage({
+export default async function OrchestrationPage({
   searchParams,
 }: {
-  searchParams?: { type?: string };
+  searchParams?: Promise<{ type?: string }>;
 }) {
-  const type = searchParams?.type;
+  const type = (await searchParams)?.type;
   let epics = listEpics();
   if (type === "code" || type === "nonsource") {
     epics = epics.filter((e) => e.workType === type);
