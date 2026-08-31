@@ -105,7 +105,7 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
           description="세션 정보가 없습니다 (status.md에 ## 세션 미기록)"
         />
       ) : (
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={10} style={{ width: "100%" }}>
           {data.sessionId && data.cwd ? (
             <>
               <Text type="secondary" style={{ fontSize: 12 }}>

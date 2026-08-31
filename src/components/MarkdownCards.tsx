@@ -39,7 +39,7 @@ export default function MarkdownCards({
       <Title level={4}>{title}</Title>
       <Text type="secondary">{subtitle}</Text>
       {blocks.length > 0 ? (
-        <Space direction="vertical" size={12} style={{ width: "100%", marginTop: 8 }}>
+        <Space orientation="vertical" size={12} style={{ width: "100%", marginTop: 8 }}>
           {blocks.map((b, i) => (
             <Card key={i} size="small" title={b.title}>
               <div className="markdown-body">

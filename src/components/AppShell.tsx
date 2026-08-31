@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Layout } from "antd";
 import AutoRefresh from "@/components/AutoRefresh";
+import LanToggle from "@/components/LanToggle";
 import MantisIcon from "@/components/MantisIcon";
 
 const { Header, Content } = Layout;
@@ -37,7 +38,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <MantisIcon size={26} color="#95de64" />
           Mentis Dashboard
         </Link>
-        <AutoRefresh intervalMs={30000} />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 20 }}>
+          <LanToggle />
+          <AutoRefresh intervalMs={30000} />
+        </span>
       </Header>
       <Content
         style={{ padding: 24, maxWidth: 1080, margin: "0 auto", width: "100%" }}

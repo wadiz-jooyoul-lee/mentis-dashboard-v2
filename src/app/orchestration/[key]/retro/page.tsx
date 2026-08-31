@@ -6,20 +6,21 @@ import RetroView from "@/components/RetroView";
 
 export const dynamic = "force-dynamic";
 
-export default function RetroPage({ params }: { params: { key: string } }) {
-  if (!ORDER_KEY_RE.test(params.key)) notFound();
-  const epic = getEpic(params.key);
-  const job = getJobStatus(`retro-${params.key}`);
+export default async function RetroPage({ params }: { params: Promise<{ key: string }> }) {
+  const { key } = await params;
+  if (!ORDER_KEY_RE.test(key)) notFound();
+  const epic = getEpic(key);
+  const job = getJobStatus(`retro-${key}`);
   return (
     <RetroView
-      epicKey={params.key}
+      epicKey={key}
       title={epic?.title ?? null}
       md={epic?.retroMd ?? null}
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       resolved={epic?.resolved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(params.key)}
+      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
       orderKind={epic?.orderKind ?? null}
     />
   );

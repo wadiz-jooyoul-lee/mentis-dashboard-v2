@@ -4,16 +4,17 @@ import OrchestrationChanges from "@/components/OrchestrationChanges";
 
 export const dynamic = "force-dynamic";
 
-export default function OrchestrationChangesPage({
+export default async function OrchestrationChangesPage({
   params,
 }: {
-  params: { key: string };
+  params: Promise<{ key: string }>;
 }) {
+  const { key } = await params;
   return (
     <OrchestrationChanges
-      epicKey={params.key}
-      epic={getEpic(params.key)}
-      quips={readQuips(params.key)}
+      epicKey={key}
+      epic={getEpic(key)}
+      quips={readQuips(key)}
     />
   );
 }

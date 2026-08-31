@@ -1,4 +1,5 @@
 import os from "node:os";
+import { spawnSync } from "node:child_process";
 
 /** VPN·터널·가상 인터페이스(타 기기가 접근 못 하는 IP)는 건너뛴다. */
 const TUNNEL_IFACE = /^(utun|tun|tap|ppp|wg|ipsec|awdl|llw|bridge)/i;
@@ -19,4 +20,25 @@ export function lanIpv4(): string | null {
     }
   }
   return fallback;
+}
+
+/**
+ * 다른 기기에서도 열리는 **호스트 이름**(mDNS). 없으면 null.
+ *
+ * 아티팩트 링크에 LAN IP(예: 192.168.10.67)를 그대로 노출하면, 그 링크가 Jira·Slack·공개
+ * 아티팩트로 새어 나갈 때 내부망 대역이 함께 드러난다(사설 IP라 접속은 불가하지만 불필요한 노출).
+ * macOS는 `LocalHostName`.local로 같은 네트워크에서 접근되므로 숫자 대신 이름을 쓴다.
+ *
+ * ⚠️ `os.hostname()`은 VPN·DHCP 환경에서 엉뚱한 이름(예: ip-10-200-8-39.…compute.internal)을
+ * 돌려주므로 쓰지 않는다. mDNS가 막힌 망에서는 다른 기기에서 안 열리므로 **호출부가 IP로 폴백**해야 한다.
+ */
+export function lanHostname(): string | null {
+  if (process.platform !== "darwin") return null;
+  try {
+    const r = spawnSync("scutil", ["--get", "LocalHostName"], { encoding: "utf8", timeout: 2000 });
+    const name = (r.stdout ?? "").trim();
+    return /^[A-Za-z0-9-]+$/.test(name) ? `${name}.local` : null;
+  } catch {
+    return null;
+  }
 }
