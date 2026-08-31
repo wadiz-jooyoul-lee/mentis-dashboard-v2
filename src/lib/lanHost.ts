@@ -42,30 +42,3 @@ export function lanHostname(): string | null {
     return null;
   }
 }
-
-/**
- * 이 서버가 실제로 어느 주소에 바인드돼 있는지 = **다른 기기에 공개 중인지**.
- *   "local"   127.0.0.1 — 이 맥에서만 열림
- *   "lan"     0.0.0.0/* — 같은 네트워크의 다른 기기에서도 열림
- *   "unknown" 판정 실패(lsof 없음 등)
- *
- * 바인드 주소는 기동 옵션(-H)으로 정해져 실행 중에는 바꿀 수 없다. 화면에는 "지금 열려 있는지"만
- * 보여 주고, 바꾸려면 `npm run lan on|off`(재기동)를 안내한다.
- */
-export function listenExposure(): "local" | "lan" | "unknown" {
-  try {
-    const r = spawnSync("lsof", ["-nP", "-a", "-p", String(process.pid), "-iTCP", "-sTCP:LISTEN"], {
-      encoding: "utf8",
-      timeout: 2000,
-    });
-    const lines = (r.stdout ?? "").split("\n").slice(1).filter(Boolean);
-    if (lines.length === 0) return "unknown";
-    for (const l of lines) {
-      const addr = (l.split(/\s+/)[8] ?? "").split(":")[0];
-      if (addr === "*" || addr === "0.0.0.0") return "lan";
-    }
-    return "local";
-  } catch {
-    return "unknown";
-  }
-}
