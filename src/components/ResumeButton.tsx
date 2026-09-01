@@ -121,7 +121,7 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
               type="info"
               showIcon
               style={{ fontSize: 12 }}
-              message={
+              title={
                 data.cwd
                   ? "세션 ID가 기록되지 않았습니다. 아래 폴더로 이동 후 `claude --resume` 목록에서 고르세요."
                   : "작업 경로가 기록되지 않았습니다. 세션 ID로 `claude --resume` 하세요."

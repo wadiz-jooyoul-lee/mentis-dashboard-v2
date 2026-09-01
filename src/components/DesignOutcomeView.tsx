@@ -228,7 +228,7 @@ export default function DesignOutcomeView({
           type="info"
           showIcon
           style={{ marginTop: 12 }}
-          message="오더가 실행 중입니다 — 오케스트레이터가 설계를 갱신할 수 있어 편집이 잠깁니다."
+          title="오더가 실행 중입니다 — 오케스트레이터가 설계를 갱신할 수 있어 편집이 잠깁니다."
         />
       )}
       <Collapse

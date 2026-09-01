@@ -334,16 +334,15 @@ export default function JiraTabView(props: Props) {
         type="info"
         showIcon
         style={{ marginTop: 12, marginBottom: 12 }}
-        message="이슈 내용은 작업 시작 때 읽은 걸 재활용합니다. 정리·코멘트·업데이트·게시는 버튼으로 실행되며, 게시 후 Jira와 동기화하지는 않습니다."
+        title="이슈 내용은 작업 시작 때 읽은 걸 재활용합니다. 정리·코멘트·업데이트·게시는 버튼으로 실행되며, 게시 후 Jira와 동기화하지는 않습니다."
       />
       {error && (
         <Alert
           type="error"
           showIcon
-          closable
-          onClose={() => setError(null)}
+          closable={{ onClose: () => setError(null) }}
           style={{ marginBottom: 12 }}
-          message={error}
+          title={error}
         />
       )}
       <Tabs
