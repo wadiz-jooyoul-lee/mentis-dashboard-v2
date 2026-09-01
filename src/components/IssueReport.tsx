@@ -167,7 +167,7 @@ function ReportBody({ content }: { content: string }) {
         <Alert
           type="error"
           showIcon
-          message={`실패 ${failed.length}건`}
+          title={`실패 ${failed.length}건`}
           description={
             <span>
               {failed

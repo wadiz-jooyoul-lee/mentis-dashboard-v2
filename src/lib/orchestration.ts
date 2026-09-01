@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
+import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
 import {
   parseOrchestration,
@@ -54,15 +54,46 @@ function orderDir(key: string): string {
  * 사용자가 터미널에서 `cd <cwd> && claude --resume <세션ID>`로 그 세션을 이어가기 위함.
  * 둘 다 없을 수 있다(방어적). 세션 섹션이 없으면 문서 전체에서 찾는다.
  */
-export function readOrderSession(key: string): { sessionId: string | null; cwd: string | null } {
+export type OrderSession = {
+  sessionId: string | null;
+  cwd: string | null;
+  /** 세션의 작업 경로가 지금도 있는가. */
+  cwdExists: boolean;
+  /**
+   * **사라진 워크트리** 목록 — 되살리는 데 필요한 정보.
+   *
+   * 세션의 `작업 경로`는 오케스트레이터가 돌던 폴더(원본 저장소 등)라 보통 삭제되지 않는다.
+   * 그래서 "작업 경로가 없을 때"만 복구를 안내하면 실제로는 한 번도 뜨지 않는다(종료 오더 46개
+   * 실측: 45개가 작업 경로 살아 있음). 판단 기준은 **기록된 워크트리가 사라졌는가**여야 한다.
+   * 브랜치는 dobby-end가 보존하므로 `git worktree add`로 같은 경로에 복원할 수 있다.
+   * (세션 전사는 `~/.claude/projects/` 아래 워크트리 밖에 있어 삭제와 무관하게 남는다 — 실측 확인.)
+   */
+  restore: { repo: string; branch: string; worktreePath: string; srcRepo: string }[];
+};
+
+export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
-  if (!md) return { sessionId: null, cwd: null };
+  if (!md) return { sessionId: null, cwd: null, cwdExists: false, restore: [] };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
   const cwdRaw = sec.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1] ?? null;
-  const cwd = cwdRaw ? cwdRaw.trim().replace(/^`|`$/g, "").trim() || null : null;
-  return { sessionId, cwd };
+  const cwd = cwdRaw ? expandHome(cwdRaw.trim().replace(/^`|`$/g, "").trim()) || null : null;
+  const cwdExists = !!cwd && fs.existsSync(cwd);
+
+  // 기록된 워크트리 중 **사라진 것**만 복구 대상으로 모은다(멀티 repo면 여러 개).
+  const st = parseOrderStatus(md, key);
+  const restore: OrderSession["restore"] = [];
+  for (const w of st.worktrees) {
+    if (!w.path || !w.branch) continue;
+    const abs = expandHome(w.path);
+    if (fs.existsSync(abs)) continue;
+    const repo =
+      w.repo ||
+      (abs.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), "");
+    restore.push({ repo, branch: w.branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
+  }
+  return { sessionId, cwd, cwdExists, restore };
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
@@ -201,6 +232,7 @@ function countAgents(o: Orchestration): Counts {
 
 /** 기록된 워크트리 경로가 있고 모두 디스크에서 사라졌으면 true(dobby-end 정리 등). 기록 없으면 false(알 수 없음). */
 function worktreesGone(worktrees: { path: string }[]): boolean {
+  // `~/work/...`로 적힌 경로는 fs가 못 푸므로 먼저 전개한다(안 하면 있어도 "없음"이 된다).
   const withPath = worktrees.filter((w) => w.path);
   if (withPath.length === 0) return false;
   return withPath.every((w) => {
@@ -336,9 +368,6 @@ export type AgentWork = {
   source?: "log" | "git";
 };
 
-function expandHome(p: string): string {
-  return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
-}
 function commonDir(paths: string[]): string {
   if (paths.length === 0) return "";
   // 파일명(마지막 세그먼트)은 공통 접두어 계산에서 제외한다. 안 그러면 파일이 1개일 때

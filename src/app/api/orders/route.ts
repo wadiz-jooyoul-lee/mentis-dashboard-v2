@@ -26,6 +26,7 @@ import {
 import { saveJiraEnrichDraft, prTargets, readOrderSession } from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { denyRemote } from "@/lib/localOnly";
+import { worktreeInfo, removeWorktrees } from "@/lib/worktree";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
 
@@ -70,6 +71,14 @@ export async function POST(req: NextRequest) {
     const r = startResolve(String(body?.key ?? ""), body?.undo === true);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 워크트리 삭제(dobby-end와 동일 절차): 제거 전 code-changes/ 스냅샷 + 브랜치 보존.
+  // 안전 조건(미푸시 커밋 없음·워크트리 실재)은 removeWorktrees가 다시 확인한다.
+  if (body?.worktreeDelete) {
+    const r = removeWorktrees(String(body?.key ?? ""));
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: 409 });
+    return NextResponse.json({ ok: true, removed: r.removed, snapshot: r.snapshot });
   }
 
   // Jira 탭: 생성(clean/comments/enrich)·게시(post)·초안 저장. 전부 사용자 버튼 트리거.
@@ -210,6 +219,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
     return NextResponse.json(readOrderSession(sessionKey));
+  }
+
+  // 워크트리 삭제 가능 여부: ?worktree={오더키} → { worktrees, removable, reason }
+  // 목록 전체에 대해 미리 계산하면 오더마다 git 호출이 붙어 느려지므로, 버튼에 마우스를
+  // 올렸을 때만 이 API를 부른다(지연 확인).
+  const wtKey = (sp.get("worktree") ?? "").trim();
+  if (wtKey) {
+    if (!ORDER_KEY_RE.test(wtKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    return NextResponse.json(worktreeInfo(wtKey));
   }
 
   const key = (sp.get("key") ?? "").trim();

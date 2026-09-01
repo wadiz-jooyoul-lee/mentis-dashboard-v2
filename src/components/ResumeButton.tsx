@@ -33,7 +33,35 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-type Session = { sessionId: string | null; cwd: string | null };
+/**
+ * 워크트리 복원 + 세션 이어가기를 **한 줄로** 잇는다(붙여넣기 한 번으로 끝).
+ *
+ * 각 저장소 단위는 실측한 실패 조건을 피하도록 만든다(git 2.52 기준):
+ *  - `worktree prune`: 폴더만 `rm`으로 지운 경우 "missing but already registered"로 add가 실패한다.
+ *    prune은 사라진 워크트리의 관리 기록만 지우므로 안전하다.
+ *  - `[ -d 경로 ] ||`: 이미 있으면 건너뛴다(add는 "already exists"로 실패해 체인이 끊긴다).
+ *  - 브랜치가 원격에만 있어도 add가 추적 브랜치를 자동 생성한다(실측 확인).
+ *  - `&&`로 이어 **하나라도 실패하면 claude를 띄우지 않는다**(코드 없이 세션만 열리는 것 방지).
+ */
+function chainedCommand(d: { cwd: string | null; sessionId: string | null; restore: Restore[] }): string {
+  const q = (v: string) => `"${v}"`;
+  const parts = d.restore.map(
+    (r) =>
+      `(git -C ${q(r.srcRepo)} worktree prune; [ -d ${q(r.worktreePath)} ] || git -C ${q(r.srcRepo)} worktree add ${q(r.worktreePath)} ${r.branch})`
+  );
+  parts.push(`cd ${q(d.cwd ?? "")}`);
+  parts.push(`claude --resume ${d.sessionId}`);
+  return parts.join(" && ");
+}
+
+type Restore = { repo: string; branch: string; worktreePath: string; srcRepo: string };
+type Session = {
+  sessionId: string | null;
+  cwd: string | null;
+  cwdExists: boolean;
+  /** 사라진 워크트리들(멀티 repo면 여러 개). 비어 있으면 코드 폴더가 다 살아 있다는 뜻. */
+  restore: Restore[];
+};
 
 /** 모노스페이스 값 한 줄 + 복사 버튼. */
 function CopyRow({ label, value }: { label: string; value: string }) {
@@ -83,9 +111,14 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         cache: "no-store",
       });
       const j = await r.json();
-      setData({ sessionId: j.sessionId ?? null, cwd: j.cwd ?? null });
+      setData({
+        sessionId: j.sessionId ?? null,
+        cwd: j.cwd ?? null,
+        cwdExists: !!j.cwdExists,
+        restore: Array.isArray(j.restore) ? j.restore : [],
+      });
     } catch {
-      setData({ sessionId: null, cwd: null });
+      setData({ sessionId: null, cwd: null, cwdExists: false, restore: [] });
     }
     setLoading(false);
   };
@@ -109,19 +142,52 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
           {data.sessionId && data.cwd ? (
             <>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                이 명령을 터미널에 붙여넣어 세션을 이어가세요:
+                {data.restore.length > 0
+                  ? "이 명령 하나로 코드 폴더를 되살린 뒤 세션까지 이어집니다:"
+                  : data.cwdExists
+                    ? "이 명령을 터미널에 붙여넣어 세션을 이어가세요:"
+                    : "작업 경로가 사라졌습니다. 아래 명령이 폴더를 되살린 뒤 세션을 이어갑니다:"}
               </Text>
               <CopyRow
                 label="명령"
-                value={`cd ${data.cwd} && claude --resume ${data.sessionId}`}
+                value={
+                  data.restore.length > 0
+                    ? chainedCommand(data)
+                    : data.cwdExists
+                      ? `cd ${data.cwd} && claude --resume ${data.sessionId}`
+                      : `mkdir -p ${data.cwd} && cd ${data.cwd} && claude --resume ${data.sessionId}`
+                }
               />
+              {/* 세션의 작업 경로는 보통 오케스트레이터가 돌던 폴더(원본 저장소)라 살아 있다.
+                  진짜 사라지는 건 에이전트 워크트리이므로, 그건 따로 복원 명령을 준다. */}
+              {data.restore.length > 0 && (
+                <>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ fontSize: 12 }}
+                    title={`이 오더의 코드 폴더(워크트리) ${data.restore.length}개가 정리되어, 위 명령이 먼저 되살린 뒤 세션을 엽니다. 브랜치는 보존되어 있어 복원됩니다. 복원에 실패하면 세션을 열지 않고 멈춥니다.`}
+                  />
+                  {data.restore.map((r) => (
+                    <div key={r.worktreePath}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        따로 실행하려면 · {r.repo} ({r.branch})
+                      </Text>
+                      <CopyRow
+                        label="복원 명령"
+                        value={`git -C ${r.srcRepo} worktree add ${r.worktreePath} ${r.branch}`}
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           ) : (
             <Alert
               type="info"
               showIcon
               style={{ fontSize: 12 }}
-              message={
+              title={
                 data.cwd
                   ? "세션 ID가 기록되지 않았습니다. 아래 폴더로 이동 후 `claude --resume` 목록에서 고르세요."
                   : "작업 경로가 기록되지 않았습니다. 세션 ID로 `claude --resume` 하세요."
