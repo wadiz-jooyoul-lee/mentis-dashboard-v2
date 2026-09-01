@@ -366,7 +366,7 @@ export default function OrchestrationBoard({
           showIcon
           icon={orchestratorAvatar(24)}
           style={{ marginBottom: 16 }}
-          message={`정체 의심 ${staleAgents.length}건`}
+          title={`정체 의심 ${staleAgents.length}건`}
           description={staleAgents
             .map((a) => `${a.agent}(${a.issue}) 마지막 변경 후 ${minutesSince(staleBase(a))}분`)
             .join(" · ")}

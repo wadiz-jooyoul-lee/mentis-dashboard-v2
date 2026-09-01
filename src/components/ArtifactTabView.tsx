@@ -116,7 +116,7 @@ export default function ArtifactTabView({
                 type={exposure === "lan" ? "warning" : "info"}
                 showIcon
                 style={{ padding: "6px 12px" }}
-                message={
+                title={
                   <Text style={{ fontSize: 13 }}>
                     <b>내부용 링크입니다.</b> 사외·타인 공유는 아래 <b>공개 아티팩트</b>를 쓰세요.
                     {exposure === "lan" && (
@@ -159,7 +159,7 @@ export default function ArtifactTabView({
             <Alert
               type="info"
               showIcon
-              message="아직 구현 내용(explainer)이 없습니다."
+              title="아직 구현 내용(explainer)이 없습니다."
               description="‘구현 내용’ 탭에서 먼저 생성하면 여기에서 HTML 링크·미리보기가 제공됩니다."
             />
           )}
@@ -181,7 +181,7 @@ export default function ArtifactTabView({
             <Alert
               type="info"
               showIcon
-              message="공개 아티팩트 링크가 아직 없습니다."
+              title="공개 아티팩트 링크가 아직 없습니다."
               description={
                 <Paragraph style={{ margin: 0 }}>
                   대화형 Claude Code에서 <Text code>/dobby-share {epicKey}</Text> 를 실행하면 claude.ai
