@@ -79,3 +79,14 @@ export type ReportRun = {
   /** 정렬용 epoch(ms) */
   sortKey: number;
 };
+
+/**
+ * status.md에 `~/work/subtree/...`처럼 적힌 경로를 실제 절대경로로 편다.
+ * fs.existsSync는 `~`를 풀지 못해, 안 펴면 폴더가 있어도 "없음"으로 판정된다
+ * (사례 FE1-1212: 워크트리 2개가 존재 판정 자체를 못 받음).
+ */
+export function expandHome(p: string): string {
+  if (!p) return p;
+  if (p === "~") return os.homedir();
+  return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+}
