@@ -11,6 +11,7 @@ import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
 import OrderLauncher from "@/components/OrderLauncher";
 import DateFoldedTable from "@/components/DateFoldedTable";
+import WorktreeDeleteButton from "@/components/WorktreeDeleteButton";
 import GroupAvatar from "@/components/GroupAvatar";
 import ResolveButton from "@/components/ResolveButton";
 import { dobbyColor } from "@/lib/dobby";
@@ -68,10 +69,13 @@ const KIND_TAGS: Array<{ value: KindFilter; label: string }> = [
 
 export default function OrchestrationList({
   epics,
+  deletable,
   sourceDir,
   initialJobs = [],
   initialArchived = [],
 }: {
+  /** 오더별 워크트리 삭제 가능 여부. 키가 없으면 지울 워크트리가 없다는 뜻(버튼 미노출). */
+  deletable: Record<string, { removable: boolean; reason: string | null }>;
   epics: EpicSummary[];
   sourceDir: string;
   initialJobs?: JobWithKey[];
@@ -210,11 +214,18 @@ export default function OrchestrationList({
     {
       title: "해결",
       key: "resolve",
-      render: (_: unknown, r: EpicSummary) => (
-        <span onClick={(e) => e.stopPropagation()}>
-          <ResolveButton epicKey={r.epicKey} resolved={workStatus(r).text !== "작업중"} />
-        </span>
-      ),
+      render: (_: unknown, r: EpicSummary) => {
+        const resolved = workStatus(r).text !== "작업중";
+        return (
+          <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <ResolveButton epicKey={r.epicKey} resolved={resolved} />
+            {/* 지울 워크트리가 실제로 있는 오더에만 — 이미 정리됐거나 문서 전용이면 아예 안 그린다. */}
+            {resolved && deletable[r.epicKey] && (
+              <WorktreeDeleteButton epicKey={r.epicKey} state={deletable[r.epicKey]} />
+            )}
+          </span>
+        );
+      },
     },
   ];
 
@@ -327,6 +338,8 @@ export default function OrchestrationList({
                       onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
                       rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
                       emptyText="진행 중인 오더가 없습니다"
+                      pageSize={10}
+                      storageKey="orders-by-date"
                     />
                   </div>
                 </div>
