@@ -368,7 +368,14 @@ export default function OrchestrationBoard({
           style={{ marginBottom: 16 }}
           title={`정체 의심 ${staleAgents.length}건`}
           description={staleAgents
-            .map((a) => `${a.agent}(${a.issue}) 마지막 변경 후 ${minutesSince(staleBase(a))}분`)
+            .map((a) => {
+              // 이슈 컬럼은 레거시 상태표(하위이슈별 에픽)에만 있다 — 현행 스키마
+              // (슬러그·이름·설명·상태·라운드·착수·갱신)에는 없어서 대개 빈 문자열이다.
+              // 가드 없이 `${a.agent}(${a.issue})`로 쓰면 "equity-server()"처럼 빈 괄호가 남는다.
+              // 같은 파일 187행·OrchestrationChanges 311행은 이미 같은 가드를 쓰고 있다.
+              const who = a.issue && a.issue !== "-" ? `${a.agent}(${a.issue})` : a.agent;
+              return `${who} 마지막 변경 후 ${minutesSince(staleBase(a))}분`;
+            })
             .join(" · ")}
         />
       )}
@@ -572,6 +579,33 @@ export default function OrchestrationBoard({
         </div>
       )}
 
+
+      {/* 기타 문서 — 대시보드가 이름을 모르는 루트 .md. 목록만 보여주고 본문은 문서 탭에서 읽는다
+          (본문까지 보드에 실으면 문서가 많은 오더의 응답이 통째로 커진다 — 실측 1.16MB → 1.94MB). */}
+      {epic!.otherDocs.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <Space align="baseline" size={8}>
+            <Title level={4} style={{ margin: 0 }}>
+              기타 문서
+            </Title>
+            <Link href={`/orchestration/${epicKey}/docs`}>전체 보기 →</Link>
+          </Space>
+          <div>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              전용 탭이 없는 문서입니다. 에이전트가 조사 결과를 자기 이름으로 남긴 것이 대부분입니다.
+            </Text>
+          </div>
+          <Space size={[8, 8]} wrap style={{ marginTop: 12 }}>
+            {epic!.otherDocs.map((d) => (
+              <Link key={d.name} href={`/orchestration/${epicKey}/docs#${encodeURIComponent(d.name)}`}>
+                <Tag icon={<FileTextOutlined />} color="blue" style={{ margin: 0, cursor: "pointer" }}>
+                  {d.name} · {Math.max(1, Math.round(d.bytes / 1024))} KB
+                </Tag>
+              </Link>
+            ))}
+          </Space>
+        </div>
+      )}
 
       {/* 산출물 (deliverables/) */}
       {epic!.deliverables.length > 0 && (
