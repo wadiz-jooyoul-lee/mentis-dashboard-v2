@@ -13,7 +13,7 @@ export default async function OrchestrationChangesPage({
   return (
     <OrchestrationChanges
       epicKey={key}
-      epic={getEpic(key)}
+      epic={getEpic(key, { withDiffs: true })}
       quips={readQuips(key)}
     />
   );

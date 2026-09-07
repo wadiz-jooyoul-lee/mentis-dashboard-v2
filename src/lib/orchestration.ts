@@ -19,6 +19,7 @@ import {
 } from "@/lib/parseOrchestration";
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
+import { memoByFileStat } from "@/lib/fileMemo";
 import {
   assignOrderAvatars,
   type AssignedAvatar,
@@ -532,6 +533,94 @@ function fillGitChanges(
   }
 }
 
+/**
+ * 로그 파싱 결과 캐시 래퍼. 대화 로그는 오더에 따라 수십 MB라 파싱에 수백 ms가 든다.
+ * 파일이 그대로면(수정시각·크기 동일) 이전 결과를 재사용한다.
+ */
+function parseAgentLogCached(rawPath: string): Omit<AgentWork, "slug"> {
+  return memoByFileStat("agentLog", expandHome(rawPath), () => parseAgentLog(rawPath));
+}
+
+/**
+ * 코드 변경(diff 본문)을 만든다. **비싼 경로** — `/changes` 화면에서만 쓴다.
+ *
+ * agent-logs.json(문자열/단계별 객체) 우선, 없으면 projects 자동탐색.
+ * listConsoleAgents가 두 경우를 모두 평탄화(id=슬러그[::단계])해 주므로, 같은 슬러그의
+ * 여러 단계(analysis/impl 등)를 하나로 합쳐 구현 diff·커밋이 드러나게 한다.
+ */
+function buildAgentWorks(
+  epicKey: string,
+  orchestration: Orchestration,
+  st: ReturnType<typeof parseOrderStatus> | null
+): AgentWork[] {
+  // 한 로그 파일을 여러 항목이 가리키는 경우가 흔하다(agent-logs.json의 round-1~round-N이
+  // 같은 .output을 가리킴). 실제 경로(realpath) 기준으로 한 번만 파싱해 재사용한다.
+  const parsedByPath = new Map<string, Omit<AgentWork, "slug">>();
+  const parseOnce = (rawPath: string): Omit<AgentWork, "slug"> => {
+    const expanded = expandHome(rawPath);
+    let real = expanded;
+    try {
+      real = fs.realpathSync(expanded);
+    } catch {
+      /* 파일이 없으면 확장 경로를 키로 쓴다 */
+    }
+    let hit = parsedByPath.get(real);
+    if (!hit) {
+      hit = parseAgentLogCached(rawPath);
+      parsedByPath.set(real, hit);
+    }
+    return hit;
+  };
+
+  const bySlug = new Map<string, AgentWork>();
+  for (const ca of listConsoleAgents(epicKey)) {
+    const parsed = parseOnce(ca.path);
+    const cur = bySlug.get(ca.slug);
+    if (cur) {
+      cur.files = Array.from(new Set([...cur.files, ...parsed.files]));
+      cur.diffs.push(...parsed.diffs);
+      cur.commits.push(...parsed.commits);
+      cur.found = cur.found || parsed.found;
+      if (parsed.diffs.length && parsed.summary) cur.summary = parsed.summary;
+    } else {
+      // 캐시된 결과를 그대로 담으면 아래 병합·fillGitChanges가 캐시 내용을 변형시킨다.
+      // 배열은 복사해 넣는다(캐시 오염 방지).
+      bySlug.set(ca.slug, {
+        slug: ca.slug,
+        ...parsed,
+        files: [...parsed.files],
+        diffs: [...parsed.diffs],
+        commits: [...parsed.commits],
+      });
+    }
+  }
+  const works = Array.from(bySlug.values()).sort((a, b) => a.slug.localeCompare(b.slug));
+  // 로그(Edit/Write)에 코드 변경이 없으면 워크트리 브랜치 diff로 보강한다(셸로 수정한 경우).
+  if (st) fillGitChanges(works, orchestration.agents, st.worktrees);
+  return works;
+}
+
+/**
+ * **저렴한 경로** — 로그 본문을 읽지 않고 "작업 로그가 있는 에이전트 슬러그"만 채운다.
+ *
+ * 보드(칸반)는 카드에서 해당 에이전트의 코드 변경 섹션으로 이동할 slug만 알면 되고,
+ * 헤더·탭 화면들은 이 값을 아예 쓰지 않는다. 그런데 예전에는 어느 화면이든 로그 전체를
+ * 파싱했다(오더에 따라 수십 MB). 슬러그 목록은 agent-logs.json 키만 읽으면 나온다.
+ */
+function slugStubs(epicKey: string): AgentWork[] {
+  const slugs = Array.from(new Set(listConsoleAgents(epicKey).map((a) => a.slug)));
+  return slugs.sort().map((slug) => ({
+    slug,
+    logPath: "",
+    found: false,
+    baseDir: "",
+    files: [],
+    diffs: [],
+    commits: [],
+    summary: "",
+  }));
+}
+
 export type Deliverable = { name: string; content: string; kind: "md" | "html" | "other" };
 
 export type EpicDetail = {
@@ -589,6 +678,16 @@ export type EpicDetail = {
   jiraEnrichMd: string | null;
   /** Jira 탭 — 게시 여부 플래그(jira-enrich.json). desc/comment별 반영 시각. */
   jiraPosted: { desc?: string; comment?: string };
+  /**
+   * 공통 헤더의 탭 표시용 "문서 존재 여부". 본문을 읽지 않고 existsSync로만 판정한다.
+   *
+   * 왜 별도 필드인가: 헤더는 탭을 켤지 말지만 알면 되는데 예전에는 `!!epic.retroMd`처럼
+   * **불리언 하나를 얻으려고 수십 KB 파일을 통째로 읽었다**(retro.md는 29 KB).
+   * 본문이 실제로 필요한 화면(`/retro`·`/jira`·`/design`·`/explain`)은 아래 *Md를 그대로 쓴다.
+   */
+  hasJiraDoc: boolean;
+  hasDesignDoc: boolean;
+  hasExplainerDoc: boolean;
 };
 
 /** test-runs/{시각}/result.md 회차들(최신순). */
@@ -925,7 +1024,15 @@ function epicAvatars(
   return obj;
 }
 
-export function getEpic(epicKey: string): EpicDetail | null {
+export type EpicLoadOpts = {
+  /**
+   * 코드 변경(diff) 본문까지 만든다. 에이전트 대화 로그 전체를 읽어 파싱하므로 비싸다
+   * (오더에 따라 수십 MB). `/changes` 화면 전용이며, 다른 화면은 슬러그 목록만 쓴다.
+   */
+  withDiffs?: boolean;
+};
+
+export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | null {
   const dir = orderDir(epicKey);
   if (!fs.existsSync(dir)) return null;
   const statusMd = readFileSafe(path.join(dir, "status.md"));
@@ -958,32 +1065,13 @@ export function getEpic(epicKey: string): EpicDetail | null {
   }
   reviews.sort((a, b) => b.round - a.round || a.slug.localeCompare(b.slug));
 
-  // 코드 변경(로그 기반): agent-logs.json(문자열/단계별 객체) 우선, 없으면 projects 자동탐색.
-  // listConsoleAgents가 두 경우를 모두 평탄화(id=슬러그[::단계])해 주므로, 같은 슬러그의
-  // 여러 단계(analysis/impl 등)를 하나로 합쳐 구현 diff·커밋이 드러나게 한다.
-  const agentWorks: AgentWork[] = [];
-  {
-    const bySlug = new Map<string, AgentWork>();
-    for (const ca of listConsoleAgents(epicKey)) {
-      const parsed = parseAgentLog(ca.path);
-      const cur = bySlug.get(ca.slug);
-      if (cur) {
-        cur.files = Array.from(new Set([...cur.files, ...parsed.files]));
-        cur.diffs.push(...parsed.diffs);
-        cur.commits.push(...parsed.commits);
-        cur.found = cur.found || parsed.found;
-        if (parsed.diffs.length && parsed.summary) cur.summary = parsed.summary;
-      } else {
-        bySlug.set(ca.slug, { slug: ca.slug, ...parsed });
-      }
-    }
-    agentWorks.push(...bySlug.values());
-  }
-  agentWorks.sort((a, b) => a.slug.localeCompare(b.slug));
-
   const st = statusMd ? parseOrderStatus(statusMd, epicKey) : null;
-  // 로그(Edit/Write)에 코드 변경이 없으면 워크트리 브랜치 diff로 보강한다(셸로 수정한 경우).
-  if (st) fillGitChanges(agentWorks, orchestration.agents, st.worktrees);
+  // 코드 변경(diff 본문)은 `/changes` 화면만 쓴다. 나머지 화면(보드·구현 내용·검증·Jira·
+  // 설계·회고·아티팩트·콘솔)은 "작업 로그가 있는 에이전트 슬러그"만 필요하므로,
+  // 기본값에서는 로그 본문을 아예 읽지 않는다.
+  const agentWorks = opts.withDiffs
+    ? buildAgentWorks(epicKey, orchestration, st)
+    : slugStubs(epicKey);
   const avatars = epicAvatars(
     epicKey,
     dir,
@@ -1040,6 +1128,10 @@ export function getEpic(epicKey: string): EpicDetail | null {
     jiraCommentsMd: readFileSafe(path.join(dir, "jira-comments.md")),
     jiraEnrichMd: readFileSafe(path.join(dir, "jira-enrich.md")),
     jiraPosted: readJiraPosted(dir),
+    hasJiraDoc: fs.existsSync(path.join(dir, "jira-issue.md")),
+    hasDesignDoc:
+      fs.existsSync(path.join(dir, "design.md")) || fs.existsSync(path.join(dir, "outcome.md")),
+    hasExplainerDoc: fs.existsSync(path.join(dir, "explainer.md")),
   };
 }
 

@@ -29,8 +29,8 @@ export default async function OrderConsolePage({
       height={480}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
+      hasDesign={epic?.hasDesignDoc ?? false}
       orderKind={epic?.orderKind ?? null}
     />
   );

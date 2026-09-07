@@ -27,7 +27,7 @@ export default async function OrchestrationDetailPage({
         job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
         mode={epic.orchestration?.mode ?? null}
         worktreeRemoved={epic.worktreeRemoved}
-        hasJira={!!epic.jiraIssueMd || isJiraIssueKey(key)}
+        hasJira={epic.hasJiraDoc || isJiraIssueKey(key)}
         orderKind={epic.orderKind}
       />
     );
