@@ -122,13 +122,13 @@ export default function ArtifactTabView({
                     {exposure === "lan" && (
                       <>
                         {" "}현재 이 서버는 <b>같은 네트워크의 다른 기기에 열려 있습니다</b>(0.0.0.0 바인드).
-                        닫으려면 <Text code>npm run lan off</Text>.
+                        닫으려면 <Text code>pnpm share:off</Text>.
                       </>
                     )}
                     {exposure === "local" && (
                       <>
                         {" "}현재 이 서버는 <b>이 맥에서만</b> 열립니다(127.0.0.1 바인드) — 다른 기기에서는 이
-                        링크가 열리지 않습니다. 열려면 <Text code>npm run lan on</Text>.
+                        링크가 열리지 않습니다. 열려면 <Text code>pnpm share:on</Text>.
                       </>
                     )}
                   </Text>

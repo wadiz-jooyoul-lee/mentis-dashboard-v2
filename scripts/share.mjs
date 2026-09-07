@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * 대시보드의 외부(다른 기기) 공개를 켜고 끈다 — 헤더 토글과 같은 일을 터미널에서.
+ * 대시보드를 다른 기기에서 볼 수 있게 공유를 켜고 끈다 — 헤더 토글과 같은 일을 터미널에서.
  *
  * 서버는 항상 0.0.0.0에 열려 있고 실제 차단은 `src/proxy.ts`가 이 파일을 보고 한다.
  * 그래서 값만 바꾸면 재기동 없이 다음 요청부터 바로 반영된다.
  *
- *   node scripts/lan.mjs status   현재 공개 여부
- *   node scripts/lan.mjs on       외부 공개 켜기
- *   node scripts/lan.mjs off      이 맥에서만
+ *   pnpm share       현재 공개 여부 + 다른 기기용 주소
+ *   pnpm share:on    외부 공개 켜기
+ *   pnpm share:off   이 맥에서만
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -48,4 +48,4 @@ if (cmd === "status") status();
 else if (cmd === "on" || cmd === "off") {
   fs.writeFileSync(FILE, `${cmd}\n`);
   status();
-} else console.log("사용법: node scripts/lan.mjs [status|on|off]");
+} else console.log("사용법: pnpm share | pnpm share:on | pnpm share:off");
