@@ -16,15 +16,15 @@ export default async function ArtifactPage({ params }: { params: Promise<{ key: 
       epicKey={key}
       title={epic?.title ?? null}
       resolved={epic?.resolved ?? false}
-      hasExplainer={!!epic?.explainerMd}
+      hasExplainer={epic?.hasExplainerDoc ?? false}
       shareUrl={epic?.artifactShareUrl ?? null}
       // 링크에 숫자 IP를 노출하지 않도록 mDNS 이름을 먼저 쓰고, 안 되면 IP로 폴백한다.
       lanHost={lanHostname() ?? lanIpv4()}
       exposure={exposureOn() ? "lan" : "local"}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
+      hasDesign={epic?.hasDesignDoc ?? false}
       orderKind={epic?.orderKind ?? null}
     />
   );

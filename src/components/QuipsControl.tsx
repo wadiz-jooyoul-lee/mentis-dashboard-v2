@@ -83,6 +83,16 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ quips: true, key: epicKey, slugs: targets }),
           });
+          // 다른 작업이 실행 중이면 서버가 `busy:{잡키}`로 거절한다(소감은 최하위 우선순위).
+          // 실패가 아니라 "양보"이므로 폴링하지 않고 조용히 물러난다. 다음 진입 때 다시 시도한다.
+          if (r.status === 409) {
+            const j = (await r.json().catch(() => null)) as { error?: string } | null;
+            if (typeof j?.error === "string" && j.error.startsWith("busy")) {
+              setBusy(false);
+              if (manual) message.info("다른 작업이 실행 중이라 소감 생성을 건너뜁니다");
+              return;
+            }
+          }
           if (r.ok || r.status === 409) {
             setBusy(true);
           } else {
@@ -107,8 +117,19 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
   useEffect(() => {
     if (triggered.current) return;
     triggered.current = true;
-    start(false);
-    return () => stopPoll();
+    // 진입 즉시가 아니라 **브라우저가 한가해진 뒤**에 시작한다(최하위 우선순위).
+    // 예전에는 마운트하자마자 API를 불러 화면이 뜨는 중에 서버 작업이 끼어들었다.
+    // requestIdleCallback을 지원하지 않는 브라우저는 지연 타이머로 대체한다.
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    let idleId: number | undefined;
+    let timerId: number | undefined;
+    if (ric) idleId = ric(() => start(false), { timeout: 5000 });
+    else timerId = window.setTimeout(() => start(false), 2000);
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback?.(idleId);
+      if (timerId !== undefined) window.clearTimeout(timerId);
+      stopPoll();
+    };
   }, [start]);
 
   if (!canAct) return null; // 읽기 전용 화면에는 리프레시 버튼을 그리지 않는다

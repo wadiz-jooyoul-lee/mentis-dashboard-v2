@@ -20,8 +20,8 @@ export default async function ExplainPage({ params }: { params: Promise<{ key: s
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
+      hasDesign={epic?.hasDesignDoc ?? false}
       orderKind={epic?.orderKind ?? null}
     />
   );

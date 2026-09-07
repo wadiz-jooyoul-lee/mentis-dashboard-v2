@@ -18,7 +18,7 @@ export default async function DesignPage({ params }: { params: Promise<{ key: st
       resolved={epic.resolved ?? false}
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved ?? false}
-      hasJira={!!epic.jiraIssueMd || isJiraIssueKey(key)}
+      hasJira={epic.hasJiraDoc || isJiraIssueKey(key)}
       orderKind={epic.orderKind ?? null}
       designMd={epic.designMd}
       outcomeMd={epic.outcomeMd}

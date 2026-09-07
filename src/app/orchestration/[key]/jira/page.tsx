@@ -13,7 +13,7 @@ export default async function JiraPage({ params }: { params: Promise<{ key: stri
   // Jira 키면 아직 이슈를 안 불러왔어도 탭을 열어 "불러오기" 버튼을 제공.
   if (!epic?.jiraIssueMd && !isJiraIssueKey(key)) notFound();
 
-  const canEnrich = !!(epic?.implementationMd || epic?.produceMd || epic?.explainerMd);
+  const canEnrich = !!(epic?.implementationMd || epic?.produceMd) || !!epic?.hasExplainerDoc;
 
   return (
     <JiraTabView
@@ -22,7 +22,7 @@ export default async function JiraPage({ params }: { params: Promise<{ key: stri
       resolved={epic?.resolved ?? false}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasDesign={epic?.hasDesignDoc ?? false}
       canEnrich={canEnrich}
       jiraIssueMd={epic?.jiraIssueMd ?? null}
       jiraIssueCleanMd={epic?.jiraIssueCleanMd ?? null}

@@ -18,8 +18,8 @@ export default async function VerifyPage({ params }: { params: Promise<{ key: st
       resolved={epic.resolved}
       mode={epic.orchestration?.mode ?? null}
       worktreeRemoved={epic.worktreeRemoved}
-      hasJira={!!epic.jiraIssueMd || isJiraIssueKey(key)}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasJira={epic.hasJiraDoc || isJiraIssueKey(key)}
+      hasDesign={epic?.hasDesignDoc ?? false}
       orderKind={epic.orderKind ?? null}
       runs={epic.runs}
       testGuideMd={epic.testGuideMd}

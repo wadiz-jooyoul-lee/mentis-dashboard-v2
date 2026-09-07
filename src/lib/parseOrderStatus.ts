@@ -215,8 +215,12 @@ function parseIssueMeta(
   const isTask = /^TASK-/.test(fallbackKey);
 
   // 1) 볼드 라벨 → 상단표(항목/값) → 자유 불릿 순
+  //
+  // ⛔ 제목에는 field()를 쓰지 않는다 — field()는 값을 `·`(중점)에서 끊는데, 제목 자체에
+  // 중점이 들어가는 경우가 흔해 뒷부분이 통째로 사라진다(사례 FE1-1813:
+  // "[Web] 랜딩·기획 지면 공유 버튼 결함 5종 수정"이 "[Web] 랜딩"으로 표시).
+  // 제목은 한 줄에 값 하나만 오는 필드라 줄 끝까지 읽는 fieldLine()이 맞다(md.ts 주석 참조).
   let title =
-    field(src, "제목") ??
     fieldLine(src, "제목") ??
     kvGet(kv, "제목", "초점", "주제") ??
     null;

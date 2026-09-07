@@ -139,10 +139,44 @@ export function isRunning(key: string): boolean {
 }
 
 /**
+ * 지금 실제로 살아 있는 잡 키 목록.
+ *
+ * `isRunning`을 키마다 부르면 그 안에서 `ps`를 매번 띄운다(잡 폴더가 170개 넘음).
+ * 여기서는 메타(run.json)에서 PID를 모아 **`ps`를 단 한 번** 호출해 확인한다.
+ */
+function runningJobKeys(): string[] {
+  const metas = allJobKeys()
+    .map((k) => readMeta(k))
+    .filter((m): m is Meta => !!m && m.pid > 0);
+  if (metas.length === 0) return [];
+  const alive = new Set<number>();
+  try {
+    const out = execFileSync("ps", ["-o", "pid=,command=", "-p", metas.map((m) => m.pid).join(",")], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    for (const line of out.split("\n")) {
+      const m = line.trim().match(/^(\d+)\s+(.*)$/);
+      if (m && /claude/i.test(m[2])) alive.add(Number(m[1]));
+    }
+  } catch {
+    /* 대상 PID가 모두 죽었으면 ps가 실패한다 → 살아 있는 잡 없음 */
+  }
+  return metas.filter((m) => alive.has(m.pid)).map((m) => m.key);
+}
+
+/**
  * claude 헤드리스 실행(신규/재개 공용). append=true면 로그 이어쓰기.
  * model을 주면 `--model`로 그 모델을 강제한다(요약·게시·소감 등 저렴/고정 모델용).
+ * lowPriority=true면 `nice`로 OS 최하위 우선순위로 띄운다(재미기능 등 양보해야 하는 잡).
  */
-function spawnClaude(key: string, promptArgs: string[], append: boolean, model?: string): void {
+function spawnClaude(
+  key: string,
+  promptArgs: string[],
+  append: boolean,
+  model?: string,
+  lowPriority = false
+): void {
   fs.mkdirSync(jobDir(key), { recursive: true });
   const out = fs.openSync(logPath(key), append ? "a" : "w");
   const workspace = getWorkspaceDir();
@@ -159,7 +193,12 @@ function spawnClaude(key: string, promptArgs: string[], append: boolean, model?:
     "--add-dir",
     getReposRoot(),
   ];
-  const child = spawn(claudeBin(), args, {
+  // nice는 fork 없이 자기 자신을 대상 명령으로 바꿔치기(exec)하므로 PID가 그대로 유지된다.
+  // → 아래 writeMeta의 PID와 isRunning의 `ps` 확인이 그대로 동작한다.
+  const [cmd, cmdArgs] = lowPriority
+    ? (["nice", ["-n", "19", claudeBin(), ...args]] as const)
+    : ([claudeBin(), args] as const);
+  const child = spawn(cmd, cmdArgs as string[], {
     cwd: workspace,
     detached: true,
     stdio: ["ignore", out, out],
@@ -289,9 +328,17 @@ export function startQuips(
   const safe = (slugs ?? [])
     .map((s) => String(s).trim())
     .filter((s) => /^[A-Za-z0-9_-]+$/.test(s));
+  // 소감은 재미기능이므로 **모든 기능 중 최하위 우선순위**로 다룬다.
+  // 실측(잡 로그 73건 집계): 1회 평균 15턴 · 100초 · 약 57만 토큰 · $0.17.
+  // 설명("토큰이 적다")과 달리 가벼운 작업이 아니라서, 본 작업과 경쟁하지 않게 양보시킨다.
+  //
+  // ① 다른 잡(오케스트레이션·구현 내용·회고·Jira·설계 등)이 하나라도 돌고 있으면 시작하지
+  //    않는다. 다른 오더의 소감 잡도 여기에 걸려 동시 실행이 1건으로 제한된다.
+  const busy = runningJobKeys().filter((k2) => k2 !== jobId);
+  if (busy.length > 0) return { ok: false, reason: `busy:${busy[0]}` };
   const prompt = `/avatar-quips ${k}${safe.length ? " " + safe.join(" ") : ""}`;
-  // 소감은 재미기능 → 가장 저렴한 모델(Haiku)로.
-  spawnClaude(jobId, ["-p", prompt], false, "haiku");
+  // ② 가장 저렴한 모델(Haiku) + ③ nice로 OS 최하위 우선순위(dev 서버·본 작업에 CPU 양보).
+  spawnClaude(jobId, ["-p", prompt], false, "haiku", true);
   return { ok: true, jobId };
 }
 

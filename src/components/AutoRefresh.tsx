@@ -28,8 +28,22 @@ export default function AutoRefresh({
 
   useEffect(() => {
     setLast(new Date().toLocaleTimeString("ko-KR"));
-    const id = setInterval(refresh, intervalMs);
-    return () => clearInterval(id);
+    // 탭이 백그라운드(다른 탭·최소화)일 때는 갱신하지 않는다.
+    // router.refresh()는 서버 컴포넌트를 전부 다시 실행하므로(파일 읽기·파싱) 보지 않는
+    // 화면에 그 비용을 쓸 이유가 없다. 다시 화면으로 돌아오는 순간 한 번 갱신해 최신을 맞춘다.
+    const tick = () => {
+      if (document.visibilityState === "hidden") return;
+      refresh();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const id = setInterval(tick, intervalMs);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh, intervalMs]);
 
   return (

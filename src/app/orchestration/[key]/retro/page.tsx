@@ -20,8 +20,8 @@ export default async function RetroPage({ params }: { params: Promise<{ key: str
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       resolved={epic?.resolved ?? false}
-      hasJira={!!epic?.jiraIssueMd || isJiraIssueKey(key)}
-      hasDesign={!!epic?.designMd || !!epic?.outcomeMd}
+      hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
+      hasDesign={epic?.hasDesignDoc ?? false}
       orderKind={epic?.orderKind ?? null}
     />
   );
