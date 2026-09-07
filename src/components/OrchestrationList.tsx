@@ -116,7 +116,18 @@ export default function OrchestrationList({
       render: (key: string, r: EpicSummary) => (
         <Space size={8}>
           <GroupAvatar slug={key} avatar={r.avatar ?? undefined} size={28} showGroup />
-          <Text strong>{key}</Text>
+          {/*
+            키를 Link로 두면 마우스를 올릴 때 Next.js가 상세 화면을 미리 받아둔다(prefetch).
+            router.push만 쓰면 prefetch가 전혀 동작하지 않아 클릭 후에야 받아오기 시작했다.
+            행 전체 클릭(onRowClick)은 그대로 유지 — 표 어디를 눌러도 이동한다.
+          */}
+          <Link
+            href={`/orchestration/${key}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ color: "inherit" }}
+          >
+            <Text strong>{key}</Text>
+          </Link>
           <a
             href={jiraUrl(key)}
             target="_blank"
