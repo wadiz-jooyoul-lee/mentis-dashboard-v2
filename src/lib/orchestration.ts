@@ -20,6 +20,7 @@ import {
 import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import { memoByFileStat } from "@/lib/fileMemo";
+import { findTable, columnIndex, fieldLine } from "@/lib/md";
 import {
   assignOrderAvatars,
   type AssignedAvatar,
@@ -671,8 +672,8 @@ export type EpicDetail = {
   outcomeMd: string | null;
   /** design.md의 mtime(ms) — 대시보드 편집 저장의 충돌 감지용. 파일 없으면 null. */
   designMtime: number | null;
-  /** 아티팩트 탭 — dobby-share가 게시한 claude.ai 공개 아티팩트 URL(artifact-share.md에서 추출). 없으면 null. */
-  artifactShareUrl: string | null;
+  /** 아티팩트 탭 — dobby-share가 게시한 claude.ai 공개 아티팩트 목록(게시 순). 없으면 빈 배열. */
+  artifactShares: ArtifactShare[];
   /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
   jiraIssueMd: string | null;
   /** Jira 탭 — 읽기 쉽게 정리한 이슈(jira-issue-clean.md). 버튼 생성. */
@@ -753,6 +754,71 @@ const KNOWN_ROOT_DOCS = new Set([
   "jira-comments.md",
   "jira-enrich.md",
 ]);
+
+/**
+ * 게시된 클로드 아티팩트 한 건. `slug`가 게시 원고 파일명과 짝이다 — `artifacts/{슬러그}.html`.
+ * 레거시(불릿 형식) 파일은 슬러그를 알 수 없어 `legacy`로 채운다.
+ */
+export type ArtifactShare = {
+  slug: string;
+  title: string;
+  url: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+/**
+ * `artifact-share.md`의 아티팩트 목록.
+ *
+ * 한 오더가 아티팩트를 여러 개 가질 수 있다(구현 결과·회고 요약·검증 리포트 등).
+ * 예전에는 첫 `https://` URL 하나만 뽑아 써서 두 번째 이후가 화면에서 사라졌다.
+ *
+ * **두 형식을 모두 읽는다** — 표 형식(복수, dobby_artifact_add가 씀)과 불릿 형식(단수, 레거시).
+ * 끝난 오더 7건이 불릿 형식이라 한쪽만 지원하면 그 링크들이 통째로 안 보인다(비파괴 유지).
+ * 표가 있으면 표만 쓴다 — 재게시로 표가 생긴 파일에 불릿이 남아 있어도 중복으로 세지 않는다.
+ */
+function readArtifactShares(key: string): ArtifactShare[] {
+  const md = readFileSafe(path.join(orderDir(key), "artifact-share.md"));
+  if (!md) return [];
+
+  // ① 표 형식 — 헤더 키워드로 칼럼 위치를 찾는다(스키마 하드코딩 금지)
+  const t = findTable(md, "슬러그");
+  if (t) {
+    const cs = columnIndex(t.headers, "슬러그");
+    const ct = columnIndex(t.headers, "제목");
+    const cu = columnIndex(t.headers, "링크");
+    const cc = columnIndex(t.headers, "생성");
+    const cd = columnIndex(t.headers, "갱신");
+    const out: ArtifactShare[] = [];
+    for (const r of t.rows) {
+      const at = (i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
+      const url = at(cu).match(/https?:\/\/[^\s)>\]]+/)?.[0] ?? "";
+      if (!url) continue; // 링크 없는 행은 아직 게시 전 — 건너뛴다
+      const slug = at(cs) || "artifact";
+      out.push({
+        slug,
+        title: at(ct) || slug,
+        url,
+        createdAt: at(cc) || null,
+        updatedAt: at(cd) || null,
+      });
+    }
+    if (out.length > 0) return out;
+  }
+
+  // ② 레거시 불릿 — `- **링크**: …` 한 건. 슬러그가 없으므로 legacy로 둔다.
+  const url = md.match(/https?:\/\/[^\s)>\]]+/)?.[0];
+  if (!url) return [];
+  return [
+    {
+      slug: "legacy",
+      title: fieldLine(md, "제목") ?? `${key} 구현 내용`,
+      url,
+      createdAt: fieldLine(md, "생성"),
+      updatedAt: fieldLine(md, "갱신"),
+    },
+  ];
+}
 
 /** 이름을 모르는 루트 문서 한 건. `content`는 문서 탭에서만 채운다(보드는 목록만 쓴다). */
 export type OrderDoc = { name: string; bytes: number; content: string };
@@ -1198,10 +1264,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
         return null;
       }
     })(),
-    artifactShareUrl:
-      (readFileSafe(path.join(dir, "artifact-share.md")) ?? "").match(
-        /https?:\/\/[^\s)>\]]+/
-      )?.[0] ?? null,
+    artifactShares: readArtifactShares(epicKey),
     jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
     jiraIssueCleanMd: readFileSafe(path.join(dir, "jira-issue-clean.md")),
     jiraCommentsMd: readFileSafe(path.join(dir, "jira-comments.md")),
