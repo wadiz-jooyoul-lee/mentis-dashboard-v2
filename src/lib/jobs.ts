@@ -55,7 +55,7 @@ function claudeBin(): string {
 }
 
 /** 설치된 go-dobby 플러그인의 dobby-lib.sh 경로(최신 버전). 결정론 헬퍼 직접 실행용. 없으면 null. */
-function goDobbyLib(): string | null {
+export function goDobbyLib(): string | null {
   const base = path.join(
     os.homedir(),
     ".claude/plugins/cache/mentis-plugins/go-dobby"
