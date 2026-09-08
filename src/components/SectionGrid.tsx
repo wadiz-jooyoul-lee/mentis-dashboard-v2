@@ -137,10 +137,6 @@ export default function SectionGrid({
 }) {
   return (
     <div>
-      <Title level={2} style={{ marginTop: 0 }}>
-        대시보드
-      </Title>
-      <Paragraph type="secondary">보고 싶은 항목을 선택하세요.</Paragraph>
       {AREA_ORDER.map((area) => {
         const items = sections.filter((s) => s.area === area);
         if (items.length === 0) return null;
