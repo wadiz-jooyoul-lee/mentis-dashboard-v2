@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCanAct } from "@/components/CanAct";
 import {
-  Alert, Breadcrumb, Button, Card, Collapse, Space, Statistic, Tabs, Tag, Typography, message,
+  Alert, Breadcrumb, Button, Card, Collapse, Space, Statistic, Table, Tabs, Tag, Typography, message,
 } from "antd";
 import { ReloadOutlined, SaveOutlined } from "@ant-design/icons";
-import SessionBackupTable, { fmtBytes, type SessionArchive } from "@/components/SessionBackupTable";
+import SessionBackupTable, { fmtBytes, fmtDate, type SessionArchive } from "@/components/SessionBackupTable";
 import OrchestrationBackupTable, { type OrchArchive } from "@/components/OrchestrationBackupTable";
 import InProgressBackupTable, { type InProgressArchive } from "@/components/InProgressBackupTable";
 
@@ -204,6 +204,38 @@ export default function BackupStatusView({
     </Card>
   );
 
+  // 외부(구글 드라이브 등)로 올릴 대상 — 경로를 바로 복사할 수 있게 한 곳에 모은다.
+  const latestSession = session.archives[0] ?? null;
+  const exportRows = [
+    {
+      key: "session",
+      what: "세션 전사",
+      desc: "대화 기록 전체. 아카이브 하나에 다 들어 있습니다.",
+      path: latestSession ? `${session.dest}/${latestSession.name}` : session.dest,
+      size: latestSession ? latestSession.sizeBytes : session.totalBytes,
+      at: latestSession ? latestSession.at : session.lastBackupAt,
+      missing: !latestSession,
+    },
+    {
+      key: "folder",
+      what: "메타 · 폴더별",
+      desc: "해결된 작업의 문서·리뷰·코드 변경 기록. 폴더째 올리십시오.",
+      path: folder.dest,
+      size: folder.totalBytes,
+      at: folder.archives[0]?.at ?? null,
+      missing: folder.archives.length === 0,
+    },
+    {
+      key: "inprogress",
+      what: "메타 · 진행중",
+      desc: "아직 작업중인 폴더의 임시 스냅샷. 폴더째 올리십시오.",
+      path: inprogress.dir,
+      size: inprogress.totalBytes,
+      at: inprogress.archives[0]?.at ?? null,
+      missing: inprogress.archives.length === 0,
+    },
+  ];
+
   const restoreBlock = (title: string, note: string, cmd: string) => (
     <div style={{ marginBottom: 20 }}>
       <Text strong>{title}</Text>
@@ -344,6 +376,84 @@ export default function BackupStatusView({
                 </Paragraph>
                 <InProgressBackupTable archives={inprogress.archives} today={inprogress.today} />
               </>
+            ),
+          },
+          {
+            key: "export",
+            label: "내보내기",
+            children: (
+              <div>
+                <Paragraph type="secondary" style={{ fontSize: 13 }}>
+                  아래 파일·폴더를 구글 드라이브 같은 외부 저장소에 올려 두면, 이 맥이 없어져도 되살릴 수 있습니다.
+                  경로 오른쪽 아이콘을 누르면 복사됩니다.
+                </Paragraph>
+                <Table
+                  size="small"
+                  rowKey="key"
+                  pagination={false}
+                  dataSource={exportRows}
+                  columns={[
+                    {
+                      title: "대상",
+                      dataIndex: "what",
+                      key: "what",
+                      width: 130,
+                      render: (v: string, r: (typeof exportRows)[number]) => (
+                        <Space direction="vertical" size={0}>
+                          <Text strong style={{ fontSize: 13 }}>{v}</Text>
+                          {r.missing ? <Tag color="warning">아직 없음</Tag> : null}
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: "경로",
+                      dataIndex: "path",
+                      key: "path",
+                      render: (v: string, r: (typeof exportRows)[number]) => (
+                        <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                          <Text code copyable={{ text: v }} style={{ fontSize: 12, wordBreak: "break-all" }}>
+                            {v}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 11 }}>{r.desc}</Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: "크기",
+                      dataIndex: "size",
+                      key: "size",
+                      align: "right" as const,
+                      width: 90,
+                      render: (n: number) => fmtBytes(n),
+                    },
+                    {
+                      title: "갱신",
+                      dataIndex: "at",
+                      key: "at",
+                      width: 170,
+                      render: (v: string | null) => fmtDate(v),
+                    },
+                  ]}
+                />
+                <div style={{ marginTop: 20, maxWidth: 760 }}>
+                  {restoreBlock(
+                    "백업 폴더를 Finder에서 열기",
+                    "위 셋이 모두 이 폴더 안에 있습니다. 열어서 드라이브로 끌어다 놓으면 됩니다.",
+                    `open ${session.dest}`,
+                  )}
+                  {restoreBlock(
+                    "한 파일로 묶기 (선택)",
+                    "드라이브에 파일 하나만 올리고 싶을 때. 안에 든 것이 이미 압축돼 있어 다시 압축하지 않고 묶기만 합니다(빠르고, 크기도 같습니다).",
+                    `tar -cf ~/Desktop/claude-backup-$(date +%Y%m%d).tar --exclude=tmp -C ${session.dest} .`,
+                  )}
+                </div>
+                <Alert
+                  type="info"
+                  showIcon
+                  message="파일 이름이 매번 바뀝니다"
+                  description="세션 전사 아카이브 이름에는 만든 시각이 들어 있어, 백업할 때마다 새 이름이 됩니다. 드라이브에 그냥 올리면 옛 파일이 쌓이니, 올린 뒤 이전 것을 지우거나 같은 이름으로 바꿔 올리십시오."
+                />
+              </div>
             ),
           },
           {
