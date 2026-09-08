@@ -20,7 +20,7 @@ export function fmtDate(iso: string | null): string {
   return isNaN(d.getTime()) ? "없음" : d.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** 세션 전사(~/.claude/projects) 증분 백업 아카이브 목록. */
+/** 세션 전사(~/.claude/projects) 전체 백업 아카이브 목록(최신 하나만 남는다). */
 export default function SessionBackupTable({ archives }: { archives: SessionArchive[] }) {
   const columns = [
     { title: "시각", dataIndex: "at", key: "at", render: (v: string) => fmtDate(v) },

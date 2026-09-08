@@ -272,7 +272,7 @@ export default function BackupStatusView({
         {card(
           "세션 전사",
           sessionHealth,
-          "~/.claude/projects 증분 백업",
+          "~/.claude/projects 전체 백업 · 최신 1개",
           [
             { label: "마지막", value: sessionAge == null ? "없음" : sessionAge === 0 ? "오늘" : `${sessionAge}일 전` },
             { label: "미백업", value: `${session.pending}개`, warn: session.pending > 0 },
@@ -314,7 +314,7 @@ export default function BackupStatusView({
             children: (
               <>
                 <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                  저장 위치: <Text code>{session.dest}</Text> · 첫 회차는 전체, 이후는 변경분만 쌓입니다.
+                  저장 위치: <Text code>{session.dest}</Text> · 매번 전체를 담고 최신 하나만 남깁니다. 바뀐 파일이 없으면 새로 만들지 않습니다.
                 </Paragraph>
                 <SessionBackupTable archives={session.archives} />
               </>
@@ -375,7 +375,7 @@ export default function BackupStatusView({
                 )}
                 {restoreBlock(
                   "③ 확인 후 제자리로 — 세션 전사",
-                  "증분 백업이라 여러 아카이브를 시각 순서대로(오래된 것부터) 풀어야 합니다.",
+                  "아카이브 하나에 전부 들어 있어 이것만 풀면 됩니다.",
                   `tar -xf {아카이브} -C ~/.claude/projects`,
                 )}
                 <Alert
