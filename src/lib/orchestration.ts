@@ -655,6 +655,11 @@ export type EpicDetail = {
   /** 사용자 수동 확인 가이드(test-guide.md). 대시보드가 카드로 렌더. 없으면 null. */
   testGuideMd: string | null;
   deliverables: Deliverable[];
+  /**
+   * 이름을 모르는 루트 `.md` 문서들(에이전트가 임의 이름으로 남긴 조사 결과 등).
+   * `content`는 `withDocs` 옵션일 때만 채워진다 — 보드는 목록(이름·크기)만 쓴다.
+   */
+  otherDocs: OrderDoc[];
   runs: ReportRun[];
   /** 대시보드가 띄운 잡(run.log)이 있는지 — 실시간 콘솔 가용 여부. */
   hasJob: boolean;
@@ -722,6 +727,74 @@ function readRuns(key: string): ReportRun[] {
   }
   runs.sort((a, b) => b.sortKey - a.sortKey);
   return runs;
+}
+
+/**
+ * 대시보드가 이름으로 알아보는 루트 문서 목록. 여기 없는 루트 `.md`는 어느 탭에도 안 뜬다.
+ * (아래 KNOWN_ROOT_DOCS를 늘릴 때는 EpicDetail 필드도 함께 추가해야 실제로 렌더된다.)
+ */
+const KNOWN_ROOT_DOCS = new Set([
+  "status.md",
+  "orchestration.md", // 상태표·이벤트 로그 정본 — 보드가 이미 렌더한다
+  "analysis.md",
+  "implementation.md",
+  "produce.md",
+  "summary.md",
+  "decisions.md",
+  "side-effects.md",
+  "test-guide.md",
+  "explainer.md",
+  "retro.md",
+  "design.md",
+  "outcome.md",
+  "artifact-share.md",
+  "jira-issue.md",
+  "jira-issue-clean.md",
+  "jira-comments.md",
+  "jira-enrich.md",
+]);
+
+/** 이름을 모르는 루트 문서 한 건. `content`는 문서 탭에서만 채운다(보드는 목록만 쓴다). */
+export type OrderDoc = { name: string; bytes: number; content: string };
+
+/**
+ * 오더 폴더 루트에 있는 **이름을 모르는 `.md`** 문서들.
+ *
+ * 왜 필요한가: 에이전트가 조사 결과를 임의 이름으로 남기면(예 `sweep-findings.md`·
+ * `equity-liveness.md`·`analysis-{영역}.md`) 대시보드가 그 이름을 모르기 때문에
+ * **어느 탭에도 표시되지 않았다.** 이벤트 로그가 "여기 정리했다"고 그 파일을 가리키는데
+ * 화면에서 열 방법이 없었다(사례 FE1-1820: 조사 산출물 4개 62KB가 통째로 안 보였다).
+ * 전체 메타 기준 75개 오더 · 158개 파일이 이 상태였다.
+ *
+ * 제외: KNOWN_ROOT_DOCS(각자 전용 탭이 있음) · `.bak`(백업) · 숨김 파일.
+ *
+ * ⛔ `withContent`가 아니면 **본문을 읽지 않는다.** 보드는 목록만 쓰는데 본문까지 실으면
+ * 문서가 많은 오더에서 응답이 통째로 커진다(실측 FE-8218 1.16MB → 1.94MB). 본문은
+ * `/orchestration/{키}/docs` 탭에서만 읽는다.
+ */
+function readOtherDocs(key: string, withContent: boolean): OrderDoc[] {
+  const dir = orderDir(key);
+  const out: OrderDoc[] = [];
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (f.startsWith(".")) continue;
+      const lower = f.toLowerCase();
+      if (!lower.endsWith(".md")) continue;
+      if (lower.endsWith(".bak.md") || lower.endsWith(".md.bak")) continue;
+      if (KNOWN_ROOT_DOCS.has(lower)) continue;
+      const full = path.join(dir, f);
+      let bytes = 0;
+      try {
+        bytes = fs.statSync(full).size;
+      } catch {
+        continue; // 읽을 수 없는 항목은 건너뛴다
+      }
+      out.push({ name: f, bytes, content: withContent ? readFileSafe(full) ?? "" : "" });
+    }
+  } catch {
+    /* 폴더 접근 실패는 무시 */
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** deliverables/ 산출물(produce.md 제외). md/html/기타 구분. */
@@ -1030,6 +1103,11 @@ export type EpicLoadOpts = {
    * (오더에 따라 수십 MB). `/changes` 화면 전용이며, 다른 화면은 슬러그 목록만 쓴다.
    */
   withDiffs?: boolean;
+  /**
+   * 이름을 모르는 루트 문서(`otherDocs`)의 **본문까지** 읽는다. `/docs` 탭 전용.
+   * 기본값에서는 목록(이름·크기)만 채운다 — 보드 응답이 커지는 것을 막는다.
+   */
+  withDocs?: boolean;
 };
 
 export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | null {
@@ -1106,6 +1184,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     sideEffectsMd: readFileSafe(path.join(dir, "side-effects.md")),
     testGuideMd: readFileSafe(path.join(dir, "test-guide.md")),
     deliverables: readDeliverables(epicKey),
+    otherDocs: readOtherDocs(epicKey, opts.withDocs === true),
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
