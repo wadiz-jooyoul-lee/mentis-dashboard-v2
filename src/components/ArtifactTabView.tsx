@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Typography, Space, Button, Card, Tag, Alert, Collapse, message } from "antd";
 import { CopyOutlined, ExportOutlined } from "@ant-design/icons";
 import OrderHeader from "@/components/OrderHeader";
+import type { ArtifactShare } from "@/lib/orchestration";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -55,7 +56,7 @@ export default function ArtifactTabView({
   epicKey,
   title = null,
   hasExplainer,
-  shareUrl,
+  shares,
   lanHost = null,
   exposure = "unknown",
   mode,
@@ -68,7 +69,8 @@ export default function ArtifactTabView({
   epicKey: string;
   title?: string | null;
   hasExplainer: boolean;
-  shareUrl: string | null;
+  /** 게시된 클로드 아티팩트 전부(게시 순). 여러 개일 수 있다. */
+  shares: ArtifactShare[];
   /** 서버가 계산한 LAN IPv4. 있으면 localhost 대신 이 IP로 링크를 만든다(타 기기에서 열 수 있게). */
   lanHost?: string | null;
   /** 이 서버가 다른 기기에 열려 있는지(바인드 주소 기준). */
@@ -170,12 +172,37 @@ export default function ArtifactTabView({
           size="small"
           title={<Space><span>공개 아티팩트</span><Tag color="purple">claude.ai</Tag></Space>}
         >
-          {shareUrl ? (
+          {shares.length > 0 ? (
             <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Text type="secondary" style={{ fontSize: 13 }}>
-                <code>/dobby-share {epicKey}</code> 로 게시된 공개 아티팩트 링크입니다.
+                <code>/dobby-share {epicKey}</code> 로 게시된 공개 아티팩트
+                {shares.length > 1 ? ` ${shares.length}개` : ""}입니다.
               </Text>
-              <LinkRow url={shareUrl} copyLabel="공유용 복사" />
+              {/* 한 오더가 아티팩트를 여럿 가질 수 있다(구현 결과·회고 요약 등) — 전부 보여준다.
+                  slug는 게시 원고(artifacts/{슬러그}.html)와 짝이라 어느 주제인지 드러난다. */}
+              {shares.map((s) => (
+                <Card
+                  key={s.slug + s.url}
+                  size="small"
+                  type="inner"
+                  title={
+                    <Space size={8} wrap>
+                      <Text strong>{s.title}</Text>
+                      {s.slug !== "legacy" && <Tag style={{ margin: 0 }}>{s.slug}</Tag>}
+                      {s.updatedAt && <Tag color="blue" style={{ margin: 0 }}>갱신 {s.updatedAt}</Tag>}
+                    </Space>
+                  }
+                >
+                  <Space orientation="vertical" size={6} style={{ width: "100%" }}>
+                    <LinkRow url={s.url} copyLabel="공유용 복사" />
+                    {s.createdAt && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        생성 {s.createdAt}
+                      </Text>
+                    )}
+                  </Space>
+                </Card>
+              ))}
             </Space>
           ) : (
             <Alert
