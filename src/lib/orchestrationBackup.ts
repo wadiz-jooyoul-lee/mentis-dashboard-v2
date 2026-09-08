@@ -24,6 +24,27 @@ export function orchestrationBackupDir(): string {
   return DEST;
 }
 
+/** 스크립트 실행 원본 출력(backup-run.log). 최근 것만 본다 — 계속 덧붙는 파일이다. */
+export function readRunLog(maxBytes = 20000): string {
+  const p = path.join(DEST, "backup-run.log");
+  try {
+    const size = fs.statSync(p).size;
+    const start = Math.max(0, size - maxBytes);
+    const fd = fs.openSync(p, "r");
+    try {
+      const buf = Buffer.alloc(size - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      const text = buf.toString("utf8");
+      // 앞이 잘렸으면 깨진 첫 줄은 버린다.
+      return start > 0 ? text.slice(text.indexOf("\n") + 1) : text;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
 export type OrchArchive = {
   /** 메타 폴더 이름 = 오더 키 */
   key: string;
@@ -222,6 +243,191 @@ export function getOrchestrationBackupStatus(): OrchBackupStatus {
     running: isOrchestrationBackupRunning(),
     log,
   };
+}
+
+// ── 진행중(작업중) 백업 ────────────────────────────────────────────────
+// 해결 전에는 폴더별 아카이브가 갱신되지 않으므로(해결 시점에만 만든다) 그 사이 변경이
+// 무방비다. 작업중인 폴더들을 하루 두 번 한 덩이로 모아 임시 보관한다.
+
+const INP_DIR = path.join(DEST, "inprogress");
+const INP_RE = /^inprogress-(\d{4})(\d{2})(\d{2})-(am|pm)\.tar\.(zst|gz)$/;
+/** 보관 기간(일). 스크립트의 ORCHESTRATION_BACKUP_KEEP_DAYS 기본값과 같아야 한다. */
+export const INP_KEEP_DAYS = Number(process.env.ORCHESTRATION_BACKUP_KEEP_DAYS || 14);
+
+export type InProgressSlot = "am" | "pm";
+
+export type InProgressArchive = {
+  name: string;
+  /** YYYYMMDD */
+  day: string;
+  slot: InProgressSlot;
+  /** 실제 실행 시각(파일 수정 시각) */
+  at: string;
+  sizeBytes: number;
+  orders: number | null;
+  files: number | null;
+  rawBytes: number | null;
+  ratio: number | null;
+};
+
+export type InProgressStatus = {
+  dir: string;
+  archives: InProgressArchive[];
+  totalBytes: number;
+  keepDays: number;
+  /** 오늘(YYYYMMDD) */
+  today: string;
+  /** 오늘 회차별 보유 여부 */
+  has: { am: boolean; pm: boolean };
+  /**
+   * 지금 시각에 있어야 하는 회차. 오전 10시 전이면 null.
+   * 오후 3시 이후에 그날 처음 돌면 오후 회차 하나만 만든다(오전은 그날 건너뛴 것으로 둔다).
+   * ⛔ 이 규칙은 스크립트의 _inprogress_slot 과 같아야 한다.
+   */
+  dueSlot: InProgressSlot | null;
+  /** 있어야 할 회차가 아직 없나 */
+  due: boolean;
+  running: boolean;
+  log: string;
+};
+
+function todayStr(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+export function currentSlot(d = new Date()): InProgressSlot | null {
+  const h = d.getHours();
+  if (h >= 15) return "pm";
+  if (h >= 10) return "am";
+  return null;
+}
+
+/** inprogress-log.txt에서 아카이브별 (오더 수·파일 수·원본·배율)을 뽑는다. */
+function readInProgressLog(): {
+  log: string;
+  meta: Record<string, { orders: number | null; files: number | null; raw: number | null; ratio: number | null }>;
+} {
+  let log = "";
+  const meta: Record<string, { orders: number | null; files: number | null; raw: number | null; ratio: number | null }> = {};
+  try {
+    log = fs.readFileSync(path.join(INP_DIR, "inprogress-log.txt"), "utf8");
+  } catch {
+    return { log: "", meta };
+  }
+  // "일시 | 20260909-pm | N orders | M files | 원본 → 압축 (Rx) | 파일명"
+  const re =
+    /\|\s*(\d+)\s+orders\s*\|\s*(\d+)\s+files\s*\|\s*([\d.]+[BKMG])\s*→\s*([\d.]+[BKMG])\s*\(([\d.]+)x\)\s*\|\s*(\S+)/;
+  for (const line of log.split("\n")) {
+    const m = line.match(re);
+    if (!m) continue;
+    meta[m[6].trim()] = {
+      orders: Number(m[1]),
+      files: Number(m[2]),
+      raw: parseSize(m[3]),
+      ratio: Number(m[5]) || null,
+    };
+  }
+  return { log, meta };
+}
+
+export function getInProgressStatus(now = new Date()): InProgressStatus {
+  const { log, meta } = readInProgressLog();
+  const archives: InProgressArchive[] = [];
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(INP_DIR);
+  } catch {
+    /* 아직 없음 */
+  }
+  for (const name of names) {
+    const m = name.match(INP_RE);
+    if (!m) continue;
+    const [, y, mo, d, slot] = m;
+    let sizeBytes = 0;
+    let at = new Date(+y, +mo - 1, +d).toISOString();
+    try {
+      const st = fs.statSync(path.join(INP_DIR, name));
+      sizeBytes = st.size;
+      at = new Date(st.mtimeMs).toISOString();
+    } catch {
+      /* skip */
+    }
+    const info = meta[name] ?? { orders: null, files: null, raw: null, ratio: null };
+    archives.push({
+      name,
+      day: `${y}${mo}${d}`,
+      slot: slot as InProgressSlot,
+      at,
+      sizeBytes,
+      orders: info.orders,
+      files: info.files,
+      rawBytes: info.raw,
+      ratio: info.ratio,
+    });
+  }
+  archives.sort((a, b) => (b.day + b.slot).localeCompare(a.day + a.slot));
+
+  const today = todayStr(now);
+  const has = {
+    am: archives.some((a) => a.day === today && a.slot === "am"),
+    pm: archives.some((a) => a.day === today && a.slot === "pm"),
+  };
+  const dueSlot = currentSlot(now);
+  return {
+    dir: INP_DIR,
+    archives,
+    totalBytes: archives.reduce((n, a) => n + a.sizeBytes, 0),
+    keepDays: INP_KEEP_DAYS,
+    today,
+    has,
+    dueSlot,
+    due: dueSlot != null && !has[dueSlot],
+    running: isOrchestrationBackupRunning(),
+    log,
+  };
+}
+
+/**
+ * 있어야 할 회차가 없으면 백그라운드로 만든다. 대시보드가 30초마다 두드리므로
+ * "이미 있으면 즉시 반환"이 싸야 한다 — 디렉터리 읽기 1회로 끝난다.
+ */
+export function maybeRunInProgressBackup(
+  now = new Date(),
+  /**
+   * 사용자가 버튼으로 직접 부른 경우. 회차 시각(오전 10시) 전이라도 그날 첫 회차(오전)로
+   * 만든다 — 자동 트리거는 시각을 지키지만, 사람이 누른 것은 그 자체가 의도다.
+   */
+  manual = false,
+): {
+  ok: boolean;
+  ran: boolean;
+  slot: InProgressSlot | null;
+  reason?: string;
+} {
+  const slot = currentSlot(now) ?? (manual ? "am" : null);
+  if (!slot) return { ok: true, ran: false, slot: null, reason: "before_10" };
+  const s = getInProgressStatus(now);
+  if (s.has[slot]) return { ok: true, ran: false, slot, reason: "already_done" };
+  if (s.running) return { ok: true, ran: false, slot, reason: "already_running" };
+
+  const lib = goDobbyLib();
+  if (!lib) return { ok: false, ran: false, slot, reason: "no_plugin" };
+  const script = path.join(path.dirname(lib), "dobby-meta-backup.sh");
+  if (!fs.existsSync(script)) return { ok: false, ran: false, slot, reason: "no_script" };
+  try {
+    fs.mkdirSync(INP_DIR, { recursive: true });
+    const out = fs.openSync(path.join(DEST, "backup-run.log"), "a");
+    const child = spawn("bash", [script, "--inprogress", slot], {
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: { ...process.env, ORCHESTRATION_BACKUP_DIR: DEST },
+    });
+    child.unref();
+    return { ok: true, ran: true, slot };
+  } catch {
+    return { ok: false, ran: false, slot, reason: "spawn_failed" };
+  }
 }
 
 /** `dobby-meta-backup.sh --all`을 백그라운드(detached)로 실행. */

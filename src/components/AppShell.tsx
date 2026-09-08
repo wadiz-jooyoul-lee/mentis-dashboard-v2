@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Layout } from "antd";
 import AutoRefresh from "@/components/AutoRefresh";
+import InProgressBackupTrigger from "@/components/InProgressBackupTrigger";
 import { CanActProvider } from "@/components/CanAct";
 import LanToggle from "@/components/LanToggle";
 import MantisIcon from "@/components/MantisIcon";
@@ -12,6 +13,7 @@ const { Header, Content } = Layout;
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <CanActProvider>
+    <InProgressBackupTrigger />
     <Layout style={{ minHeight: "100vh" }}>
       <Header
         style={{

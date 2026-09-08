@@ -1,32 +1,52 @@
 import { getBackupStatus, listBackups, backupDir } from "@/lib/backup";
-import { getOrchestrationBackupStatus } from "@/lib/orchestrationBackup";
-import BackupListView from "@/components/BackupListView";
-import OrchestrationBackupView from "@/components/OrchestrationBackupView";
+import {
+  getOrchestrationBackupStatus,
+  getInProgressStatus,
+  readRunLog,
+} from "@/lib/orchestrationBackup";
+import BackupStatusView from "@/components/BackupStatusView";
 
 export const dynamic = "force-dynamic";
 
 export default function BackupPage() {
-  const status = getBackupStatus();
+  const s = getBackupStatus();
   const { archives, totalBytes, log } = listBackups();
-  const orch = getOrchestrationBackupStatus();
+  const folder = getOrchestrationBackupStatus();
+  const inp = getInProgressStatus();
   return (
-    <>
-      <BackupListView
-        archives={archives}
-        totalBytes={totalBytes}
-        log={log}
-        status={{ lastBackupAt: status.lastBackupAt, pending: status.pending, running: status.running }}
-        dest={backupDir()}
-      />
-      <OrchestrationBackupView
-        archives={orch.archives}
-        totalBytes={orch.totalBytes}
-        orders={orch.orders}
-        missing={orch.missing}
-        stale={orch.stale}
-        running={orch.running}
-        dest={orch.dest}
-      />
-    </>
+    <BackupStatusView
+      session={{
+        archives,
+        totalBytes,
+        log,
+        lastBackupAt: s.lastBackupAt,
+        pending: s.pending,
+        running: s.running,
+        dest: backupDir(),
+      }}
+      folder={{
+        archives: folder.archives,
+        totalBytes: folder.totalBytes,
+        orders: folder.orders,
+        missing: folder.missing,
+        stale: folder.stale,
+        running: folder.running,
+        log: folder.log,
+        dest: folder.dest,
+        metaDir: folder.metaDir,
+      }}
+      inprogress={{
+        archives: inp.archives,
+        totalBytes: inp.totalBytes,
+        today: inp.today,
+        has: inp.has,
+        dueSlot: inp.dueSlot,
+        due: inp.due,
+        keepDays: inp.keepDays,
+        dir: inp.dir,
+        log: inp.log,
+      }}
+      runLog={readRunLog()}
+    />
   );
 }
