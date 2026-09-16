@@ -8,6 +8,7 @@ import {
   CheckSquareOutlined,
   DeploymentUnitOutlined,
   ClusterOutlined,
+  ShareAltOutlined,
 } from "@ant-design/icons";
 import type { Section } from "@/lib/sections";
 import { AREA_LABELS, AREA_ORDER } from "@/lib/sections";
@@ -21,6 +22,7 @@ const ICONS = {
   CheckSquareOutlined: CheckSquareOutlined,
   DeploymentUnitOutlined: DeploymentUnitOutlined,
   ClusterOutlined: ClusterOutlined,
+  ShareAltOutlined: ShareAltOutlined,
 };
 
 const METRIC_COLOR: Record<string, string> = {
