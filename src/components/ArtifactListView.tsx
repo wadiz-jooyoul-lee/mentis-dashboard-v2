@@ -2,7 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Typography, Space, Card, Tag, Empty, Button, Row, Col, Input, Tooltip, message } from "antd";
+import {
+  Typography,
+  Space,
+  Card,
+  Tag,
+  Empty,
+  Button,
+  Row,
+  Col,
+  Input,
+  Tooltip,
+  Breadcrumb,
+  message,
+} from "antd";
 import {
   CopyOutlined,
   ExportOutlined,
@@ -58,9 +71,19 @@ export default function ArtifactListView({ items }: { items: ArtifactEntry[] }) 
     );
   }, [items, q]);
 
+  // 최상위 화면이라 상세처럼 OrderHeader가 없다 — 홈으로 돌아갈 길을 여기서 준다
+  // (/agents 와 같은 형식).
+  const crumb = (
+    <Breadcrumb
+      items={[{ title: <Link href="/">홈</Link> }, { title: "아티팩트" }]}
+      style={{ marginBottom: 12 }}
+    />
+  );
+
   if (items.length === 0) {
     return (
       <div>
+        {crumb}
         <Title level={2} style={{ marginTop: 0 }}>
           아티팩트
         </Title>
@@ -83,6 +106,7 @@ export default function ArtifactListView({ items }: { items: ArtifactEntry[] }) 
 
   return (
     <div>
+      {crumb}
       <Title level={2} style={{ marginTop: 0 }}>
         아티팩트 <Text type="secondary" style={{ fontSize: 16 }}>({items.length})</Text>
       </Title>
