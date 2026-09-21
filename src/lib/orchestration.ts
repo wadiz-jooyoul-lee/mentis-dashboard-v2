@@ -328,6 +328,88 @@ export function listEpics(): EpicSummary[] {
   return epics;
 }
 
+/** 아티팩트 한 건 + 그것을 낸 오더 정보(아티팩트 모아보기 화면용). */
+export type ArtifactEntry = ArtifactShare & {
+  epicKey: string;
+  /** 오더 제목(status.md). 없으면 null. */
+  orderTitle: string | null;
+  workType: WorkType;
+  /** 정렬에 쓴 시각(갱신 → 생성 → 파일 수정 순으로 확정). `YYYY-MM-DD HH:MM`. */
+  sortAt: string;
+  /** 갱신 칸 괄호 안 설명(`2026-09-16 07:51 (rc4 검증 추가)` → `rc4 검증 추가`). 없으면 null. */
+  updateNote: string | null;
+};
+
+/** 파일 수정 시각을 `YYYY-MM-DD HH:MM`으로. 파일이 없으면 빈 문자열. */
+function mtimeText(file: string): string {
+  try {
+    const d = fs.statSync(file).mtime;
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+}
+
+/** `2026-09-16 07:51 (설명)` → 앞 날짜시각만. 형식이 다르면 빈 문자열. */
+function dateTimePrefix(v: string | null): string {
+  const m = (v ?? "").match(/^\s*(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
+  if (!m) return "";
+  return m[2] ? `${m[1]} ${m[2]}` : `${m[1]} 00:00`;
+}
+
+/** 갱신 칸의 괄호 설명만 뽑는다. */
+function parenNote(v: string | null): string | null {
+  const m = (v ?? "").match(/\(([^)]+)\)\s*$/);
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * 게시된 아티팩트를 오더 전체에서 모아 **갱신 최신순**으로 돌려준다.
+ *
+ * 정렬 시각은 폴백 사슬로 정한다: `갱신` → `생성` → `artifact-share.md` 수정 시각.
+ * 마지막 단계가 안전망이다 — 기록 형식이 규약을 벗어나면 날짜 칸을 못 읽는데, 그때도
+ * 파일이 바뀐 시각으로는 줄을 세울 수 있다(사례 FE1-1912: 헬퍼 대신 손으로 써서
+ * `게시일`이라는 없는 칸 이름을 썼고, 표가 없어 날짜가 통째로 안 읽혔다).
+ */
+export function listArtifacts(): ArtifactEntry[] {
+  const out: ArtifactEntry[] = [];
+  for (const e of listEpics()) {
+    const shares = readArtifactShares(e.epicKey);
+    if (shares.length === 0) continue;
+    const fileMtime = mtimeText(path.join(orderDir(e.epicKey), "artifact-share.md"));
+    for (const s of shares) {
+      out.push({
+        ...s,
+        epicKey: e.epicKey,
+        orderTitle: e.title,
+        workType: e.workType,
+        sortAt:
+          dateTimePrefix(s.updatedAt) || dateTimePrefix(s.createdAt) || fileMtime,
+        updateNote: parenNote(s.updatedAt),
+      });
+    }
+  }
+  out.sort((a, b) => b.sortAt.localeCompare(a.sortAt));
+  return out;
+}
+
+/** 허브 "아티팩트" 카드 지표. */
+export function artifactCardStats(): CardStats {
+  const items = listArtifacts();
+  if (items.length === 0) return { overall: [{ label: "아티팩트", value: 0 }], today: [] };
+  const orders = new Set(items.map((i) => i.epicKey)).size;
+  const today = ymd(new Date());
+  const updatedToday = items.filter((i) => i.sortAt.slice(0, 10) === today).length;
+  return {
+    overall: [
+      { label: "전체", value: items.length },
+      { label: "오더", value: orders, color: "blue" },
+    ],
+    today: [{ label: "오늘 갱신", value: updatedToday, color: "green" }],
+  };
+}
+
 /**
  * 각 에이전트의 현재 "작업 지문" = `상태#라운드`(결과물 완료 보정 반영). 슬러그→지문.
  * 아바타 소감(재미기능)이 "소감 만든 뒤 추가 작업했는지"를 판단하는 근거로 쓴다.

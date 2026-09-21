@@ -20,7 +20,8 @@ export type Section = {
     | "RocketOutlined"
     | "CheckSquareOutlined"
     | "DeploymentUnitOutlined"
-    | "ClusterOutlined";
+    | "ClusterOutlined"
+    | "ShareAltOutlined";
   /** 소속 영역 */
   area: SectionArea;
   /** false면 "준비 중"으로 비활성 표시 */
@@ -50,6 +51,15 @@ export const sections: Section[] = [
     description: "비소스 산출 오케스트레이션(dobby-produce) — 문서·리서치·분석",
     path: "/orchestration?type=nonsource",
     icon: "DeploymentUnitOutlined",
+    area: "orchestration",
+    enabled: true,
+  },
+  {
+    key: "artifacts",
+    title: "아티팩트",
+    description: "공개용으로 게시한 아티팩트(dobby-share) — 갱신 최신순",
+    path: "/artifacts",
+    icon: "ShareAltOutlined",
     area: "orchestration",
     enabled: true,
   },

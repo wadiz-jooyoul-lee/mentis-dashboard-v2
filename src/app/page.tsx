@@ -3,7 +3,7 @@ import Image from "next/image";
 import SectionGrid from "@/components/SectionGrid";
 import BackupStatus from "@/components/BackupStatus";
 import { sections } from "@/lib/sections";
-import { orchestrationCardStats } from "@/lib/orchestration";
+import { orchestrationCardStats, artifactCardStats } from "@/lib/orchestration";
 import { getBackupStatus } from "@/lib/backup";
 import heroImage from "@/assets/home-hero.webp";
 
@@ -13,6 +13,7 @@ export default function Home() {
   const stats = {
     "orch-code": orchestrationCardStats("code"),
     "orch-nonsource": orchestrationCardStats("nonsource"),
+    artifacts: artifactCardStats(),
   };
   const backup = getBackupStatus();
   return (
