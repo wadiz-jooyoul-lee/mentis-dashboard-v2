@@ -104,6 +104,15 @@ function buildAlias(repoRoot: string, files: string[]): Map<string, string[]> {
   return alias;
 }
 
+/**
+ * 주석을 걷어낸다. JSDoc 에 사용 예시로 적어 둔 `import ... from '@wadiz/core'` 를 진짜
+ * import 로 읽으면 없는 연결이 생긴다(저장소에 83건). 실제로 FE1-1979 에서 packages/api 가
+ * `core/src/lib/AppBridge/AppBridge.ts` 의 주석을 타고 studio 까지 닿는 것으로 잘못 나왔다.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:'"\`\\])\/\/[^\n]*/g, "$1");
+}
+
 /** `import { A, B as C }` → ["A", "C"]. 전부 통과시켜야 하는 형태면 null. */
 function namesOf(clause: string | undefined): string[] | null {
   if (!clause) return null;
@@ -179,7 +188,7 @@ export async function buildGraph(repoRoot: string, tops: string[]): Promise<DepG
     if (!isStyle && !CODE.includes(ext)) continue;
     let src: string;
     try {
-      src = fs.readFileSync(f, "utf8");
+      src = stripComments(fs.readFileSync(f, "utf8"));
     } catch {
       continue;
     }
