@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import fs from "node:fs";
 import { buildGraph, traceBundles, type DepGraph } from "@/lib/depgraph";
 
@@ -71,12 +72,19 @@ const GRAPH_TOPS = ["apps", "static", "studio", "packages", "libraries"];
 /** 빌드 전반에 걸리는 루트 파일 — 어디에도 import 되지 않으므로 그래프로 못 잡는다. */
 const ROOT_WIDE = /^(pnpm-lock\.yaml|package\.json|eslint\.config\.|packages\/eslint-config-helper)/;
 
-function git(dir: string, args: string[]): string {
-  const r = spawnSync("git", ["-C", dir, ...args], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return r.status === 0 ? r.stdout : "";
+/**
+ * git 은 **비동기로** 부른다. `spawnSync` 를 쓰면 자식 프로세스가 끝날 때까지 이벤트 루프가
+ * 통째로 멎어, 오더 하나를 판정하는 동안 다른 페이지가 같이 느려진다
+ * (실측: 보드 응답 0.79초 → 2.42초).
+ */
+const run = promisify(execFile);
+async function git(dir: string, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await run("git", ["-C", dir, ...args], { maxBuffer: 64 * 1024 * 1024 });
+    return stdout;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -95,10 +103,9 @@ function graphOf(repoRoot: string): Promise<DepGraph> {
 }
 
 /** 원격 base가 있으면 그쪽을, 없으면 로컬 base를 쓴다. */
-function baseRef(worktree: string, base: string): string {
-  return git(worktree, ["rev-parse", "--verify", "--quiet", `origin/${base}`]).trim()
-    ? `origin/${base}`
-    : base;
+async function baseRef(worktree: string, base: string): Promise<string> {
+  const found = (await git(worktree, ["rev-parse", "--verify", "--quiet", `origin/${base}`])).trim();
+  return found ? `origin/${base}` : base;
 }
 
 /**
@@ -110,7 +117,7 @@ function baseRef(worktree: string, base: string): string {
  * ③ 둘 다 없을 때만 커밋 메시지로 찾는다. 이건 **손댄 이력**이라 중간에 고쳤다가 되돌린
  *    파일까지 세므로 부정확하다(FE1-1830: studio 파일 2개를 되돌렸는데 studio 번들이 켜졌다).
  */
-export function changedFiles(key: string, worktree: string, base: string): string[] {
+export async function changedFiles(key: string, worktree: string, base: string): Promise<string[]> {
   if (!worktree || !fs.existsSync(worktree)) return [];
   const collect = (raw: string) => {
     const out = new Set<string>();
@@ -119,10 +126,10 @@ export function changedFiles(key: string, worktree: string, base: string): strin
   };
 
   const fork =
-    git(worktree, ["merge-base", `origin/${base}`, "HEAD"]).trim() ||
-    git(worktree, ["merge-base", base, "HEAD"]).trim();
+    (await git(worktree, ["merge-base", `origin/${base}`, "HEAD"])).trim() ||
+    (await git(worktree, ["merge-base", base, "HEAD"])).trim();
   if (fork) {
-    const out = collect(git(worktree, ["diff", "--name-only", fork]));
+    const out = collect(await git(worktree, ["diff", "--name-only", fork]));
     if (out.size > 0) return [...out];
   }
 
@@ -135,14 +142,14 @@ export function changedFiles(key: string, worktree: string, base: string): strin
   //
   // 찾는 범위도 워크트리 HEAD가 아니라 base여야 한다. 워크트리는 머지 **전** 상태라
   // 제 HEAD에서는 자기가 나간 머지가 안 보인다.
-  const merges = git(worktree, [
+  const merges = (await git(worktree, [
     "log",
     "--merges",
-    baseRef(worktree, base),
+    await baseRef(worktree, base),
     "--format=%H%x09%s",
     "-E",
     `--grep=/${key}([^0-9]|$)`,
-  ])
+  ]))
     .split("\n")
     .filter((l) => l.includes("\t") && !l.includes(" into "))
     .map((l) => l.split("\t")[0])
@@ -153,11 +160,11 @@ export function changedFiles(key: string, worktree: string, base: string): strin
     // 중간에 고쳤다가 되돌린 파일을 뺀다(FE1-1830: 129개 중 5개가 이렇게 빠진다).
     const touched = new Set<string>();
     for (const m of merges) {
-      for (const f of collect(git(worktree, ["diff", "--name-only", `${m}^1`, m]))) touched.add(f);
+      for (const f of collect(await git(worktree, ["diff", "--name-only", `${m}^1`, m]))) touched.add(f);
     }
     if (touched.size > 0 && touched.size <= 1000) {
       const net = collect(
-        git(worktree, [
+        await git(worktree, [
           "diff",
           "--name-only",
           `${merges[merges.length - 1]}^1`,
@@ -171,7 +178,7 @@ export function changedFiles(key: string, worktree: string, base: string): strin
     if (touched.size > 0) return [...touched];
   }
 
-  return [...collect(git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
+  return [...collect(await git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
 }
 
 /**
