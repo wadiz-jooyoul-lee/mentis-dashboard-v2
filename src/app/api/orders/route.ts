@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   // 워크트리 삭제(dobby-end와 동일 절차): 제거 전 code-changes/ 스냅샷 + 브랜치 보존.
   // 안전 조건(미푸시 커밋 없음·워크트리 실재)은 removeWorktrees가 다시 확인한다.
   if (body?.worktreeDelete) {
-    const r = removeWorktrees(String(body?.key ?? ""));
+    const r = await removeWorktrees(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: 409 });
     return NextResponse.json({ ok: true, removed: r.removed, snapshot: r.snapshot });
   }
@@ -229,7 +229,7 @@ export async function GET(req: NextRequest) {
     if (!ORDER_KEY_RE.test(wtKey)) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
-    return NextResponse.json(worktreeInfo(wtKey));
+    return NextResponse.json(await worktreeInfo(wtKey));
   }
 
   const key = (sp.get("key") ?? "").trim();

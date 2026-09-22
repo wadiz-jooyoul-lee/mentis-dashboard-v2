@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { parseOrderStatus } from "@/lib/parseOrderStatus";
 import { ORDER_KEY_RE } from "@/lib/keys";
@@ -73,32 +74,26 @@ function readStatus(key: string) {
 }
 
 /** 원격에 안 올라간 커밋 수(dobby_wt_unpushed와 같은 판정). 못 세면 null. */
-function unpushedCount(wt: string): number | null {
-  const run = (args: string[]) => {
+const run = promisify(execFile);
+
+async function unpushedCount(wt: string): Promise<number | null> {
+  const ask = async (args: string[]) => {
     try {
-      return execFileSync("git", ["-C", wt, ...args], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 5000,
-      }).trim();
+      const { stdout } = await run("git", ["-C", wt, ...args], { timeout: 5000 });
+      return stdout.trim();
     } catch {
       return null;
     }
   };
-  const n = run(["rev-list", "--count", "@{u}..HEAD"]);
+  const n = await ask(["rev-list", "--count", "@{u}..HEAD"]);
   if (n !== null && /^\d+$/.test(n)) return Number(n);
-  const br = run(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const br = await ask(["rev-parse", "--abbrev-ref", "HEAD"]);
   if (!br) return null;
-  const n2 = run(["rev-list", "--count", `origin/${br}..HEAD`]);
+  const n2 = await ask(["rev-list", "--count", `origin/${br}..HEAD`]);
   return n2 !== null && /^\d+$/.test(n2) ? Number(n2) : null;
 }
 
-/**
- * 워크트리 삭제 가능 여부. dobby-end의 안전 규칙을 그대로 옮긴다 —
- * 미푸시 커밋이 남아 있으면 지울 때 그 코드가 사라지므로 막는다.
- * (해결 상태 확인은 호출부(화면)가 이미 하므로 여기서는 워크트리 사실만 본다.)
- */
-export function worktreeInfo(key: string): WorktreeInfo {
+export async function worktreeInfo(key: string): Promise<WorktreeInfo> {
   if (!ORDER_KEY_RE.test(key)) return { worktrees: [], removable: false, reason: "잘못된 키입니다." };
   const st = readStatus(key);
   // ① status.md 워크트리 표(경로가 채워진 행) → ② 없으면 subtree 폴더에서 직접 찾기
@@ -113,18 +108,20 @@ export function worktreeInfo(key: string): WorktreeInfo {
       reason: "이 오더에는 삭제할 워크트리가 없습니다(문서 전용이거나 이미 정리됨).",
     };
   }
-  const worktrees: WorktreeState[] = rows.map((row) => {
-    // `~/work/...`로 적힌 경로는 fs가 못 푸므로 먼저 전개한다(사례 FE1-1212).
-    const w = { ...row, path: expandHome(row.path) };
-    const exists = fs.existsSync(w.path);
-    return {
-      repo: w.repo || (w.path.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), ""),
-      branch: w.branch || (exists ? branchOf(w.path) : ""),
-      path: w.path,
-      exists,
-      unpushed: exists ? unpushedCount(w.path) : null,
-    };
-  });
+  const worktrees: WorktreeState[] = await Promise.all(
+    rows.map(async (row) => {
+      // `~/work/...`로 적힌 경로는 fs가 못 푸므로 먼저 전개한다(사례 FE1-1212).
+      const w = { ...row, path: expandHome(row.path) };
+      const exists = fs.existsSync(w.path);
+      return {
+        repo: w.repo || (w.path.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), ""),
+        branch: w.branch || (exists ? branchOf(w.path) : ""),
+        path: w.path,
+        exists,
+        unpushed: exists ? await unpushedCount(w.path) : null,
+      };
+    })
+  );
 
   const live = worktrees.filter((w) => w.exists);
   if (live.length === 0) {
@@ -146,14 +143,14 @@ export function worktreeInfo(key: string): WorktreeInfo {
  * 워크트리 삭제 — dobby-end와 같은 절차로, 제거 전 코드 변경을 code-changes/에 남기고
  * **브랜치는 보존**한다(되살릴 수 있어야 이어가기가 가능하다). 삭제 전 안전 조건을 다시 확인한다.
  */
-export function removeWorktrees(key: string): {
+export async function removeWorktrees(key: string): Promise<{
   ok: boolean;
   error?: string;
   removed?: string[];
   /** 스냅샷 결과 — 화면이 "기록 남김/변경 없음/실패"를 구분해 알릴 수 있게 돌려준다. */
   snapshot?: { repo: string; state: "saved" | "empty" | "failed" }[];
-} {
-  const info = worktreeInfo(key);
+}> {
+  const info = await worktreeInfo(key);
   if (!info.removable) return { ok: false, error: info.reason ?? "삭제할 수 없습니다." };
 
   const removed: string[] = [];
@@ -234,15 +231,24 @@ export type Deletability = Record<string, { removable: boolean; reason: string |
  *
  * **지울 워크트리가 없는 오더는 map에 넣지 않는다**(호출부가 버튼 자체를 그리지 않게 —
  * 이미 정리된 종료 오더·문서 전용 오더에 비활성 버튼을 늘어놓을 이유가 없다).
- * 실측: 워크트리 1개당 git 호출 약 19ms, 실재하는 워크트리는 보통 10개 미만이다.
+ * ⛔ 하나씩 차례로 물으면 오래 걸린다. 실측(삭제 후보 90개·실재 워크트리 33개): 순차 531~810ms.
+ * 동시에 물으면 90~130ms 로 내려가고, 그동안 다른 요청이 밀리지도 않는다.
  */
-export function deletabilityOf(keys: string[]): Deletability {
+/** 동시에 띄울 git 프로세스 수. 실측(62개 기준) 8개씩 352ms · 전부 178ms — 그 사이를 잡았다. */
+const DELETABILITY_CONCURRENCY = 16;
+
+export async function deletabilityOf(keys: string[]): Promise<Deletability> {
   const out: Deletability = {};
-  for (const key of keys) {
-    const info = worktreeInfo(key);
-    // 실재하는 워크트리가 하나도 없으면 대상 아님(버튼 미노출).
-    if (!info.worktrees.some((w) => w.exists)) continue;
-    out[key] = { removable: info.removable, reason: info.reason };
+  // 한 번에 다 던지면 git 프로세스가 수십 개 동시에 뜬다. 나눠서 보낸다.
+  for (let i = 0; i < keys.length; i += DELETABILITY_CONCURRENCY) {
+    const batch = keys.slice(i, i + DELETABILITY_CONCURRENCY);
+    const infos = await Promise.all(batch.map((k) => worktreeInfo(k)));
+    batch.forEach((key, j) => {
+      const info = infos[j];
+      // 실재하는 워크트리가 하나도 없으면 대상 아님(버튼 미노출).
+      if (!info.worktrees.some((w) => w.exists)) return;
+      out[key] = { removable: info.removable, reason: info.reason };
+    });
   }
   return out;
 }
