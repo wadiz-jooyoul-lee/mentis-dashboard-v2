@@ -8,6 +8,7 @@ import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
 import ResumeButton from "@/components/ResumeButton";
 import ResolveButton from "@/components/ResolveButton";
+import BundleTags from "@/components/BundleTags";
 import { dobbyColor } from "@/lib/dobby";
 import { jiraUrl } from "@/lib/jira";
 import { isJiraIssueKey } from "@/lib/keys";
@@ -187,6 +188,8 @@ export default function OrderHeader({
               {title}
             </Text>
           )}
+          {/* 테스트하려면 다시 배포해야 하는 번들. 판정에 git 이 필요해 따로 불러온다. */}
+          <BundleTags epicKey={epicKey} />
           {mode && <Tag>{mode}</Tag>}
           {worktreeRemoved && (
             <Tag color="default" style={{ color: "#8c8c8c" }}>
