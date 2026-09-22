@@ -202,7 +202,17 @@ function spawnClaude(
     cwd: workspace,
     detached: true,
     stdio: ["ignore", out, out],
-    env: { ...process.env, NODE_EXTRA_CA_CERTS: "" },
+    // 스킬이 쓰는 경로를 **넘겨준다**. 대시보드를 띄운 셸에 go-dobby 설정이 없으면
+    // 스킬 쪽에서 `$ORCHESTRATION_META`가 빈 값이 되어, 소감을 엉뚱한 곳에 쓰거나
+    // "설정이 없다"며 그냥 물러난다(실제로 FE1-1979 는 2턴 만에 포기했다).
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: "",
+      ORCHESTRATION_META: getMetaDir(),
+      ORCHESTRATION_META_PATH: getMetaDir(),
+      ORCHESTRATION_WORKSPACE: workspace,
+      ORCHESTRATION_REPOS_ROOT: getReposRoot(),
+    },
   });
   writeMeta({ key, pid: child.pid ?? -1, startedAt: Date.now() });
   child.unref();
