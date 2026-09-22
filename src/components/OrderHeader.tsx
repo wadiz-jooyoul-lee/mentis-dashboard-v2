@@ -154,6 +154,8 @@ export default function OrderHeader({
           ]}
         />
         <Space align="center" size={8}>
+          {/* 테스트하려면 다시 배포해야 하는 번들. 판정에 git 이 필요해 따로 불러온다. */}
+          <BundleTags epicKey={epicKey} />
           <Link
             href="/agents"
             style={{
@@ -188,8 +190,6 @@ export default function OrderHeader({
               {title}
             </Text>
           )}
-          {/* 테스트하려면 다시 배포해야 하는 번들. 판정에 git 이 필요해 따로 불러온다. */}
-          <BundleTags epicKey={epicKey} />
           {mode && <Tag>{mode}</Tag>}
           {worktreeRemoved && (
             <Tag color="default" style={{ color: "#8c8c8c" }}>

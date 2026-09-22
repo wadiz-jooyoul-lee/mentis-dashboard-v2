@@ -4,7 +4,13 @@ import { NextResponse } from "next/server";
 import { parseOrderStatus } from "@/lib/parseOrderStatus";
 import { getDefaultBase, getMetaDir, getReposRoot, expandHome } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { bundlesOf, changedFiles, type BundleReport } from "@/lib/bundles";
+import {
+  ALL_BUNDLES,
+  bundlesOf,
+  changedFiles,
+  type BundleImpact,
+  type BundleReport,
+} from "@/lib/bundles";
 
 export const dynamic = "force-dynamic";
 
@@ -64,21 +70,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
     worktrees = [];
   }
 
-  const files = new Set<string>();
-  let repoRoot = "";
+  // 저장소마다 따로 판정한다. 경로 규칙이 저장소별로 다르고, 한 오더가 프런트와 백엔드를
+  // 같이 건드리는 일도 있다(app-api + wadiz-frontend).
+  let fileCount = 0;
+  const impacts: BundleImpact[] = [];
   for (const wt of pickIntegrationWorktrees(worktrees, key)) {
     // 워크트리가 정리됐으면(dobby-end) 원본 저장소에 커밋이 남아 있다.
     const candidates = [expandHome(wt.path), path.join(getReposRoot(), wt.repo)];
     const dir = candidates.find((d) => d && fs.existsSync(d));
     if (!dir) continue;
-    if (!repoRoot) repoRoot = dir;
-    for (const f of changedFiles(key, dir, getDefaultBase())) files.add(f);
+    const files = changedFiles(key, dir, getDefaultBase());
+    if (files.length === 0) continue;
+    fileCount += files.length;
+    impacts.push(...(await bundlesOf(files, dir, wt.repo)));
   }
 
   const report: BundleReport = {
-    fileCount: files.size,
-    impacts: repoRoot ? bundlesOf([...files], repoRoot) : [],
-    unknown: files.size === 0,
+    fileCount,
+    // 표시 순서를 고정한다(저장소를 도는 순서에 따라 태그가 뒤바뀌지 않게).
+    impacts: impacts.sort((a, b) => ALL_BUNDLES.indexOf(a.bundle) - ALL_BUNDLES.indexOf(b.bundle)),
+    unknown: fileCount === 0,
   };
   cache.set(key, { at: Date.now(), report });
   return NextResponse.json(report);

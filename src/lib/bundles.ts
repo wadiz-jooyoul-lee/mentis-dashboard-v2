@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import path from "node:path";
+import { buildGraph, traceBundles, type DepGraph } from "@/lib/depgraph";
 
 /**
  * 오더가 건드린 파일로 "어느 번들을 다시 배포해야 테스트할 수 있나"를 판정한다.
@@ -11,14 +11,37 @@ import path from "node:path";
  * git은 도구 사용 방식과 무관한 정본이다.
  */
 
-export type Bundle = "global" | "account" | "static" | "studio";
-export const ALL_BUNDLES: Bundle[] = ["global", "account", "static", "studio"];
+export type Bundle =
+  | "global"
+  | "account"
+  | "static"
+  | "studio"
+  | "app-api"
+  | "wadiz-web";
 
-/** 한 번들의 판정 결과. `direct`면 그 번들 소스를 직접 고친 것이고, 아니면 공유 패키지 탓이다. */
+/** wadiz-frontend 모노레포가 쪼개지는 네 갈래. */
+const FRONTEND_BUNDLES: Bundle[] = ["global", "account", "static", "studio"];
+
+/**
+ * 저장소 하나가 통째로 배포 단위인 것들.
+ *
+ * app-api 는 NestJS 앱 하나(Dockerfile 1개, 워크스페이스 아님), com.wadiz.web 은 Maven WAR
+ * 한 덩어리(`<modules>` 없음)라 더 쪼갤 곳이 없다. 어느 파일을 고쳤든 그 저장소를 다시 배포한다.
+ */
+const WHOLE_REPO: Record<string, Bundle> = {
+  "app-api": "app-api",
+  "com.wadiz.web": "wadiz-web",
+};
+
+export const ALL_BUNDLES: Bundle[] = [...FRONTEND_BUNDLES, "app-api", "wadiz-web"];
+
+/** 한 번들의 판정 결과. `direct`면 그 번들 폴더 안의 파일을 고친 것이고, 아니면 공유 코드 탓이다. */
 export type BundleImpact = {
   bundle: Bundle;
   direct: boolean;
-  /** 왜 이 번들이 켜졌나 — 직접 고친 경로 또는 공유 패키지 이름. */
+  /** 이 번들에 닿는 변경 파일 수. 1~2개면 스치기만 한 것이라 사람이 걸러 볼 만하다. */
+  count: number;
+  /** 왜 이 번들이 켜졌나 — 실제로 닿는 변경 파일들(많으면 앞의 몇 개). */
   reasons: string[];
 };
 
@@ -30,26 +53,22 @@ export type BundleReport = {
 };
 
 /**
- * 배포 단위가 소유한 소스 경로.
+ * 배포 단위가 소유한 폴더.
  *
  * 워크플로(`app-{앱}-ci-cd.yml`)가 전부 수동 실행이라 경로 필터가 없다. 그래서 폴더 구조로
  * 정한다. 저장소 구조가 바뀌면 이 표만 고치면 된다.
  */
-const DIRECT_PATHS: [RegExp, Bundle][] = [
-  [/^apps\/global\//, "global"],
-  [/^apps\/account\//, "account"],
-  [/^static\//, "static"],
-  [/^studio\//, "studio"],
+const BUNDLE_ROOTS: [string, string][] = [
+  ["global", "apps/global/"],
+  ["account", "apps/account/"],
+  ["static", "static/"],
+  ["studio", "studio/"],
 ];
 
-/**
- * 공유 `@wadiz/*` 패키지가 사는 곳. 루트 `packages/` 말고 `libraries/` 밑에도 있다
- * (`libraries/libraries/react-components` = `@wadiz/react-components` 등 8개).
- * 여기를 빠뜨리면 그 패키지를 고친 오더가 아무 번들도 안 켠다.
- */
-const PACKAGE_PATH = /^(?:packages|libraries\/(?:libraries|packages))\/([a-z0-9-]+)\//;
+/** 그래프를 훑을 최상위 폴더. */
+const GRAPH_TOPS = ["apps", "static", "studio", "packages", "libraries"];
 
-/** 빌드 전반에 걸리는 루트 파일 — 전 번들 대상. */
+/** 빌드 전반에 걸리는 루트 파일 — 어디에도 import 되지 않으므로 그래프로 못 잡는다. */
 const ROOT_WIDE = /^(pnpm-lock\.yaml|package\.json|eslint\.config\.|packages\/eslint-config-helper)/;
 
 function git(dir: string, args: string[]): string {
@@ -61,40 +80,18 @@ function git(dir: string, args: string[]): string {
 }
 
 /**
- * 번들별로 "쓰는 `@wadiz/*` 패키지 집합"을 만든다.
- *
- * ⛔ 패키지마다 grep 하면 (패키지 수 × 번들 수)회가 되어 8초까지 갔다. 번들마다 한 번씩만
- * 훑어 한 번에 집합을 만든다(실측 1.25초). 저장소 구조는 자주 안 바뀌므로 메모리에 캐시한다.
+ * 저장소의 의존성 그래프. 만드는 데 3초쯤 들지만(파일 1.9만 개·간선 3.8만 개) 저장소 구조는
+ * 자주 안 바뀌므로 프로세스가 사는 동안 들고 있는다. 되짚기 자체는 50ms 안쪽이다.
  */
-const usageCache = new Map<string, Map<Bundle, Set<string>>>();
-function usageTable(repoRoot: string): Map<Bundle, Set<string>> {
-  const hit = usageCache.get(repoRoot);
-  if (hit) return hit;
-  const roots: [string, Bundle][] = [
-    ["apps/global", "global"],
-    ["apps/account", "account"],
-    ["static", "static"],
-    ["studio", "studio"],
-  ];
-  const table = new Map<Bundle, Set<string>>();
-  for (const [rel, bundle] of roots) {
-    const dir = path.join(repoRoot, rel);
-    const used = new Set<string>();
-    if (fs.existsSync(dir)) {
-      const r = spawnSync(
-        "grep",
-        ["-rhoE", "@wadiz/[a-z0-9-]+", dir, "--include=*.ts", "--include=*.tsx", "--include=*.js", "--include=*.jsx"],
-        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
-      );
-      for (const line of (r.stdout ?? "").split("\n")) {
-        const name = line.trim().replace("@wadiz/", "");
-        if (name) used.add(name);
-      }
-    }
-    table.set(bundle, used);
+const graphCache = new Map<string, Promise<DepGraph>>();
+function graphOf(repoRoot: string): Promise<DepGraph> {
+  let g = graphCache.get(repoRoot);
+  if (!g) {
+    // 약속을 먼저 넣어 둔다. 빌드 도중 같은 저장소로 또 들어와도 두 번 만들지 않는다.
+    g = buildGraph(repoRoot, GRAPH_TOPS);
+    graphCache.set(repoRoot, g);
   }
-  usageCache.set(repoRoot, table);
-  return table;
+  return g;
 }
 
 /** 원격 base가 있으면 그쪽을, 없으면 로컬 base를 쓴다. */
@@ -177,45 +174,50 @@ export function changedFiles(key: string, worktree: string, base: string): strin
   return [...collect(git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
 }
 
-/** 파일 목록 → 번들 판정. */
-export function bundlesOf(files: string[], repoRoot: string): BundleImpact[] {
-  const direct = new Map<Bundle, Set<string>>();
-  const shared = new Map<Bundle, Set<string>>();
-  const add = (m: Map<Bundle, Set<string>>, b: Bundle, why: string) => {
-    if (!m.has(b)) m.set(b, new Set());
-    m.get(b)!.add(why);
-  };
-
-  const packages = new Set<string>();
-  for (const f of files) {
-    const direct0 = DIRECT_PATHS.find(([re]) => re.test(f));
-    if (direct0) {
-      add(direct, direct0[1], f.split("/").slice(0, 2).join("/"));
-      continue;
-    }
-    const pkg = f.match(PACKAGE_PATH);
-    if (pkg) packages.add(pkg[1]);
-    else if (ROOT_WIDE.test(f)) for (const b of ALL_BUNDLES) add(shared, b, "루트 설정");
+/**
+ * 파일 목록 → 번들 판정.
+ *
+ * `repo` 는 오더 상태표에 적힌 저장소 이름이다. 아래 경로 규칙은 wadiz-frontend 것이라,
+ * 다른 저장소에 그대로 대면 `static/` 같은 흔한 폴더 이름에 걸려 엉뚱한 번들이 켜진다.
+ */
+export async function bundlesOf(
+  files: string[],
+  repoRoot: string,
+  repo: string
+): Promise<BundleImpact[]> {
+  const whole = WHOLE_REPO[repo];
+  if (whole) {
+    if (files.length === 0) return [];
+    // 저장소 전체가 한 덩어리라 "어디를 고쳤나"만 근거로 보여 준다.
+    // 폴더를 먼저 보인다 — 최상위 파일(`.env.dev` 등)이 이름 순으로 앞자리를 다 먹으면
+    // 정작 알고 싶은 `src/api` 같은 것이 밀려난다.
+    const tops = [...new Set(files.map((f) => f.split("/").slice(0, 2).join("/")))].sort(
+      (a, b) => Number(b.includes("/")) - Number(a.includes("/")) || a.localeCompare(b)
+    );
+    return [{ bundle: whole, direct: true, count: files.length, reasons: tops.slice(0, 8) }];
   }
 
-  if (packages.size > 0) {
-    const table = usageTable(repoRoot);
-    for (const p of packages) {
-      for (const b of ALL_BUNDLES) {
-        if (table.get(b)?.has(p)) add(shared, b, `@wadiz/${p}`);
-      }
-    }
-  }
+  // 루트 설정은 아무 데도 import 되지 않아 그래프로 못 잡는다. 바뀌면 전 번들을 다시 빌드한다.
+  const rootWide = files.filter((f) => ROOT_WIDE.test(f));
+
+  // 나머지는 실제로 닿는지 되짚는다. 패키지 이름만 맞으면 켜던 방식은 안 바뀐 것까지 켰다
+  // (FE1-1953: `features/project-card`만 고쳤는데 `features/onelink`만 쓰는 account가 켜졌다).
+  const hit = traceBundles(await graphOf(repoRoot), files, BUNDLE_ROOTS);
 
   const impacts: BundleImpact[] = [];
-  for (const b of ALL_BUNDLES) {
-    const d = direct.get(b);
-    const s = shared.get(b);
-    if (!d && !s) continue;
+  for (const b of FRONTEND_BUNDLES) {
+    const reached = [...(hit.get(b) ?? [])];
+    const all = [...new Set([...reached, ...rootWide])];
+    if (all.length === 0) continue;
+    const prefix = BUNDLE_ROOTS.find(([name]) => name === b)![1];
     impacts.push({
       bundle: b,
-      direct: !!d,
-      reasons: [...(d ?? []), ...(s ?? [])].sort(),
+      direct: reached.some((f) => f.startsWith(prefix)),
+      count: all.length,
+      // 그 번들 폴더 안의 파일을 앞세운다 — 직접 고친 곳이 먼저 눈에 들어와야 한다.
+      reasons: all
+        .sort((x, y) => Number(y.startsWith(prefix)) - Number(x.startsWith(prefix)) || x.localeCompare(y))
+        .slice(0, 8),
     });
   }
   return impacts;
