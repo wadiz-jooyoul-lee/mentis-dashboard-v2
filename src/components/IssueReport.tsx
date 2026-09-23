@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,6 +21,7 @@ import {
   Alert,
   Badge,
   Select,
+  Skeleton,
 } from "antd";
 import { HistoryOutlined } from "@ant-design/icons";
 import {
@@ -259,6 +260,30 @@ export default function IssueReport({
   const [selectedId, setSelectedId] = useState(runs[0]?.id ?? "");
   const selected = runs.find((r) => r.id === selectedId) ?? runs[0] ?? null;
 
+  // 본문은 최신 회차만 실려 온다. 지난 회차를 고르면 그때 받아 와 여기 담아 둔다
+  // (한 번 받은 것은 다시 받지 않는다).
+  const [fetched, setFetched] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const body = selected ? selected.content || fetched[selected.id] || "" : "";
+
+  useEffect(() => {
+    if (!selected || selected.content || fetched[selected.id]) return;
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/orders?run=${encodeURIComponent(issueKey)}&id=${encodeURIComponent(selected.id)}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j?.ok) setFetched((m) => ({ ...m, [selected.id]: String(j.content ?? "") }));
+      })
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [selected, issueKey, fetched]);
+
   return (
     <div>
       {!embedded && (
@@ -317,7 +342,13 @@ export default function IssueReport({
               총 {runs.length}회 · 파일: {selected.file}
             </Text>
           </Space>
-          <ReportBody key={selected.id} content={selected.content} />
+          {body ? (
+            <ReportBody key={selected.id} content={body} />
+          ) : loading ? (
+            <Skeleton active paragraph={{ rows: 8 }} />
+          ) : (
+            <Empty description="이 회차의 결과를 불러오지 못했습니다" />
+          )}
         </>
       ) : (
         <Empty description="이 이슈에 대한 테스트 결과 md가 없습니다" />

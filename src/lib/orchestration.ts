@@ -778,7 +778,13 @@ export type EpicDetail = {
   hasExplainerDoc: boolean;
 };
 
-/** test-runs/{시각}/result.md 회차들(최신순). */
+/**
+ * test-runs/{시각}/result.md 회차들(최신순).
+ *
+ * 본문은 **최신 회차만** 싣는다. 화면에는 한 회차만 보이는데 전부 실어 보내면 대부분이
+ * 버려진다(FE1-1979: 8회차 48,480자를 보내고 9,974자만 쓴다 — 79% 낭비). 다른 회차를
+ * 고르면 그때 `/api/orders?run=` 으로 가져온다.
+ */
 function readRuns(key: string): ReportRun[] {
   const runsDir = path.join(orderDir(key), "test-runs");
   if (!fs.existsSync(runsDir)) return [];
@@ -809,7 +815,21 @@ function readRuns(key: string): ReportRun[] {
     runs.push({ id: e.name, label, file: path.join("test-runs", e.name, file), content, sortKey });
   }
   runs.sort((a, b) => b.sortKey - a.sortKey);
-  return runs;
+  return runs.map((r, i) => (i === 0 ? r : { ...r, content: "" }));
+}
+
+/** 한 회차의 본문만 읽는다(지연 로딩용). 없으면 null. */
+export function readRunContent(key: string, runId: string): string | null {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(runId)) return null;
+  const dir = path.join(orderDir(key), "test-runs", runId);
+  let mds: string[];
+  try {
+    mds = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".md"));
+  } catch {
+    return null;
+  }
+  const file = mds.find((f) => /result/i.test(f)) ?? mds[0];
+  return file ? readFileSafe(path.join(dir, file)) : null;
 }
 
 /**

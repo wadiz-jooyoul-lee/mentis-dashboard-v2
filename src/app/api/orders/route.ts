@@ -23,7 +23,12 @@ import {
   startResolve,
   JOB_ID_RE,
 } from "@/lib/jobs";
-import { saveJiraEnrichDraft, prTargets, readOrderSession } from "@/lib/orchestration";
+import {
+  saveJiraEnrichDraft,
+  prTargets,
+  readOrderSession,
+  readRunContent,
+} from "@/lib/orchestration";
 import { getConsole } from "@/lib/transcript";
 import { denyRemote } from "@/lib/localOnly";
 import { worktreeInfo, removeWorktrees } from "@/lib/worktree";
@@ -168,6 +173,19 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   // 아바타 소감 상태: ?quips={오더키} → 파일 유무·서명·최신여부·잡 상태
+  // 검증 탭 회차 본문(지연 로딩) — 페이지는 최신 회차만 싣고, 다른 회차를 고르면 여기서 받는다.
+  const runKey = (sp.get("run") ?? "").trim();
+  if (runKey) {
+    if (!ORDER_KEY_RE.test(runKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    const content = readRunContent(runKey, (sp.get("id") ?? "").trim());
+    if (content === null) {
+      return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, content });
+  }
+
   const quipsKey = (sp.get("quips") ?? "").trim();
   if (quipsKey) {
     if (!ORDER_KEY_RE.test(quipsKey)) {
