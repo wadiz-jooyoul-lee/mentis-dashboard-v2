@@ -84,20 +84,27 @@ function ReportBody({ content }: { content: string }) {
   const overall = overallStatus(counts);
   const passRate =
     counts.total > 0 ? Math.round((counts.pass / counts.total) * 100) : 0;
-  const hasEvidence = scenarios.some((s) => s.evidence);
+  // 값이 하나도 없는 칸은 아예 그리지 않는다. 회차마다 적은 항목이 달라서(어떤 회차는
+  // 페이지·기대를 안 적는다) 빈 칸을 그대로 그리면 표가 깨져 보인다.
+  const used = (k: "num" | "page" | "check" | "expected" | "actual" | "evidence") =>
+    scenarios.some((s) => (s[k] ?? "").trim() && s[k].trim() !== "-" && s[k].trim() !== "—");
 
   const columns = [
-    { title: "#", dataIndex: "num", key: "num", width: 56 },
-    {
-      title: "페이지 / URL",
-      dataIndex: "page",
-      key: "page",
-      render: (v: string) =>
-        v ? <Text code style={{ whiteSpace: "normal" }}>{v}</Text> : "-",
-    },
-    { title: "확인 항목", dataIndex: "check", key: "check" },
-    { title: "기대", dataIndex: "expected", key: "expected" },
-    { title: "실제", dataIndex: "actual", key: "actual" },
+    ...(used("num") ? [{ title: "#", dataIndex: "num", key: "num", width: 56 }] : []),
+    ...(used("page")
+      ? [
+          {
+            title: "페이지 / URL",
+            dataIndex: "page",
+            key: "page",
+            render: (v: string) =>
+              v ? <Text code style={{ whiteSpace: "normal" }}>{v}</Text> : "-",
+          },
+        ]
+      : []),
+    ...(used("check") ? [{ title: "확인 항목", dataIndex: "check", key: "check" }] : []),
+    ...(used("expected") ? [{ title: "기대", dataIndex: "expected", key: "expected" }] : []),
+    ...(used("actual") ? [{ title: "실제", dataIndex: "actual", key: "actual" }] : []),
     {
       title: "판정",
       dataIndex: "verdict",
@@ -105,7 +112,7 @@ function ReportBody({ content }: { content: string }) {
       width: 96,
       render: (v: Verdict) => <VerdictTag verdict={v} />,
     },
-    ...(hasEvidence
+    ...(used("evidence")
       ? [{ title: "근거", dataIndex: "evidence", key: "evidence" }]
       : []),
   ];

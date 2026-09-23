@@ -1,5 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import fs from "node:fs";
+import path from "node:path";
 import { buildGraph, traceBundles, type DepGraph } from "@/lib/depgraph";
 
 /**
@@ -71,18 +73,65 @@ const GRAPH_TOPS = ["apps", "static", "studio", "packages", "libraries"];
 /** 빌드 전반에 걸리는 루트 파일 — 어디에도 import 되지 않으므로 그래프로 못 잡는다. */
 const ROOT_WIDE = /^(pnpm-lock\.yaml|package\.json|eslint\.config\.|packages\/eslint-config-helper)/;
 
-function git(dir: string, args: string[]): string {
-  const r = spawnSync("git", ["-C", dir, ...args], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return r.status === 0 ? r.stdout : "";
+/**
+ * git 은 **비동기로** 부른다. `spawnSync` 를 쓰면 자식 프로세스가 끝날 때까지 이벤트 루프가
+ * 통째로 멎어, 오더 하나를 판정하는 동안 다른 페이지가 같이 느려진다
+ * (실측: 보드 응답 0.79초 → 2.42초).
+ */
+const run = promisify(execFile);
+async function git(dir: string, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await run("git", ["-C", dir, ...args], { maxBuffer: 64 * 1024 * 1024 });
+    return stdout;
+  } catch {
+    return "";
+  }
 }
 
 /**
  * 저장소의 의존성 그래프. 만드는 데 3초쯤 들지만(파일 1.9만 개·간선 3.8만 개) 저장소 구조는
  * 자주 안 바뀌므로 프로세스가 사는 동안 들고 있는다. 되짚기 자체는 50ms 안쪽이다.
  */
+/**
+ * 번들마다 "소스에 이름이 실제로 적혀 있는 `@wadiz/*` 패키지" 집합.
+ *
+ * 그래프와 **독립된 방법**으로 한 번 더 재기 위한 것이다. 그래프는 파일을 한 칸씩 이어 붙여
+ * 가므로, 중간에 잘못된 고리가 하나라도 끼면 없는 길이 생긴다(실제로 JSDoc 주석 속 import를
+ * 진짜로 읽어 studio 까지 닿은 적이 있다). 이름조차 안 쓰는 패키지라면 그 번들은 그 패키지를
+ * 통해 영향을 받을 수 없다 — 그래프가 뭐라 하든 잘못이다.
+ */
+const usageCache = new Map<string, Map<Bundle, Set<string>>>();
+async function packageUsage(repoRoot: string): Promise<Map<Bundle, Set<string>>> {
+  const hit = usageCache.get(repoRoot);
+  if (hit) return hit;
+  const table = new Map<Bundle, Set<string>>();
+  await Promise.all(
+    BUNDLE_ROOTS.map(async ([bundle, prefix]) => {
+      const dir = path.join(repoRoot, prefix);
+      const used = new Set<string>();
+      try {
+        const { stdout } = await run(
+          "grep",
+          ["-rhoE", "@wadiz/[a-z0-9-]+", dir, "--include=*.ts", "--include=*.tsx", "--include=*.js", "--include=*.jsx"],
+          { maxBuffer: 64 * 1024 * 1024 }
+        );
+        for (const line of stdout.split("\n")) {
+          const name = line.trim().replace("@wadiz/", "");
+          if (name) used.add(name);
+        }
+      } catch {
+        /* 폴더가 없거나 일치가 없으면 빈 집합 */
+      }
+      table.set(bundle as Bundle, used);
+    })
+  );
+  usageCache.set(repoRoot, table);
+  return table;
+}
+
+/** 공유 패키지 경로에서 패키지 이름을 뽑는다. `packages/` 말고 `libraries/` 밑에도 있다. */
+const PACKAGE_PATH = /^(?:packages|libraries\/(?:libraries|packages))\/([a-z0-9-]+)\//;
+
 const graphCache = new Map<string, Promise<DepGraph>>();
 function graphOf(repoRoot: string): Promise<DepGraph> {
   let g = graphCache.get(repoRoot);
@@ -95,10 +144,9 @@ function graphOf(repoRoot: string): Promise<DepGraph> {
 }
 
 /** 원격 base가 있으면 그쪽을, 없으면 로컬 base를 쓴다. */
-function baseRef(worktree: string, base: string): string {
-  return git(worktree, ["rev-parse", "--verify", "--quiet", `origin/${base}`]).trim()
-    ? `origin/${base}`
-    : base;
+async function baseRef(worktree: string, base: string): Promise<string> {
+  const found = (await git(worktree, ["rev-parse", "--verify", "--quiet", `origin/${base}`])).trim();
+  return found ? `origin/${base}` : base;
 }
 
 /**
@@ -110,7 +158,7 @@ function baseRef(worktree: string, base: string): string {
  * ③ 둘 다 없을 때만 커밋 메시지로 찾는다. 이건 **손댄 이력**이라 중간에 고쳤다가 되돌린
  *    파일까지 세므로 부정확하다(FE1-1830: studio 파일 2개를 되돌렸는데 studio 번들이 켜졌다).
  */
-export function changedFiles(key: string, worktree: string, base: string): string[] {
+export async function changedFiles(key: string, worktree: string, base: string): Promise<string[]> {
   if (!worktree || !fs.existsSync(worktree)) return [];
   const collect = (raw: string) => {
     const out = new Set<string>();
@@ -119,10 +167,10 @@ export function changedFiles(key: string, worktree: string, base: string): strin
   };
 
   const fork =
-    git(worktree, ["merge-base", `origin/${base}`, "HEAD"]).trim() ||
-    git(worktree, ["merge-base", base, "HEAD"]).trim();
+    (await git(worktree, ["merge-base", `origin/${base}`, "HEAD"])).trim() ||
+    (await git(worktree, ["merge-base", base, "HEAD"])).trim();
   if (fork) {
-    const out = collect(git(worktree, ["diff", "--name-only", fork]));
+    const out = collect(await git(worktree, ["diff", "--name-only", fork]));
     if (out.size > 0) return [...out];
   }
 
@@ -135,14 +183,14 @@ export function changedFiles(key: string, worktree: string, base: string): strin
   //
   // 찾는 범위도 워크트리 HEAD가 아니라 base여야 한다. 워크트리는 머지 **전** 상태라
   // 제 HEAD에서는 자기가 나간 머지가 안 보인다.
-  const merges = git(worktree, [
+  const merges = (await git(worktree, [
     "log",
     "--merges",
-    baseRef(worktree, base),
+    await baseRef(worktree, base),
     "--format=%H%x09%s",
     "-E",
     `--grep=/${key}([^0-9]|$)`,
-  ])
+  ]))
     .split("\n")
     .filter((l) => l.includes("\t") && !l.includes(" into "))
     .map((l) => l.split("\t")[0])
@@ -153,11 +201,11 @@ export function changedFiles(key: string, worktree: string, base: string): strin
     // 중간에 고쳤다가 되돌린 파일을 뺀다(FE1-1830: 129개 중 5개가 이렇게 빠진다).
     const touched = new Set<string>();
     for (const m of merges) {
-      for (const f of collect(git(worktree, ["diff", "--name-only", `${m}^1`, m]))) touched.add(f);
+      for (const f of collect(await git(worktree, ["diff", "--name-only", `${m}^1`, m]))) touched.add(f);
     }
     if (touched.size > 0 && touched.size <= 1000) {
       const net = collect(
-        git(worktree, [
+        await git(worktree, [
           "diff",
           "--name-only",
           `${merges[merges.length - 1]}^1`,
@@ -171,7 +219,7 @@ export function changedFiles(key: string, worktree: string, base: string): strin
     if (touched.size > 0) return [...touched];
   }
 
-  return [...collect(git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
+  return [...collect(await git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
 }
 
 /**
@@ -202,14 +250,22 @@ export async function bundlesOf(
 
   // 나머지는 실제로 닿는지 되짚는다. 패키지 이름만 맞으면 켜던 방식은 안 바뀐 것까지 켰다
   // (FE1-1953: `features/project-card`만 고쳤는데 `features/onelink`만 쓰는 account가 켜졌다).
-  const hit = traceBundles(await graphOf(repoRoot), files, BUNDLE_ROOTS);
+  const [graph, usage] = await Promise.all([graphOf(repoRoot), packageUsage(repoRoot)]);
+  const hit = traceBundles(graph, files, BUNDLE_ROOTS);
 
   const impacts: BundleImpact[] = [];
   for (const b of FRONTEND_BUNDLES) {
-    const reached = [...(hit.get(b) ?? [])];
+    const prefix0 = BUNDLE_ROOTS.find(([name]) => name === b)![1];
+    // 안전망: 공유 패키지를 거쳐 닿는다는 판정은, 그 번들이 그 패키지 이름을 실제로 쓸 때만
+    // 받아들인다. 그래프에 잘못된 고리가 끼어도 여기서 걸린다.
+    const reached = [...(hit.get(b) ?? [])].filter((f) => {
+      if (f.startsWith(prefix0)) return true;
+      const pkg = f.match(PACKAGE_PATH);
+      return pkg ? (usage.get(b)?.has(pkg[1]) ?? false) : true;
+    });
     const all = [...new Set([...reached, ...rootWide])];
     if (all.length === 0) continue;
-    const prefix = BUNDLE_ROOTS.find(([name]) => name === b)![1];
+    const prefix = prefix0;
     impacts.push({
       bundle: b,
       direct: reached.some((f) => f.startsWith(prefix)),

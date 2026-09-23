@@ -6,6 +6,7 @@ import { Breadcrumb, Typography, Space, Tag, Button, Tabs, Tooltip } from "antd"
 import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
+import JiraCopyButton from "@/components/JiraCopyButton";
 import ResumeButton from "@/components/ResumeButton";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
@@ -215,6 +216,7 @@ export default function OrderHeader({
               Jira에서 열기
             </Button>
           )}
+          {hasJiraIssue && <JiraCopyButton epicKey={epicKey} />}
           {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
           <ResumeButton epicKey={epicKey} />
           <ResolveButton epicKey={epicKey} resolved={resolved} />

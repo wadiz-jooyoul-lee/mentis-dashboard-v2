@@ -79,7 +79,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
     const candidates = [expandHome(wt.path), path.join(getReposRoot(), wt.repo)];
     const dir = candidates.find((d) => d && fs.existsSync(d));
     if (!dir) continue;
-    const files = changedFiles(key, dir, getDefaultBase());
+    const files = await changedFiles(key, dir, getDefaultBase());
     if (files.length === 0) continue;
     fileCount += files.length;
     impacts.push(...(await bundlesOf(files, dir, wt.repo)));
