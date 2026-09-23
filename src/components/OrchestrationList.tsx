@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Progress, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
 import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
@@ -199,27 +199,6 @@ export default function OrchestrationList({
           );
         }
         return <Tag color={s.color}>{s.text}</Tag>;
-      },
-    },
-    {
-      title: "진행률",
-      key: "progress",
-      render: (_: unknown, r: EpicSummary) => {
-        const total = r.counts.total ?? 0;
-        const done = r.counts.완료 ?? 0;
-        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-        return (
-          <Space orientation="vertical" size={2} style={{ minWidth: 160 }}>
-            <Progress
-              percent={pct}
-              size="small"
-              status={done === total && total > 0 ? "success" : "active"}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              완료 {done} / 전체 {total}
-            </Text>
-          </Space>
-        );
       },
     },
     {
