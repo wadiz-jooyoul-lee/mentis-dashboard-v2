@@ -55,11 +55,18 @@ function splitRow(line: string): string[] {
   return t.split("|").map((c) => c.trim());
 }
 
-/** 헤더 셀에 특정 키워드가 포함된 컬럼의 인덱스를 찾는다. */
+/**
+ * 헤더 셀에 특정 키워드가 포함된 컬럼의 인덱스를 찾는다.
+ *
+ * **키워드 순서가 우선순위다.** 왼쪽 컬럼이 이기게 하면 안 된다 —
+ * `# | 유형 | 시나리오 | …` 에서 `유형`(기능/회귀 분류)이 `시나리오`보다 왼쪽이라
+ * 항목 이름 자리에 "기능"·"회귀"가 들어왔다.
+ */
 function colIndex(headers: string[], ...keywords: string[]): number {
-  for (let i = 0; i < headers.length; i++) {
-    const h = headers[i].replace(/\*/g, "");
-    if (keywords.some((k) => h.includes(k))) return i;
+  const clean = headers.map((h) => h.replace(/\*/g, ""));
+  for (const k of keywords) {
+    const i = clean.findIndex((h) => h.includes(k));
+    if (i >= 0) return i;
   }
   return -1;
 }
@@ -74,7 +81,8 @@ type TableBlock = { start: number; end: number; headers: string[] };
 const COL = {
   num: ["#", "ID", "번호", "No."],
   page: ["페이지", "URL", "화면", "주소", "지면", "경로"],
-  check: ["확인", "항목", "시나리오", "무엇을", "대상", "구분", "이슈", "내용", "조작", "유형"],
+  // ⛔ `유형`·`구분`은 넣지 않는다 — 기능/회귀 같은 분류 칸이지 항목 이름이 아니다.
+  check: ["확인 항목", "확인", "시나리오", "무엇을", "항목", "대상", "이슈", "내용", "조작"],
   expected: ["기대", "예상"],
   actual: ["실제", "관측", "결과값"],
   verdict: ["판정"],

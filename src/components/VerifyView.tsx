@@ -4,6 +4,8 @@ import { Card, Typography } from "antd";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import IssueReport from "@/components/IssueReport";
+import TestSummaryView from "@/components/TestSummaryView";
+import type { TestSummary } from "@/lib/testSummary";
 import type { ReportRun } from "@/lib/issues";
 
 const { Title, Text } = Typography;
@@ -19,6 +21,7 @@ export default function VerifyView({
   hasDesign = false,
   orderKind = null,
   runs,
+  summary = null,
   testGuideMd,
 }: {
   epicKey: string;
@@ -30,6 +33,8 @@ export default function VerifyView({
   hasDesign?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
   runs: ReportRun[];
+  /** 모든 회차를 모은 요약. 회차가 없으면 null. */
+  summary?: TestSummary | null;
   testGuideMd: string | null;
 }) {
   return (
@@ -47,7 +52,7 @@ export default function VerifyView({
       <div style={{ marginTop: 16 }}>
         <Title level={4}>검증</Title>
         {runs.length > 0 ? (
-          <IssueReport issueKey={epicKey} runs={runs} embedded />
+          <IssueReport issueKey={epicKey} runs={runs} summary={summary} embedded />
         ) : (
           <Card size="small">
             <Text type="secondary">

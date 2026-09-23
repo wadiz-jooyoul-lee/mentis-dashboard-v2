@@ -34,6 +34,8 @@ import {
 } from "@ant-design/icons";
 import type { ReportRun } from "@/lib/issues";
 import { jiraUrl } from "@/lib/jira";
+import TestSummaryView from "@/components/TestSummaryView";
+import type { TestSummary } from "@/lib/testSummary";
 import { stateBadge, type IssueStatus } from "@/lib/parseStatus";
 import {
   parseReport,
@@ -326,11 +328,14 @@ function ReportBody({ content }: { content: string }) {
 export default function IssueReport({
   issueKey,
   runs,
+  summary = null,
   status,
   embedded,
 }: {
   issueKey: string;
   runs: ReportRun[];
+  /** 모든 회차를 모은 요약(서버 계산). 있으면 "전체"가 기본 화면이 된다. */
+  summary?: TestSummary | null;
   status?: IssueStatus | null;
   /** 오케스트레이션 보드 안에 임베드될 때 상단 브레드크럼/제목을 생략 */
   embedded?: boolean;
@@ -339,9 +344,13 @@ export default function IssueReport({
   const inProgress =
     status?.state === "테스트중" || status?.state === "분석중";
 
-  // 최신(runs[0]) 우선 선택
-  const [selectedId, setSelectedId] = useState(runs[0]?.id ?? "");
-  const selected = runs.find((r) => r.id === selectedId) ?? runs[0] ?? null;
+  // 회차가 둘 이상이면 "전체"가 기본 — 재실행에서 무엇이 달라졌는지 먼저 보이게.
+  const ALL = "__all__";
+  const [selectedId, setSelectedId] = useState(
+    summary && runs.length > 1 ? ALL : (runs[0]?.id ?? "")
+  );
+  const showAll = selectedId === ALL && !!summary;
+  const selected = showAll ? null : (runs.find((r) => r.id === selectedId) ?? runs[0] ?? null);
 
   // 본문은 최신 회차만 실려 온다. 지난 회차를 고르면 그때 받아 와 여기 담아 둔다
   // (한 번 받은 것은 다시 받지 않는다).
@@ -400,7 +409,7 @@ export default function IssueReport({
         </>
       )}
 
-      {selected ? (
+      {showAll || selected ? (
         <>
           <Space
             align="center"
@@ -413,20 +422,25 @@ export default function IssueReport({
               <Text type="secondary">실행 회차</Text>
             </Space>
             <Select
-              value={selected.id}
+              value={selectedId}
               onChange={setSelectedId}
               style={{ minWidth: 260 }}
-              options={runs.map((r, i) => ({
-                value: r.id,
-                label: `${r.label}${i === 0 ? " · 최신" : ""}`,
-              }))}
+              options={[
+                ...(summary ? [{ value: ALL, label: `전체 ${runs.length}회차 모아 보기` }] : []),
+                ...runs.map((r, i) => ({
+                  value: r.id,
+                  label: `${r.label}${i === 0 ? " · 최신" : ""}`,
+                })),
+              ]}
             />
             <Text type="secondary" style={{ fontSize: 12 }}>
-              총 {runs.length}회 · 파일: {selected.file}
+              총 {runs.length}회{selected ? ` · 파일: ${selected.file}` : ""}
             </Text>
           </Space>
-          {body ? (
-            <ReportBody key={selected.id} content={body} />
+          {showAll && summary ? (
+            <TestSummaryView summary={summary} />
+          ) : body ? (
+            <ReportBody key={selected!.id} content={body} />
           ) : loading ? (
             <Skeleton active paragraph={{ rows: 8 }} />
           ) : (
