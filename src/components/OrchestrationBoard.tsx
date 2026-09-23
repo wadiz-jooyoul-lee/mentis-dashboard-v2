@@ -13,7 +13,6 @@ import {
   Row,
   Col,
   Statistic,
-  Progress,
   Timeline,
   Collapse,
   Empty,
@@ -312,8 +311,6 @@ export default function OrchestrationBoard({
   const extras = Object.keys(counts).filter((s) => !STATE_ORDER.includes(s));
   const cols = [...STATE_ORDER, ...extras];
   const total = o.agents.length;
-  const done = counts["완료"] ?? 0;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const staleAgents = o.agents.filter(isStale);
 
   return (
@@ -326,7 +323,7 @@ export default function OrchestrationBoard({
           <Col xs={12} md={4}>
             <Statistic title="에이전트" value={total} suffix="명" />
           </Col>
-          <Col xs={24} md={12}>
+          <Col xs={24} md={20}>
             <Text type="secondary" style={{ fontSize: 12 }}>
               상태 분포
             </Text>
@@ -344,17 +341,6 @@ export default function OrchestrationBoard({
                   );
                 })}
               </Space>
-            </div>
-          </Col>
-          <Col xs={24} md={8} style={{ textAlign: "center" }}>
-            <Progress
-              type="dashboard"
-              percent={pct}
-              size={90}
-              status={done === total && total > 0 ? "success" : "active"}
-            />
-            <div>
-              <Text type="secondary">완료율</Text>
             </div>
           </Col>
         </Row>

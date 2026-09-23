@@ -47,7 +47,7 @@ flowchart LR
 |---|---|---|
 | **허브 (/)** | 목록 집계 | 개발/비개발 오더 수 · 진행중 · 리뷰중 · 완료 지표 |
 | **오케스트레이션 목록** | \`status.md\` | 제목 · 현재 단계 · work-type · 상태 분포 |
-| **관제 보드 [key]** | \`orchestration.md\` | 에이전트 칸반 · 완료율 · 이벤트 타임라인 · 실행 모드 |
+| **관제 보드 [key]** | \`orchestration.md\` | 에이전트 칸반 · 상태 분포 · 이벤트 타임라인 · 실행 모드 |
 | | \`agents/*.md\` | 에이전트 계약(수정 허용 범위) |
 | | \`reviews/round-*/*.md\` | 라운드별 리뷰 findings |
 | | \`analysis.md\` · \`implementation.md\`/\`produce.md\` | 분석 · 구현/산출 섹션 |
