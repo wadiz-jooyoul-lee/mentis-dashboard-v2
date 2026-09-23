@@ -1,6 +1,7 @@
 "use client";
 
-import { Card, Space, Typography, Table, Tag } from "antd";
+import { Button, Card, Space, Typography, Table, Tag } from "antd";
+import { PictureOutlined } from "@ant-design/icons";
 import type { TestSummary, ItemLine, ConditionLine } from "@/lib/testSummary";
 import type { Verdict } from "@/lib/parseReport";
 
@@ -63,7 +64,13 @@ function ConditionRow({ cond }: { cond: ConditionLine }) {
   );
 }
 
-export default function TestSummaryView({ summary }: { summary: TestSummary }) {
+export default function TestSummaryView({
+  summary,
+  epicKey,
+}: {
+  summary: TestSummary;
+  epicKey: string;
+}) {
   const { runs, items, pass, fail, skip, closing, conditions } = summary;
   const met = conditions.filter((c) => c.verdict === "pass").length;
   const bar = [
@@ -184,6 +191,33 @@ export default function TestSummaryView({ summary }: { summary: TestSummary }) {
                 </Text>
               ),
             },
+            // 마감할 때 브라우저에 띄웠던 요약 화면. 회차 폴더에 남아 있으면 다시 볼 수 있다.
+            ...(runs.some((r) => r.hasSummary)
+              ? [
+                  {
+                    title: "요약 화면",
+                    key: "s",
+                    width: 110,
+                    render: (_: unknown, r: (typeof runs)[number]) =>
+                      r.hasSummary ? (
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<PictureOutlined />}
+                          href={`/api/orders/${epicKey}/run-summary?run=${encodeURIComponent(r.id)}`}
+                          target="_blank"
+                          style={{ padding: 0 }}
+                        >
+                          보기
+                        </Button>
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          —
+                        </Text>
+                      ),
+                  },
+                ]
+              : []),
           ]}
         />
       </div>

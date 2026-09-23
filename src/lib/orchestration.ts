@@ -812,7 +812,15 @@ function readRuns(key: string): ReportRun[] {
     const sortKey = m
       ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime()
       : 0;
-    runs.push({ id: e.name, label, file: path.join("test-runs", e.name, file), content, sortKey });
+    runs.push({
+      id: e.name,
+      label,
+      file: path.join("test-runs", e.name, file),
+      content,
+      sortKey,
+      // dobby-test 가 마감할 때 남기는 요약 화면. 예전 회차에는 없다.
+      hasSummary: fs.existsSync(path.join(runDir, "summary.html")),
+    });
   }
   runs.sort((a, b) => b.sortKey - a.sortKey);
   return runs.map((r, i) => (i === 0 ? r : { ...r, content: "" }));

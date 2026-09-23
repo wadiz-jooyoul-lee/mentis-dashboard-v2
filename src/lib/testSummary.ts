@@ -23,6 +23,8 @@ export type RunLine = {
   pass: number;
   fail: number;
   skip: number;
+  /** 이 회차 폴더에 dobby-test 가 남긴 요약 화면(summary.html)이 있는가 */
+  hasSummary: boolean;
 };
 
 export type ItemLine = {
@@ -178,6 +180,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
       pass: counts.pass,
       fail: counts.fail,
       skip: counts.skip + counts.warn,
+      hasSummary: fs.existsSync(path.join(dir, "summary.html")),
     });
 
     for (const s of scenarios) {
