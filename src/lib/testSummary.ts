@@ -28,6 +28,8 @@ export type RunLine = {
 export type ItemLine = {
   /** 시나리오 번호(S1 등). 없으면 빈 문자열. */
   num: string;
+  /** 이 항목이 확인하는 해결 조건 번호들(C1 등). 안 적혔으면 빈 배열. */
+  conds: string[];
   /** 확인 항목 이름 — 가장 최근 회차에 적힌 것 */
   name: string;
   /** 이 항목을 확인한 회차 번호들 */
@@ -40,9 +42,24 @@ export type ItemLine = {
   note: string;
 };
 
+export type ConditionLine = {
+  /** C1 등 */
+  id: string;
+  text: string;
+  /** 이 조건을 확인한 시나리오 번호들 */
+  items: string[];
+  /** 그 시나리오들을 합친 판정. 확인한 시나리오가 없으면 unknown. */
+  verdict: Verdict;
+};
+
 export type TestSummary = {
   runs: RunLine[];
   items: ItemLine[];
+  /**
+   * status.md `## 닫히는 조건 항목` 표(C1…)에 테스트 결과를 붙인 것.
+   * 조건을 쪼개 적지 않은 오더는 빈 배열 — 그때는 화면이 조건 섹션을 아예 안 그린다.
+   */
+  conditions: ConditionLine[];
   /** 고유 항목 기준 집계 — 회차를 여러 번 돌아도 한 번만 센다. */
   pass: number;
   fail: number;
@@ -62,15 +79,40 @@ function findEnv(md: string): string {
   return m ? m[1] : raw.slice(0, 12);
 }
 
-/** status.md 의 닫히는 조건 한 줄. */
-function findClosing(dir: string): string | null {
+/**
+ * status.md 에서 닫히는 조건 한 줄과 그것을 쪼갠 조건 항목을 **한 번 읽어** 같이 뽑는다.
+ *
+ * ⛔ 조건 항목은 `## 닫히는 조건 항목` 아래의 표만 본다. 문서 전체에서 `| C1 |` 를 찾으면
+ * 다른 표(회귀 목록 등)의 행까지 조건으로 센다.
+ */
+function readClosing(dir: string): {
+  closing: string | null;
+  conditions: { id: string; text: string }[];
+} {
+  let md: string;
   try {
-    const md = fs.readFileSync(path.join(dir, "status.md"), "utf8");
-    const m = md.match(/^\s*-\s*\*\*닫히는 조건\*\*\s*[:：]\s*(.+)$/m);
-    return m ? m[1].trim() : null;
+    md = fs.readFileSync(path.join(dir, "status.md"), "utf8");
   } catch {
-    return null;
+    return { closing: null, conditions: [] };
   }
+  const one = md.match(/^\s*-\s*\*\*닫히는 조건\*\*\s*[:：]\s*(.+)$/m);
+  const conditions: { id: string; text: string }[] = [];
+  let inSection = false;
+  for (const line of md.split("\n")) {
+    if (/^##\s/.test(line)) {
+      inSection = line.includes("닫히는 조건 항목");
+      continue;
+    }
+    if (!inSection) continue;
+    const m = line.match(/^\|\s*(C\d+)\s*\|\s*(.+?)\s*\|\s*$/);
+    if (m) conditions.push({ id: m[1], text: m[2].trim() });
+  }
+  return { closing: one ? one[1].trim() : null, conditions };
+}
+
+/** `C1·C2` · `C1, C2` 어느 쪽으로 적혀 있어도 번호만 뽑는다. */
+function parseConds(cell: string): string[] {
+  return [...cell.matchAll(/C\d+/g)].map((m) => m[0]);
 }
 
 export function summarizeRuns(orderDir: string): TestSummary | null {
@@ -88,7 +130,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
   // (1회차 `홈 — 친구 활동 더보기` / 2회차 `/web/main`). 번호가 없을 때만 이름으로 묶는다.
   const seen = new Map<
     string,
-    { num: string; name: string; runs: number[]; verdicts: Verdict[]; note: string }
+    { num: string; name: string; conds: string[]; runs: number[]; verdicts: Verdict[]; note: string }
   >();
 
   for (const id of entries) {
@@ -126,9 +168,11 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
       const name = (s.check || s.page || "").trim();
       const key = num || name;
       if (!key) continue;
-      const cur = seen.get(key) ?? { num, name, runs: [], verdicts: [], note: "" };
-      // 이름은 최근 회차 것으로 갱신한다(뒤 회차가 더 다듬어져 있는 편이다).
+      const cur = seen.get(key) ?? { num, name, conds: [], runs: [], verdicts: [], note: "" };
+      // 이름·조건은 최근 회차 것으로 갱신한다(뒤 회차가 더 다듬어져 있는 편이다).
       if (name) cur.name = name;
+      const conds = parseConds(s.cond || "");
+      if (conds.length) cur.conds = conds;
       cur.runs.push(no);
       cur.verdicts.push(s.verdict);
       if (s.verdict === "fail" || s.verdict === "skip" || s.verdict === "warn") {
@@ -145,6 +189,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
     const varied = new Set(v.verdicts).size > 1;
     return {
       num: v.num,
+      conds: v.conds,
       name: v.name,
       runs: v.runs,
       verdict: last,
@@ -153,12 +198,29 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
     };
   });
 
+  const { closing, conditions: declared } = readClosing(orderDir);
+  // 조건마다 그것을 확인한 시나리오를 모아 판정을 합친다.
+  // 하나라도 실패면 실패, 보류가 섞였으면 보류, 전부 통과여야 통과다 — 통과가 제일 엄하다.
+  const conditions: ConditionLine[] = declared.map((c) => {
+    const mine = items.filter((i) => i.conds.includes(c.id));
+    const verdict: Verdict =
+      mine.length === 0
+        ? "unknown"
+        : mine.some((i) => i.verdict === "fail")
+          ? "fail"
+          : mine.some((i) => i.verdict === "skip" || i.verdict === "warn")
+            ? "skip"
+            : "pass";
+    return { id: c.id, text: c.text, items: mine.map((i) => i.num || i.name), verdict };
+  });
+
   return {
     runs,
     items,
+    conditions,
     pass: items.filter((i) => i.verdict === "pass").length,
     fail: items.filter((i) => i.verdict === "fail").length,
     skip: items.filter((i) => i.verdict === "skip" || i.verdict === "warn").length,
-    closing: findClosing(orderDir),
+    closing,
   };
 }

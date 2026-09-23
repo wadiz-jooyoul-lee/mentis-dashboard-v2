@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, Space, Typography, Table, Tag } from "antd";
-import type { TestSummary, ItemLine } from "@/lib/testSummary";
+import type { TestSummary, ItemLine, ConditionLine } from "@/lib/testSummary";
 import type { Verdict } from "@/lib/parseReport";
 
 const { Title, Text } = Typography;
@@ -25,8 +25,47 @@ function toneOf(v: Verdict): string {
  * 회차 하나만 보면 재실행에서 무엇이 달라졌는지 알 수 없다. 항목별로 어느 회차에서
  * 봤는지, 판정이 바뀌었는지까지 함께 보여 사람이 완성 여부를 판단할 재료를 준다.
  */
+/**
+ * 해결 조건 한 줄 — 이 조건을 어느 시나리오가 확인했고 그 결과가 무엇인지.
+ *
+ * 확인한 시나리오가 없으면 "확인한 시나리오 없음"이라고 **드러내 놓고** 적는다.
+ * 조용히 빼면 "다 됐다"로 읽힌다 — 그게 이 화면이 막으려는 것이다.
+ */
+function ConditionRow({ cond }: { cond: ConditionLine }) {
+  const none = cond.items.length === 0;
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "baseline",
+        padding: "7px 0",
+        borderTop: "1px solid #f5f5f5",
+      }}
+    >
+      <Tag
+        color={none ? undefined : toneOf(cond.verdict)}
+        style={{ margin: 0, background: "transparent", minWidth: 40, textAlign: "center" }}
+      >
+        {cond.id}
+      </Tag>
+      <Text style={{ flex: 1 }}>{cond.text}</Text>
+      <Text type="secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+        {none ? "확인한 시나리오 없음" : cond.items.join("·")}
+      </Text>
+      <Text
+        style={{ fontSize: 12, width: 52, textAlign: "right", color: none ? undefined : toneOf(cond.verdict) }}
+        type={none ? "secondary" : undefined}
+      >
+        {none ? "미확인" : LABEL[cond.verdict]}
+      </Text>
+    </div>
+  );
+}
+
 export default function TestSummaryView({ summary }: { summary: TestSummary }) {
-  const { runs, items, pass, fail, skip, closing } = summary;
+  const { runs, items, pass, fail, skip, closing, conditions } = summary;
+  const met = conditions.filter((c) => c.verdict === "pass").length;
   const bar = [
     { n: pass, c: TONE.pass },
     { n: fail, c: TONE.fail },
@@ -84,17 +123,39 @@ export default function TestSummaryView({ summary }: { summary: TestSummary }) {
         </div>
       </Card>
 
-      {closing && (
+      {(closing || conditions.length > 0) && (
         <div>
           <Title level={4} style={{ marginTop: 0, marginBottom: 8 }}>
             닫히는 조건
+            {conditions.length > 0 && (
+              <Text
+                style={{
+                  marginLeft: 10,
+                  fontSize: 14,
+                  fontWeight: 400,
+                  color: met === conditions.length ? TONE.pass : undefined,
+                }}
+              >
+                {conditions.length}가지 중 {met}가지 확인
+              </Text>
+            )}
           </Title>
-          <Text>{closing}</Text>
-          <div style={{ marginTop: 6 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              이 조건이 충족됐는지는 아래 확인한 항목과 대조해 사람이 판단합니다.
-            </Text>
-          </div>
+          {closing && <Text>{closing}</Text>}
+
+          {conditions.length > 0 ? (
+            <div style={{ marginTop: 12 }}>
+              {conditions.map((c) => (
+                <ConditionRow key={c.id} cond={c} />
+              ))}
+            </div>
+          ) : (
+            // 조건을 쪼개 적지 않은 오더 — 화면이 셀 수 있는 것이 없다.
+            <div style={{ marginTop: 6 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                이 조건이 충족됐는지는 아래 확인한 항목과 대조해 사람이 판단합니다.
+              </Text>
+            </div>
+          )}
         </div>
       )}
 

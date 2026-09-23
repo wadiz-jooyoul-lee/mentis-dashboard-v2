@@ -7,6 +7,8 @@ export type Verdict = "pass" | "fail" | "skip" | "warn" | "unknown";
 
 export type Scenario = {
   num: string;
+  /** 이 시나리오가 확인하는 해결 조건 번호(C1 · C1·C2). 없으면 빈 문자열. */
+  cond: string;
   page: string;
   check: string;
   expected: string;
@@ -80,6 +82,8 @@ type TableBlock = { start: number; end: number; headers: string[] };
  */
 const COL = {
   num: ["#", "ID", "번호", "No."],
+  // status.md `## 닫히는 조건 항목`의 C 번호. 헬퍼가 표를 깔아 준 뒤의 회차에만 있다.
+  cond: ["조건"],
   page: ["페이지", "URL", "화면", "주소", "지면", "경로"],
   // ⛔ `유형`·`구분`은 넣지 않는다 — 기능/회귀 같은 분류 칸이지 항목 이름이 아니다.
   check: ["확인 항목", "확인", "시나리오", "무엇을", "항목", "대상", "이슈", "내용", "조작"],
@@ -167,6 +171,7 @@ function findScenarioTable(lines: string[]): TableBlock | null {
 function parseScenarios(lines: string[], table: TableBlock): Scenario[] {
   const { headers, start, end } = table;
   const idxNum = colIndex(headers, ...COL.num);
+  const idxCond = colIndex(headers, ...COL.cond);
   const idxPage = colIndex(headers, ...COL.page);
   const idxCheck = colIndex(headers, ...COL.check);
   const idxExpected = colIndex(headers, ...COL.expected);
@@ -191,6 +196,7 @@ function parseScenarios(lines: string[], table: TableBlock): Scenario[] {
     if (cells.every((c) => /^:?-{1,}:?$/.test(c) || c === "")) continue;
     rows.push({
       num: at(cells, idxNum),
+      cond: at(cells, idxCond),
       page: at(cells, idxPage),
       check: at(cells, idxCheck),
       expected: at(cells, idxExpected),

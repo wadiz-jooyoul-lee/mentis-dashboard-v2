@@ -90,11 +90,12 @@ function ReportBody({ content }: { content: string }) {
     counts.total > 0 ? Math.round((counts.pass / counts.total) * 100) : 0;
   // 값이 하나도 없는 칸은 아예 그리지 않는다. 회차마다 적은 항목이 달라서(어떤 회차는
   // 페이지·기대를 안 적는다) 빈 칸을 그대로 그리면 표가 깨져 보인다.
-  const used = (k: "num" | "page" | "check" | "expected" | "actual" | "evidence") =>
+  const used = (k: "num" | "cond" | "page" | "check" | "expected" | "actual" | "evidence") =>
     scenarios.some((s) => (s[k] ?? "").trim() && s[k].trim() !== "-" && s[k].trim() !== "—");
 
   const columns = [
     ...(used("num") ? [{ title: "#", dataIndex: "num", key: "num", width: 56 }] : []),
+    ...(used("cond") ? [{ title: "조건", dataIndex: "cond", key: "cond", width: 68 }] : []),
     ...(used("page")
       ? [
           {
