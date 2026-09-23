@@ -9,6 +9,7 @@ const COLOR: Record<Bundle, string> = {
   global: "blue",
   account: "purple",
   static: "green",
+  admin: "gold",
   studio: "orange",
   "app-api": "cyan",
   "wadiz-web": "volcano",

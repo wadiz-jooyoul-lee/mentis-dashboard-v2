@@ -268,7 +268,11 @@ export function traceBundles(
     const queue: [string, string | null][] = [[start, null]];
     while (queue.length) {
       const [cur, from] = queue.shift()!;
-      for (const [bundle, prefix] of roots) if (cur.startsWith(prefix)) mark(bundle, start);
+      // 경로가 겹치는 번들이 있다(admin 은 static 안에 산다). **가장 긴 것 하나만** 잡는다 —
+      // 둘 다 켜면 admin 파일이 static 배포로도 반영되는 것처럼 보인다(실제로는 제외된다).
+      let best: [string, string] | null = null;
+      for (const r of roots) if (cur.startsWith(r[1]) && (!best || r[1].length > best[1].length)) best = r;
+      if (best) mark(best[0], start);
 
       const barrel = graph.reexport.get(cur);
       for (const { importer, names } of graph.rev.get(cur) ?? []) {

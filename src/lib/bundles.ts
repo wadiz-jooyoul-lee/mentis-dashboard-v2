@@ -17,12 +17,13 @@ export type Bundle =
   | "global"
   | "account"
   | "static"
+  | "admin"
   | "studio"
   | "app-api"
   | "wadiz-web";
 
-/** wadiz-frontend 모노레포가 쪼개지는 네 갈래. */
-const FRONTEND_BUNDLES: Bundle[] = ["global", "account", "static", "studio"];
+/** wadiz-frontend 모노레포가 쪼개지는 다섯 갈래. */
+const FRONTEND_BUNDLES: Bundle[] = ["global", "account", "static", "admin", "studio"];
 
 /**
  * 저장소 하나가 통째로 배포 단위인 것들.
@@ -63,6 +64,10 @@ export type BundleReport = {
 const BUNDLE_ROOTS: [string, string][] = [
   ["global", "apps/global/"],
   ["account", "apps/account/"],
+  // admin 은 static 안에 있지만 **따로 배포한다**. 기본 static 빌드는 admin 을 빼고 만든다
+  // (`build-static.sh`: BUILD_ADMIN 이 false 면 `--ignore '@wadiz-static/admin'`).
+  // static 보다 긴 경로라 아래 "가장 긴 것 하나만" 규칙에 따라 admin 이 이긴다.
+  ["admin", "static/services/admin/"],
   ["static", "static/"],
   ["studio", "studio/"],
 ];
