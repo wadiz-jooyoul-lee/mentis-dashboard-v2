@@ -22,6 +22,7 @@ import {
   Badge,
   Select,
   Skeleton,
+  Segmented,
 } from "antd";
 import { HistoryOutlined } from "@ant-design/icons";
 import {
@@ -120,96 +121,178 @@ function ReportBody({ content }: { content: string }) {
 
   const failed = scenarios.filter((s) => s.verdict === "fail");
 
+  const skipped = scenarios.filter((s) => s.verdict === "skip" || s.verdict === "warn");
+  // 접지 않고 걸러 본다. 데이터가 이미 와 있어 접어도 아낄 것이 없다.
+  const [filter, setFilter] = useState<"all" | "pass" | "fail" | "skip">("all");
+  const shown =
+    filter === "all"
+      ? scenarios
+      : filter === "skip"
+        ? skipped
+        : scenarios.filter((s) => s.verdict === filter);
+  // 판정 색 — 카드 테두리와 막대에 같은 색을 쓴다.
+  const TONE = { pass: "#52c41a", fail: "#ff4d4f", skip: "#bfbfbf" } as const;
+  const bar = [
+    { n: counts.pass, c: TONE.pass },
+    { n: counts.fail, c: TONE.fail },
+    { n: counts.skip + counts.warn + counts.unknown, c: TONE.skip },
+  ].filter((x) => x.n > 0);
+
   return (
-    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-      {/* 종합 요약 */}
-      <Card>
-        <Row gutter={[24, 16]} align="middle">
-          <Col xs={24} md={6}>
-            <Space orientation="vertical" size={4}>
-              <Text type="secondary">종합 판정</Text>
-              <Tag
-                color={overall.color}
-                style={{ fontSize: 18, padding: "6px 16px", margin: 0 }}
-              >
-                {overall.label}
-              </Tag>
-            </Space>
-          </Col>
-          <Col xs={12} md={4}>
-            <Statistic title="전체" value={counts.total} suffix="건" />
-          </Col>
-          <Col xs={12} md={4}>
-            <Statistic
-              title="통과"
-              value={counts.pass}
-              valueStyle={{ color: "#52c41a" }}
-            />
-          </Col>
-          <Col xs={12} md={4}>
-            <Statistic
-              title="실패"
-              value={counts.fail}
-              valueStyle={{ color: "#ff4d4f" }}
-            />
-          </Col>
-          <Col xs={12} md={2}>
-            <Statistic title="스킵/주의" value={counts.skip + counts.warn} />
-          </Col>
-          <Col xs={24} md={4} style={{ textAlign: "center" }}>
-            <Progress
-              type="dashboard"
-              percent={passRate}
-              size={90}
-              status={counts.fail > 0 ? "exception" : "success"}
-            />
-            <div>
-              <Text type="secondary">통과율</Text>
-            </div>
-          </Col>
-        </Row>
+    <Space orientation="vertical" size={24} style={{ width: "100%" }}>
+      {/* ── 1층: 판정 한 장 ── */}
+      <Card
+        styles={{ body: { padding: "20px 24px" } }}
+        style={{
+          borderColor: counts.fail > 0 ? "#ffccc7" : "#f0f0f0",
+          background: counts.fail > 0 ? "#fff8f7" : "#fafffa",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <span
+              style={{
+                fontSize: 32,
+                fontWeight: 700,
+                lineHeight: 1.1,
+                color: counts.fail > 0 ? TONE.fail : TONE.pass,
+              }}
+            >
+              {overall.label}
+            </span>
+            <Text type="secondary">
+              {counts.pass}건 통과
+              {counts.fail > 0 && ` · ${counts.fail}건 실패`}
+              {skipped.length > 0 && ` · ${skipped.length}건 보류`}
+            </Text>
+          </div>
+          <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5 }}>
+            {counts.pass}
+            <Text type="secondary" style={{ fontSize: 18, fontWeight: 400 }}>
+              {" / "}
+              {counts.total}
+            </Text>
+          </span>
+        </div>
+        {/* 통과·실패·보류 비율을 한 줄로 */}
+        <div style={{ display: "flex", height: 6, borderRadius: 3, overflow: "hidden", marginTop: 14 }}>
+          {bar.map((x, i) => (
+            <div key={i} style={{ flex: x.n, background: x.c }} />
+          ))}
+        </div>
       </Card>
 
-      {/* 실패 요약 배너 */}
+      {/* ── 2층: 손볼 것 (실패·보류만) ── */}
       {failed.length > 0 && (
-        <Alert
-          type="error"
-          showIcon
-          title={`실패 ${failed.length}건`}
-          description={
-            <span>
-              {failed
-                .map((s) => `#${s.num} ${s.check || s.page}`)
-                .join(" · ")}
-            </span>
-          }
-        />
+        <div>
+          <Title level={4} style={{ marginTop: 0, marginBottom: 12 }}>
+            실패 {failed.length}건
+          </Title>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+            {failed.map((f, i) => (
+              <Card key={i} size="small" style={{ borderLeft: `3px solid ${TONE.fail}` }}>
+                <Text strong>
+                  {f.num && `${f.num} `}
+                  {f.check || f.page}
+                </Text>
+                {(f.expected || f.actual) && (
+                  <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7 }}>
+                    {f.expected && (
+                      <div>
+                        <Text type="secondary">기대 </Text>
+                        {f.expected}
+                      </div>
+                    )}
+                    {f.actual && (
+                      <div>
+                        <Text type="secondary">실제 </Text>
+                        {f.actual}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {f.evidence && (
+                  <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0, marginTop: 6 }}>
+                    {f.evidence}
+                  </Paragraph>
+                )}
+              </Card>
+            ))}
+          </Space>
+        </div>
       )}
 
-      {/* 메타 정보 */}
+      {skipped.length > 0 && (
+        <div>
+          <Title level={4} style={{ marginTop: 0, marginBottom: 12 }}>
+            보류 {skipped.length}건 — 왜 못 했나
+          </Title>
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
+            {skipped.map((sc, i) => (
+              <div key={i} style={{ display: "flex", gap: 12, fontSize: 13, lineHeight: 1.7 }}>
+                <Text strong style={{ flexShrink: 0, minWidth: 0 }}>
+                  {sc.num && `${sc.num} `}
+                  {sc.check || sc.page}
+                </Text>
+                <Text type="secondary">{sc.actual || sc.evidence || sc.expected || "사유 없음"}</Text>
+              </div>
+            ))}
+          </Space>
+        </div>
+      )}
+
+      {/* ── 메타: 한 줄로 눌러 둔다 ── */}
       {meta.length > 0 && (
-        <Descriptions
-          title="테스트 개요"
-          bordered
-          size="small"
-          column={{ xs: 1, sm: 1, md: 2 }}
-        >
-          {meta.map((m) => (
-            <Descriptions.Item key={m.label} label={m.label}>
-              {m.value}
-            </Descriptions.Item>
-          ))}
-        </Descriptions>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {/* 값이 긴 항목(대상 설명 등)은 줄여 한 줄에 담는다. 전문은 아래 상세에 그대로 있다. */}
+          {meta
+            .map((m) => `${m.label} ${m.value.length > 46 ? m.value.slice(0, 46) + "…" : m.value}`)
+            .join("  ·  ")}
+        </Text>
       )}
 
-      {/* 시나리오 표 */}
+      {/* ── 3층: 전체 표 (접지 않고 걸러 본다) ── */}
       {scenarios.length > 0 && (
         <div>
-          <Title level={4}>시나리오별 결과</Title>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <Title level={4} style={{ margin: 0 }}>
+              전체 {scenarios.length}건
+            </Title>
+            <Segmented
+              size="small"
+              value={filter}
+              onChange={(v) => setFilter(v as typeof filter)}
+              options={[
+                { label: "전체", value: "all" },
+                ...(counts.fail > 0 ? [{ label: `실패 ${counts.fail}`, value: "fail" as const }] : []),
+                ...(skipped.length > 0
+                  ? [{ label: `보류 ${skipped.length}`, value: "skip" as const }]
+                  : []),
+                { label: `통과 ${counts.pass}`, value: "pass" as const },
+              ]}
+            />
+          </div>
           <Table<Scenario>
             rowKey={(r) => r.num || `${r.page}-${r.check}`}
             columns={columns}
-            dataSource={scenarios}
+            dataSource={shown}
             pagination={false}
             size="middle"
             scroll={{ x: "max-content" }}
