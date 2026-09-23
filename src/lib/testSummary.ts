@@ -68,15 +68,32 @@ export type TestSummary = {
   closing: string | null;
 };
 
-/** `- **환경**: dev` 또는 `| 환경 | dev |` 어느 쪽으로 적혀 있어도 찾는다. */
+/**
+ * 회차를 어느 환경에서 봤나(dev·rc4·stage…).
+ *
+ * 헬퍼가 `- **환경**:` 줄을 깔아 주기 전에 쌓인 회차는 표기가 제각각이다(실측 78개 중 40개만
+ * 읽혔다). 아래를 다 받는다 — 값만 멀쩡히 들어 있지 라벨이 다를 뿐이다.
+ *   `- **환경**: dev`  `- 환경: dev`  `- 환경: **dev**`  `대상 환경: rc4 어드민`  `| 환경 | dev |`
+ */
 function findEnv(md: string): string {
-  const bullet = md.match(/^\s*-\s*\*\*(?:환경|실행 환경|테스트 환경)\*\*\s*[:：]\s*(.+)$/m);
+  const bullet = md.match(
+    /^\s*[-*]?\s*\*{0,2}(?:대상\s*)?(?:환경|실행 환경|테스트 환경)\*{0,2}\s*[:：]\s*(.+)$/m
+  );
   const table = md.match(/^\|\s*(?:환경|실행 환경|테스트 환경)\s*\|\s*([^|]+)\|/m);
-  const raw = (bullet?.[1] ?? table?.[1] ?? "").trim();
+  // 값 앞에도 꾸밈이 붙는다(`**dev**`, `` `rc4` ``).
+  const raw = (bullet?.[1] ?? table?.[1] ?? "").trim().replace(/^[*`\s]+/, "");
+  // 주소로 적은 회차가 있다 — 호스트 앞자리가 환경 이름이다(`https://stage.wadiz.io` → stage,
+  // `www.wadiz.io` → 라이브).
+  const host = raw.match(/^(?:https?:\/\/)?([A-Za-z0-9-]+)\.(?:[A-Za-z0-9-]+\.)*(?:io|kr|com)\b/);
+  if (host) return host[1] === "www" ? "live" : host[1];
   // `rc4 (https://rc4.wadiz.io)` · `dev, 크롬 데스크톱, 창 너비 1440` 처럼 뒤에 설명이 붙는다.
-  // 앞의 환경 이름만 남긴다.
-  const m = raw.match(/^([A-Za-z][A-Za-z0-9]*)\b/);
-  return m ? m[1] : raw.slice(0, 12);
+  // 앞의 이름만 남긴다.
+  const token = raw.split(/[\s,(—]/)[0].replace(/[*`'"]/g, "");
+  if (/^라이브/.test(token)) return "live";
+  if (/^로컬/.test(token)) return "local";
+  // 환경 이름은 늘 영문이다. 우리말이 잡혔으면 설명 문장을 문 것이니 빈칸으로 둔다 —
+  // 릴리즈 노트 환경 칸에 `빈` 같은 토막이 들어가는 것보다 낫다.
+  return /^[A-Za-z][A-Za-z0-9]*$/.test(token) ? token : "";
 }
 
 /**
