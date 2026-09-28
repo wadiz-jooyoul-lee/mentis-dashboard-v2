@@ -175,8 +175,30 @@ export async function changedFiles(key: string, worktree: string, base: string):
     (await git(worktree, ["merge-base", `origin/${base}`, "HEAD"])).trim() ||
     (await git(worktree, ["merge-base", base, "HEAD"])).trim();
   if (fork) {
-    const out = collect(await git(worktree, ["diff", "--name-only", fork]));
-    if (out.size > 0) return [...out];
+    const plain = collect(await git(worktree, ["diff", "--name-only", fork]));
+    if (plain.size > 0) {
+      // ⛔ `base` 는 전역 기본값(cloud_live)이라 **이 오더의 실제 베이스가 아닐 수 있다.**
+      // 다른 오더의 브랜치 위로 갈라져 나온 오더가 있다(실측 FE1-1787: 기준 브랜치를
+      // feature/FE1-1301 로 바꿔 리베이스했다). 그러면 cloud_live 와의 diff 에 부모 오더가
+      // 한 일이 통째로 섞인다 — 210개로 세어졌지만 실제로 이 오더가 바꾼 것은 15개였다.
+      //
+      // 그래서 **이 오더의 커밋만** 모아 본다. 키가 든 커밋(`feat: FE1-1787 …`)의 변경 +
+      // 아직 커밋 안 된 변경이다. 이것이 plain 보다 작으면 브랜치에 남의 일이 섞여 있다는
+      // 뜻이라 이쪽을 쓴다. 같거나 크면(= 보통의 오더) 지금까지처럼 plain 을 쓴다.
+      const own = new Set<string>();
+      const ownCommits = (await git(worktree, ["log", "--format=%H", `--grep=${key}`, `${fork}..HEAD`]))
+        .split("\n")
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .slice(0, 100);
+      for (const c of ownCommits) {
+        for (const f of collect(await git(worktree, ["diff", "--name-only", `${c}^`, c]))) own.add(f);
+      }
+      // 커밋 전 변경도 이 오더 것이다(미커밋 상태로 리뷰받는 흐름이라 빠뜨리면 안 된다).
+      for (const f of collect(await git(worktree, ["diff", "--name-only", "HEAD"]))) own.add(f);
+      if (own.size > 0 && own.size < plain.size) return [...own];
+      return [...plain];
+    }
   }
 
   // 통합된 뒤에는 ①이 빈다. 이 오더의 브랜치가 base로 **나간** 머지를 찾아 순 변경을 센다.
