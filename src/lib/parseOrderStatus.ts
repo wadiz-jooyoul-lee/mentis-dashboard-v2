@@ -150,13 +150,21 @@ export type ShipRow = {
  */
 export const SHIP_MILESTONES = ["PR", "리뷰", "머지", "배포", "검증"] as const;
 
+/**
+ * 옛 이름을 지금 쓰는 말로 바꿔 보여 준다. 파일은 고치지 않는다 — 화면에서만 맞춘다.
+ *   `배송 완료`(표가 생기기 전 마지막 단계) · `반영 완료`(잠깐 썼던 이름) → `검증 완료`
+ */
+function normalizeStage(stage: string): string {
+  if (/^(배송|반영) 완료/.test(stage)) return "검증 완료";
+  return stage;
+}
+
 function shipMilestone(stage: string): number {
   if (/^PR 생성/.test(stage)) return 0;
   if (/^리뷰/.test(stage)) return 1;
   if (/^머지/.test(stage)) return 2;
   if (/^(빌드|배포)/.test(stage)) return 3;
-  // `배송 완료` 는 표가 생기기 전 마지막 단계 이름이다(옛 기록 폴백용).
-  if (/^(검증|반영|배송)/.test(stage)) return 4;
+  if (/^검증/.test(stage)) return 4;
   return -1;
 }
 
@@ -348,7 +356,7 @@ function parseShip(md: string): ShipRow[] {
       .map((r) => {
         const env = at(r, ci.env).trim();
         const rawStage = at(r, ci.stage).replace(/\*/g, "").trim();
-        const stage = rawStage.replace(/\s*⚠\s*$/, "").trim();
+        const stage = normalizeStage(rawStage.replace(/\s*⚠\s*$/, "").trim());
         const note = cell(r, ci.note);
         return {
           env,
@@ -359,7 +367,7 @@ function parseShip(md: string): ShipRow[] {
           note,
           blocked: !!note || /⚠/.test(rawStage),
           milestone: shipMilestone(stage),
-          done: /반영 완료/.test(stage),
+          done: /검증 완료/.test(stage),
         };
       })
       .filter((x) => x.env && x.stage);
@@ -369,7 +377,9 @@ function parseShip(md: string): ShipRow[] {
   const m = md.match(/^\s*[-*]\s*\*\*배[포송] 단계\*\*\s*[:：]\s*(.+)$/m);
   if (!m) return [];
   const line = m[1].trim();
-  const stage = line.replace(/\s*[(（].*$/, "").replace(/\s*—.*$/, "").trim();
+  const stage = normalizeStage(
+    line.replace(/\s*[(（].*$/, "").replace(/\s*—.*$/, "").trim()
+  );
   const env = line.match(/\b(dev|rc1|rc4|stage)\b/)?.[1] ?? "-";
   const pr = line.match(/#(\d+)/)?.[0] ?? null;
   return [
@@ -382,8 +392,8 @@ function parseShip(md: string): ShipRow[] {
       note: null,
       blocked: false,
       milestone: shipMilestone(stage),
-      // 옛 `배포 완료` 는 "번들이 올라갔다"는 뜻이라 끝난 것이 아니다 — 끝은 `배송 완료` 뿐.
-      done: /배송 완료|반영 완료/.test(stage),
+      // 옛 `배포 완료` 는 "번들이 올라갔다"는 뜻이라 끝난 것이 아니다 — 끝은 `검증 완료` 뿐.
+      done: /검증 완료/.test(stage),
     },
   ];
 }
