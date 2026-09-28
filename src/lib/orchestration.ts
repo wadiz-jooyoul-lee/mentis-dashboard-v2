@@ -17,7 +17,12 @@ import {
   type AgentState,
   type AgentRow,
 } from "@/lib/parseOrchestration";
-import { parseOrderStatus, phaseText, type PhaseKey } from "@/lib/parseOrderStatus";
+import {
+  parseOrderStatus,
+  phaseText,
+  type PhaseKey,
+  type ShipRow,
+} from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import { memoByFileStat } from "@/lib/fileMemo";
 import { findTable, columnIndex, fieldLine } from "@/lib/md";
@@ -267,6 +272,8 @@ export type EpicSummary = {
   /** status.md 현재 단계(정규화 버킷) + 짧은 라벨 — 에이전트 표가 아직 없는 착수 직후 표시용 */
   phase: PhaseKey;
   phaseLabel: string;
+  /** dobby-ship 배포 단계 — 환경마다 한 행. 목록 "배포" 컬럼용. 없으면 빈 배열. */
+  ship: ShipRow[];
 };
 
 // "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
@@ -315,6 +322,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
+    ship: st?.ship ?? [],
   };
 }
 
@@ -727,6 +735,10 @@ export type EpicDetail = {
   resolved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
+  /** dobby-ship 배포 단계 — 환경마다 한 행. 보드 관제 카드용. 없으면 빈 배열. */
+  ship: ShipRow[];
+  /** 이 오더 저장소의 GitHub 주소(PR·빌드 링크용). 못 알아내면 null. */
+  repoUrl: string | null;
   analysisMd: string | null;
   implementationMd: string | null;
   produceMd: string | null;
@@ -812,7 +824,15 @@ function readRuns(key: string): ReportRun[] {
     const sortKey = m
       ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime()
       : 0;
-    runs.push({ id: e.name, label, file: path.join("test-runs", e.name, file), content, sortKey });
+    runs.push({
+      id: e.name,
+      label,
+      file: path.join("test-runs", e.name, file),
+      content,
+      sortKey,
+      // dobby-test 가 마감할 때 남기는 요약 화면. 예전 회차에는 없다.
+      hasSummary: fs.existsSync(path.join(runDir, "summary.html")),
+    });
   }
   runs.sort((a, b) => b.sortKey - a.sortKey);
   return runs.map((r, i) => (i === 0 ? r : { ...r, content: "" }));
@@ -1065,6 +1085,22 @@ function repoFromSessionCwd(statusMd: string): string {
     if (fs.existsSync(path.join(root, seg, ".git"))) return seg;
   }
   return "";
+}
+
+/**
+ * 배포 표의 PR·빌드가 가리킬 GitHub 주소.
+ *
+ * ⛔ 후보의 첫 번째를 쓰면 안 된다 — 멀티레포 오더는 워크트리가 여럿이라 엉뚱한 저장소로 간다
+ * (실측 FE1-1301: com.wadiz.web 이 먼저 잡혀 PR #29430 링크가 404였다. 그 PR 은 wadiz-frontend 것).
+ *
+ * status.md 에 적힌 저장소가 정본이다(헬퍼 dobby_ship_repo 가 PR 을 만든 저장소를 그대로 적는다).
+ * 옛 기록에는 그 줄이 없어서, 워크트리 후보가 **하나뿐일 때만** 그것을 쓴다. 틀린 링크보다 링크가
+ * 없는 편이 낫다.
+ */
+function shipRepoUrl(key: string, shipRepo: string | null): string | null {
+  if (shipRepo) return `https://github.com/${shipRepo}`;
+  const targets = prTargets(key);
+  return targets.length === 1 ? targets[0].repoUrl : null;
 }
 
 export function prTargets(key: string): PrTarget[] {
@@ -1342,6 +1378,8 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
+    ship: st?.ship ?? [],
+    repoUrl: shipRepoUrl(epicKey, st?.shipRepo ?? null),
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
     produceMd:

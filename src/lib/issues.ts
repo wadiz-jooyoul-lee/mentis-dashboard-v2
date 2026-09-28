@@ -78,6 +78,8 @@ export type ReportRun = {
   content: string;
   /** 정렬용 epoch(ms) */
   sortKey: number;
+  /** 이 회차 폴더에 dobby-test 가 남긴 요약 화면(summary.html)이 있는가 */
+  hasSummary: boolean;
 };
 
 /**

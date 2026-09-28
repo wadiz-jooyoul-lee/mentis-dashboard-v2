@@ -12,8 +12,6 @@ import {
   Card,
   Row,
   Col,
-  Statistic,
-  Progress,
   Timeline,
   Collapse,
   Empty,
@@ -25,6 +23,7 @@ import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
+import { ShipProgress } from "@/components/ShipProgress";
 import type { QuipsFile, Quip } from "@/lib/quips";
 import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
@@ -290,11 +289,24 @@ export default function OrchestrationBoard({
     />
   );
 
+  // 에이전트 표가 없어도 배포는 있을 수 있다(에이전트가 이미 정리된 오더). 이른 반환보다 앞에서 잡는다.
+  const ship = epic?.ship ?? [];
+
   if (!o) {
     const phase = epic?.phaseLabel;
     return (
       <div>
         {header}
+        {ship.length > 0 && (
+          <Card style={{ marginBottom: 16 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              배포
+            </Text>
+            <div style={{ marginTop: 6 }}>
+              <ShipProgress rows={ship} repoUrl={epic?.repoUrl ?? null} />
+            </div>
+          </Card>
+        )}
         <Empty
           description={
             phase && phase !== "-"
@@ -312,8 +324,6 @@ export default function OrchestrationBoard({
   const extras = Object.keys(counts).filter((s) => !STATE_ORDER.includes(s));
   const cols = [...STATE_ORDER, ...extras];
   const total = o.agents.length;
-  const done = counts["완료"] ?? 0;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const staleAgents = o.agents.filter(isStale);
 
   return (
@@ -322,15 +332,25 @@ export default function OrchestrationBoard({
 
       {/* 관제 요약 */}
       <Card style={{ marginBottom: 16 }}>
-        <Row gutter={[24, 16]} align="middle">
-          <Col xs={12} md={4}>
-            <Statistic title="에이전트" value={total} suffix="명" />
+        {/* 세 블록이 같은 틀을 쓴다: 12px 회색 라벨 + 6px 띄우고 내용.
+            Statistic 을 쓰면 에이전트만 글자 크기가 달라 줄이 어긋난다. */}
+        <Row gutter={[24, 12]} align="top">
+          <Col xs={8} md={3}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              에이전트
+            </Text>
+            <div style={{ marginTop: 6, fontSize: 18, fontWeight: 600, lineHeight: "24px" }}>
+              {total}
+              <Text type="secondary" style={{ fontSize: 12, marginInlineStart: 2 }}>
+                명
+              </Text>
+            </div>
           </Col>
-          <Col xs={24} md={12}>
+          <Col xs={16} md={ship.length > 0 ? 6 : 21}>
             <Text type="secondary" style={{ fontSize: 12 }}>
               상태 분포
             </Text>
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 6, minHeight: 24, display: "flex", alignItems: "center" }}>
               <Space size={[6, 6]} wrap>
                 {cols
                   .filter((s) => (counts[s] ?? 0) > 0)
@@ -346,17 +366,16 @@ export default function OrchestrationBoard({
               </Space>
             </div>
           </Col>
-          <Col xs={24} md={8} style={{ textAlign: "center" }}>
-            <Progress
-              type="dashboard"
-              percent={pct}
-              size={90}
-              status={done === total && total > 0 ? "success" : "active"}
-            />
-            <div>
-              <Text type="secondary">완료율</Text>
-            </div>
-          </Col>
+          {ship.length > 0 && (
+            <Col xs={24} md={15}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                배포
+              </Text>
+              <div style={{ marginTop: 6, minHeight: 24, display: "flex", alignItems: "center" }}>
+                <ShipProgress rows={ship} repoUrl={epic?.repoUrl ?? null} />
+              </div>
+            </Col>
+          )}
         </Row>
       </Card>
 

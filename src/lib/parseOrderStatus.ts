@@ -121,6 +121,45 @@ export type ResolutionInfo = {
   note: string | null;
 };
 
+/**
+ * dobby-ship 배포 단계(status.md `## 배포` 표의 한 행 = 한 환경).
+ * 한 오더가 여러 번·여러 환경으로 나가므로 환경마다 행이 하나씩 쌓인다.
+ */
+export type ShipRow = {
+  /** dev · rc1 · rc4 · stage */
+  env: string;
+  /** 아홉 어휘 중 하나(⚠ 는 떼어 blocked 로 옮긴다) */
+  stage: string;
+  /** "#29436" — 없으면 null */
+  pr: string | null;
+  /** "static#36364314238 · global#36364316550" — 없으면 null */
+  build: string | null;
+  updatedAt: string | null;
+  /** 비고(막힌 사유). 있으면 blocked=true */
+  note: string | null;
+  blocked: boolean;
+  /** 화면에 그릴 다섯 칸 중 몇 번째인가(0~4). 모르는 어휘면 -1 */
+  milestone: number;
+  /** 이 환경이 끝났나(반영 완료) */
+  done: boolean;
+};
+
+/**
+ * 아홉 단계를 화면용 다섯 칸으로 접는다.
+ * 아홉 칸은 화면에서 너무 잘게 나뉜다 — 정확한 낱말은 옆에 그대로 적는다.
+ */
+export const SHIP_MILESTONES = ["PR", "리뷰", "머지", "배포", "검증"] as const;
+
+function shipMilestone(stage: string): number {
+  if (/^PR 생성/.test(stage)) return 0;
+  if (/^리뷰/.test(stage)) return 1;
+  if (/^머지/.test(stage)) return 2;
+  if (/^(빌드|배포)/.test(stage)) return 3;
+  // `배송 완료` 는 표가 생기기 전 마지막 단계 이름이다(옛 기록 폴백용).
+  if (/^(검증|반영|배송)/.test(stage)) return 4;
+  return -1;
+}
+
 export type OrderStatus = {
   meta: OrderMeta;
   /** 현재 단계 원문 */
@@ -144,6 +183,13 @@ export type OrderStatus = {
   testHistory: TestHistoryRow[];
   worktrees: WorktreeRow[];
   resolution: ResolutionInfo | null;
+  /** dobby-ship 배포 단계 — 환경마다 한 행. 없으면 빈 배열. */
+  ship: ShipRow[];
+  /**
+   * 배포 표의 PR·빌드가 속한 저장소(`owner/repo`). 링크를 만들 때 쓴다.
+   * 멀티레포 오더는 워크트리만 봐서는 어느 저장소인지 알 수 없어 헬퍼가 직접 적어 준다.
+   */
+  shipRepo: string | null;
   raw: string;
 };
 
@@ -266,6 +312,80 @@ function parseIssueMeta(
 
 function rowsOf(t: TableData | null): string[][] {
   return t ? t.rows : [];
+}
+
+/**
+ * "## 배포" 표를 환경별 행으로 읽는다.
+ *
+ * 옛 기록 대응: 표가 생기기 전에는 `## 이슈/작업` 아래 한 줄이었다
+ * (`- **배송 단계**: 배포 대기 (dev)`). 그 줄만 있는 오더는 환경 하나짜리 행으로 읽는다.
+ * 소급해 파일을 고치지는 않는다 — 그 오더가 다시 배포될 때 헬퍼가 알아서 표로 옮긴다.
+ */
+/** "## 배포" 섹션의 `- **저장소**: owner/repo`. 없으면 null(옛 기록). */
+function parseShipRepo(md: string): string | null {
+  const body = sectionBody(md, /^배포$/);
+  const m = body.match(/^\s*[-*]\s*\*\*저장소\*\*\s*[:：]\s*`?([^\s`]+)/m);
+  return m ? m[1] : null;
+}
+
+function parseShip(md: string): ShipRow[] {
+  const body = sectionBody(md, /^배포$/);
+  const t = body ? findTable(body, "환경") : null;
+  if (t) {
+    const ci = {
+      env: columnIndex(t.headers, "환경"),
+      stage: columnIndex(t.headers, "단계"),
+      pr: columnIndex(t.headers, "PR"),
+      build: columnIndex(t.headers, "빌드"),
+      updated: columnIndex(t.headers, "갱신"),
+      note: columnIndex(t.headers, "비고"),
+    };
+    const cell = (r: string[], i: number): string | null => {
+      const v = at(r, i).replace(/^`|`$/g, "").trim();
+      return v && v !== "-" ? v : null;
+    };
+    return rowsOf(t)
+      .map((r) => {
+        const env = at(r, ci.env).trim();
+        const rawStage = at(r, ci.stage).replace(/\*/g, "").trim();
+        const stage = rawStage.replace(/\s*⚠\s*$/, "").trim();
+        const note = cell(r, ci.note);
+        return {
+          env,
+          stage,
+          pr: cell(r, ci.pr),
+          build: cell(r, ci.build),
+          updatedAt: cell(r, ci.updated),
+          note,
+          blocked: !!note || /⚠/.test(rawStage),
+          milestone: shipMilestone(stage),
+          done: /반영 완료/.test(stage),
+        };
+      })
+      .filter((x) => x.env && x.stage);
+  }
+
+  // 옛 한 줄 폴백: "- **배포 단계**: 배포 대기 (dev, PR #29430 · …)"
+  const m = md.match(/^\s*[-*]\s*\*\*배[포송] 단계\*\*\s*[:：]\s*(.+)$/m);
+  if (!m) return [];
+  const line = m[1].trim();
+  const stage = line.replace(/\s*[(（].*$/, "").replace(/\s*—.*$/, "").trim();
+  const env = line.match(/\b(dev|rc1|rc4|stage)\b/)?.[1] ?? "-";
+  const pr = line.match(/#(\d+)/)?.[0] ?? null;
+  return [
+    {
+      env,
+      stage,
+      pr,
+      build: null,
+      updatedAt: null,
+      note: null,
+      blocked: false,
+      milestone: shipMilestone(stage),
+      // 옛 `배포 완료` 는 "번들이 올라갔다"는 뜻이라 끝난 것이 아니다 — 끝은 `배송 완료` 뿐.
+      done: /배송 완료|반영 완료/.test(stage),
+    },
+  ];
 }
 
 function parseAgents(md: string): AgentRow[] {
@@ -430,6 +550,8 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     testHistory: parseTestHistory(md),
     worktrees: parseWorktrees(md),
     resolution: parseResolution(md),
+    ship: parseShip(md),
+    shipRepo: parseShipRepo(md),
     raw: md,
   };
 }

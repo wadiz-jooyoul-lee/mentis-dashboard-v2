@@ -24,7 +24,7 @@ import {
   Skeleton,
   Segmented,
 } from "antd";
-import { HistoryOutlined } from "@ant-design/icons";
+import { HistoryOutlined, PictureOutlined } from "@ant-design/icons";
 import {
   LinkOutlined,
   CheckCircleTwoTone,
@@ -434,12 +434,25 @@ export default function IssueReport({
                 })),
               ]}
             />
+            {/* 마감할 때 브라우저에 띄웠던 요약 화면. 회차 폴더에 남아 있으면 다시 볼 수 있다. */}
+            {selected?.hasSummary && (
+              <Button
+                type="link"
+                size="small"
+                icon={<PictureOutlined />}
+                href={`/api/orders/${issueKey}/run-summary?run=${encodeURIComponent(selected.id)}`}
+                target="_blank"
+                style={{ padding: 0 }}
+              >
+                요약 화면
+              </Button>
+            )}
             <Text type="secondary" style={{ fontSize: 12 }}>
               총 {runs.length}회{selected ? ` · 파일: ${selected.file}` : ""}
             </Text>
           </Space>
           {showAll && summary ? (
-            <TestSummaryView summary={summary} />
+            <TestSummaryView summary={summary} epicKey={issueKey} />
           ) : body ? (
             <ReportBody key={selected!.id} content={body} />
           ) : loading ? (
