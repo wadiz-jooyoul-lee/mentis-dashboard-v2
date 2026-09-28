@@ -14,6 +14,7 @@ import DateFoldedTable from "@/components/DateFoldedTable";
 import WorktreeDeleteButton from "@/components/WorktreeDeleteButton";
 import GroupAvatar from "@/components/GroupAvatar";
 import ResolveButton from "@/components/ResolveButton";
+import { ShipTags } from "@/components/ShipProgress";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -108,6 +109,10 @@ export default function OrchestrationList({
   const active = epics.filter((r) => workStatus(r).text === "작업중");
   const topItems = hasFilter ? filtered : active;
 
+  // 배포 표가 있는 오더는 아직 드물다(110여 개 중 두 개). 하나도 없으면 컬럼 자체를 숨긴다 —
+  // 안 그러면 빈 칸만 한 줄 늘어선다.
+  const anyShip = epics.some((r) => r.ship.length > 0);
+
   const columns = [
     {
       title: "에픽",
@@ -201,6 +206,15 @@ export default function OrchestrationList({
         return <Tag color={s.color}>{s.text}</Tag>;
       },
     },
+    ...(anyShip
+      ? [
+          {
+            title: "배포",
+            key: "ship",
+            render: (_: unknown, r: EpicSummary) => <ShipTags rows={r.ship} />,
+          },
+        ]
+      : []),
     {
       title: "해결",
       key: "resolve",
