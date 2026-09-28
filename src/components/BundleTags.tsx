@@ -63,14 +63,19 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
 
   return (
     <span style={GROUP}>
-      {report.impacts.map((i) => (
+      {/* 직접 고친 번들을 앞세운다. 뒤엣것은 "닿을 수도 있다"는 신호라, 섞여 있으면
+          정작 확인해야 할 번들이 묻힌다(실측 FE1-1787: 확인할 것은 static·global·
+          wadiz-web 셋인데 account·admin 이 같은 줄에 나란히 섰다). */}
+      {[...report.impacts]
+        .sort((a, b) => Number(b.direct) - Number(a.direct))
+        .map((i) => (
         <Tooltip
           key={i.bundle}
           title={
             <span>
               {i.direct
-                ? `이 번들 폴더의 파일을 고쳤습니다 (닿는 변경 ${i.count}개)`
-                : `공유 코드를 거쳐 닿습니다 (${i.count}개)`}
+                ? `이 번들 폴더의 파일을 고쳤습니다 (닿는 변경 ${i.count}개) — 다시 빌드해야 합니다`
+                : `공유 코드를 거쳐 닿습니다 (${i.count}개) — 이 번들이 그 코드를 실제로 쓰는지 확인하고 판단하세요`}
               <br />
               {i.reasons.map((r) => (
                 <span key={r} style={{ display: "block" }}>
@@ -81,14 +86,20 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
             </span>
           }
         >
-          {/* 직접 고친 번들은 색을 채우고, 공유 코드 탓은 점선 테두리만 남긴다.
-              옆의 숫자가 닿는 변경 파일 수 — 1이면 스치기만 한 것이라 사람이 걸러 볼 만하다. */}
+          {/* 직접 고친 번들만 색을 쓴다. 공유 코드 탓은 색 없이 점선·흐리게 —
+              "빌드해야 하는 것"과 "닿을 수도 있는 것"이 한눈에 갈려야 한다. */}
           <Tag
-            color={COLOR[i.bundle]}
+            color={i.direct ? COLOR[i.bundle] : undefined}
             style={
               i.direct
                 ? { margin: 0 }
-                : { margin: 0, background: "transparent", borderStyle: "dashed" }
+                : {
+                    margin: 0,
+                    background: "transparent",
+                    borderStyle: "dashed",
+                    opacity: 0.45,
+                    fontSize: 11,
+                  }
             }
           >
             {i.bundle} <span style={{ opacity: 0.65 }}>{i.count}</span>
