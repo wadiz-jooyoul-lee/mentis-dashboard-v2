@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Layout } from "antd";
+import { usePathname } from "next/navigation";
+import { Layout, Menu } from "antd";
 import AutoRefresh from "@/components/AutoRefresh";
 import InProgressBackupTrigger from "@/components/InProgressBackupTrigger";
 import { CanActProvider } from "@/components/CanAct";
@@ -10,7 +11,29 @@ import MantisIcon from "@/components/MantisIcon";
 
 const { Header, Content } = Layout;
 
+/** 머리띠 가운데 메뉴. 경로가 바로 키다. */
+const NAV = [
+  { key: "/", label: <Link href="/">홈</Link> },
+  { key: "/orchestration", label: <Link href="/orchestration">오케스트레이션</Link> },
+  { key: "/artifacts", label: <Link href="/artifacts">아티팩트</Link> },
+];
+
+/**
+ * 지금 보고 있는 화면이 셋 중 어느 것인가.
+ *
+ * 오더 상세(/orchestration/FE1-1787)처럼 아래로 더 들어간 경로도 그 뿌리를 켜 준다.
+ * 오더 안의 "아티팩트" 탭(/orchestration/{키}/artifact)은 경로가 /orchestration 으로
+ * 시작하므로 오케스트레이션이 켜진다 — 그 탭은 모아보기(/artifacts)가 아니라 그 오더의 것이다.
+ */
+function currentNavKey(pathname: string): string[] {
+  if (pathname.startsWith("/orchestration")) return ["/orchestration"];
+  if (pathname.startsWith("/artifacts")) return ["/artifacts"];
+  if (pathname === "/") return ["/"];
+  return [];
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   return (
     <CanActProvider>
     <InProgressBackupTrigger />
@@ -42,6 +65,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <MantisIcon size={26} color="#95de64" />
           Mentis Dashboard
         </Link>
+        {/*
+          좌우(제목·도구)의 폭이 달라 space-between 으로는 가운데에 오지 않는다.
+          머리띠가 position:sticky 라 좌표 기준이 되므로 절대 배치로 화면 가운데에 둔다.
+        */}
+        <Menu
+          theme="dark"
+          mode="horizontal"
+          selectedKeys={currentNavKey(pathname)}
+          items={NAV}
+          // 셋뿐이라 접을 이유가 없다. 절대 배치라 폭이 0 으로 재어져
+          // 마지막 칸이 "..." 로 접히는 것을 막는다.
+          disabledOverflow
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "transparent",
+            borderBottom: "none",
+            minWidth: 0,
+          }}
+        />
         <span style={{ display: "inline-flex", alignItems: "center", gap: 20 }}>
           <LanToggle />
           <AutoRefresh intervalMs={30000} />
