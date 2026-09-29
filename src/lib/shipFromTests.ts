@@ -50,25 +50,29 @@ export function shipFromTestRuns(orderDir: string, recorded: ShipRow[]): ShipRow
   for (const run of summary.runs) {
     const env = normalizeEnv(run.env);
     if (!env || known.has(env)) continue;
+    // ⛔ 라이브를 **고치기 전 코드를 보려고** 연 회차는 배포가 아니다.
+    // 실측 FE1-1979 4회차 「라이브 대조」 — 증상이 이 변경 탓인지 가리려고 운영을 열었는데
+    // `live 검증 완료` 로 적혔다. local 은 거른다 — 거기서 실제로 검증하기 때문이다.
+    if (env === "live" && run.baseline) continue;
     latest.set(env, run);
   }
   if (!latest.size) return recorded;
 
   const made: ShipRow[] = [...latest].map(([env, run]) => {
-    // ⛔ 실패가 있다고 «검증 중» 으로 두지 않는다. 검증은 **돌았고 끝났다** — 결과가 나쁠 뿐이다.
-    // 진행중으로 보이면 «기다리면 되는 일» 로 읽혀, 사람이 손대야 하는 자리가 묻힌다.
-    // 끝난 것으로 두고 빨갛게 세운다.
-    const ran = run.pass + run.fail > 0;
+    // ⛔ 언제나 `검증 완료` 다. 회차가 **남아 있다는 것 자체가 검증이 끝났다는 뜻**이고,
+    // 파일에는 «지금 돌고 있다» 를 말해 주는 것이 없다. 실패가 있어도 «검증 중» 으로 두지
+    // 않는다 — 진행중으로 보이면 «기다리면 되는 일» 로 읽혀 사람이 손대야 할 자리가 묻힌다.
+    // 결과가 나쁘면 끝난 것으로 두고 **빨갛게** 세운다.
     return {
       env,
-      stage: ran ? "검증 완료" : "검증 중",
+      stage: "검증 완료",
       pr: null,
       build: null,
       updatedAt: run.label || null,
       note: run.fail > 0 ? `실패 ${run.fail}건` : null,
       blocked: run.fail > 0,
       milestone: 4, // 다섯 칸 중 마지막(검증) — 앞 네 칸은 모르므로 켜지 않는다
-      done: ran,
+      done: true,
       inferred: true,
     };
   });

@@ -25,6 +25,13 @@ export type RunLine = {
   skip: number;
   /** 이 회차 폴더에 dobby-test 가 남긴 요약 화면(summary.html)이 있는가 */
   hasSummary: boolean;
+  /**
+   * **고치기 전 코드**를 보려고 돌린 대조 회차인가.
+   *
+   * 이 변경이 잘 돌아가는지 본 것이 아니라, 증상이 이 변경 탓인지 가리려고 옛 코드를
+   * 연 것이다. 배포로 세면 안 된다 — 실측 FE1-1979 4회차가 라이브를 그렇게 열었다.
+   */
+  baseline: boolean;
 };
 
 export type ItemLine = {
@@ -101,6 +108,24 @@ function findEnv(md: string): string {
   // 환경 이름은 늘 영문이다. 우리말이 잡혔으면 설명 문장을 문 것이니 빈칸으로 둔다 —
   // 릴리즈 노트 환경 칸에 `빈` 같은 토막이 들어가는 것보다 낫다.
   return /^[A-Za-z][A-Za-z0-9]*$/.test(token) ? token : "";
+}
+
+/**
+ * 대조 회차인가 — 고치기 전 코드를 보려고 돌린 회차.
+ *
+ * ⛔ **제목 줄과 환경 줄만** 본다. 본문까지 보면 「수정 전 코드였다면 …」 처럼 설명으로 쓴
+ * 정상 회차까지 걸린다(실측: 머리 600자로 넓히면 92건 중 10건이 걸렸고 그중 9건이 멀쩡한
+ * 회차였다). 좁히면 실측 92건 중 FE1-1979 4회차 한 건만 걸린다.
+ *
+ * 같은 라이브라도 FE1-1912 의 「라이브 검증 — GTM 태그 …」 는 진짜 배포 확인이라 안 걸린다.
+ */
+function isBaselineRun(md: string): boolean {
+  const title = md.split("\n", 1)[0] ?? "";
+  const envLine =
+    md.match(
+      /^[ \t]*[-*]?[ \t]*\*{0,2}(?:대상[ \t]*)?(?:환경|실행 환경|테스트 환경)\*{0,2}[ \t]*[:：].*$/m
+    )?.[0] ?? "";
+  return /대조|수정 전/.test(envLine) || /대조/.test(title);
 }
 
 /**
@@ -186,6 +211,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
       fail: counts.fail,
       skip: counts.skip + counts.warn,
       hasSummary: fs.existsSync(path.join(dir, "summary.html")),
+      baseline: isBaselineRun(md),
     });
 
     for (const s of scenarios) {
