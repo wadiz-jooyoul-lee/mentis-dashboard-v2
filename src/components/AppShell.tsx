@@ -21,15 +21,15 @@ const NAV = [
 /**
  * 지금 보고 있는 화면이 셋 중 어느 것인가.
  *
- * 오더 상세(/orchestration/FE1-1787)처럼 아래로 더 들어간 경로도 그 뿌리를 켜 준다.
- * 오더 안의 "아티팩트" 탭(/orchestration/{키}/artifact)은 경로가 /orchestration 으로
- * 시작하므로 오케스트레이션이 켜진다 — 그 탭은 모아보기(/artifacts)가 아니라 그 오더의 것이다.
+ * ⛔ **그 화면 자체일 때만** 켠다. 아래로 들어간 경로(오더 상세 /orchestration/FE1-1787,
+ * 그 안의 탭 /orchestration/{키}/artifact)에서는 아무것도 켜지 않는다.
+ *
+ * 뿌리로 켜 보았는데, 상세로 들어가도 「오케스트레이션」이 계속 눌린 채로 남아 지금 목록에
+ * 있는 것처럼 보였다. 머리띠 메뉴는 «지금 어디인가» 가 아니라 «어디로 갈 수 있나» 를
+ * 가리키는 자리다 — 상세에서 지금 위치를 말해 주는 것은 그 아래 브레드크럼이다.
  */
 function currentNavKey(pathname: string): string[] {
-  if (pathname.startsWith("/orchestration")) return ["/orchestration"];
-  if (pathname.startsWith("/artifacts")) return ["/artifacts"];
-  if (pathname === "/") return ["/"];
-  return [];
+  return NAV.some((n) => n.key === pathname) ? [pathname] : [];
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
