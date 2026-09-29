@@ -43,6 +43,7 @@ type TagStyle = { color: string; variant: "filled" | "solid" | "outlined" };
 function milestoneStyle(i: number, r: ShipRow): TagStyle {
   if (r.inferred) {
     if (i !== r.milestone) return { color: "default", variant: "filled" };
+    if (r.blocked) return { color: "error", variant: "solid" };
     return r.done
       ? { color: "success", variant: "outlined" }
       : { color: "processing", variant: "solid" };

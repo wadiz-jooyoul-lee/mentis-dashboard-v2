@@ -373,7 +373,9 @@ function parseShip(md: string): ShipRow[] {
           build: cell(r, ci.build),
           updatedAt: cell(r, ci.updated),
           note,
-          blocked: !!note || /⚠/.test(rawStage),
+          // `리뷰 취소` 는 PR 이 머지 없이 닫힌 자리라 그 자체로 막힌 상태다 —
+          // 비고를 안 적었더라도 빨갛게 보여야 «아직 기다리는 중»으로 오해하지 않는다.
+          blocked: !!note || /⚠/.test(rawStage) || /^리뷰 취소/.test(stage),
           milestone: shipMilestone(stage),
           done: /검증 완료/.test(stage),
           inferred: false,

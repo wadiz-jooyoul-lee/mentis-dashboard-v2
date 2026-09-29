@@ -55,18 +55,20 @@ export function shipFromTestRuns(orderDir: string, recorded: ShipRow[]): ShipRow
   if (!latest.size) return recorded;
 
   const made: ShipRow[] = [...latest].map(([env, run]) => {
-    // 실패가 하나라도 남아 있으면 아직 보는 중이다. 통과만 있고 하나라도 봤으면 끝난 것으로 본다.
-    const done = run.fail === 0 && run.pass > 0;
+    // ⛔ 실패가 있다고 «검증 중» 으로 두지 않는다. 검증은 **돌았고 끝났다** — 결과가 나쁠 뿐이다.
+    // 진행중으로 보이면 «기다리면 되는 일» 로 읽혀, 사람이 손대야 하는 자리가 묻힌다.
+    // 끝난 것으로 두고 빨갛게 세운다.
+    const ran = run.pass + run.fail > 0;
     return {
       env,
-      stage: done ? "검증 완료" : "검증 중",
+      stage: ran ? "검증 완료" : "검증 중",
       pr: null,
       build: null,
       updatedAt: run.label || null,
-      note: null,
-      blocked: false,
+      note: run.fail > 0 ? `실패 ${run.fail}건` : null,
+      blocked: run.fail > 0,
       milestone: 4, // 다섯 칸 중 마지막(검증) — 앞 네 칸은 모르므로 켜지 않는다
-      done,
+      done: ran,
       inferred: true,
     };
   });
