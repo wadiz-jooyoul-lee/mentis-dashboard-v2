@@ -37,6 +37,7 @@ import {
 } from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
+import { shipFromTestRuns } from "@/lib/shipFromTests";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
 const KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
@@ -322,7 +323,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
-    ship: st?.ship ?? [],
+    ship: shipFromTestRuns(orderDir(key), st?.ship ?? []),
   };
 }
 
@@ -1378,7 +1379,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
-    ship: st?.ship ?? [],
+    ship: shipFromTestRuns(orderDir(epicKey), st?.ship ?? []),
     repoUrl: shipRepoUrl(epicKey, st?.shipRepo ?? null),
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
