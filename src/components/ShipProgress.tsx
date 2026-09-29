@@ -36,11 +36,30 @@ type TagStyle = { color: string; variant: "filled" | "solid" | "outlined" };
  *   · 끝난 칸   초록 테두리(outlined)
  *   · 지금 칸   꽉 찬 색(solid) — 막혀 있으면(⚠) 빨강
  *   · 아직     회색
+ *
+ * ⛔ 검증 회차에서 미루어 만든 행(inferred)은 **마지막 칸만** 켠다. PR·리뷰·머지·빌드는
+ * dobby-ship 을 돌려야 아는 값인데, 앞 칸까지 켜면 확인하지도 않은 것을 끝났다고 보여 준다.
  */
 function milestoneStyle(i: number, r: ShipRow): TagStyle {
+  if (r.inferred) {
+    if (i !== r.milestone) return { color: "default", variant: "filled" };
+    return r.done
+      ? { color: "success", variant: "outlined" }
+      : { color: "processing", variant: "solid" };
+  }
   if (r.done || i < r.milestone) return { color: "success", variant: "outlined" };
   if (i === r.milestone) return { color: r.blocked ? "error" : "processing", variant: "solid" };
   return { color: "default", variant: "filled" };
+}
+
+/**
+ * 이 행이 어디서 왔는지 — 풍선말에 그대로 적는다.
+ * 추론이면 그 사실과 한계("앞 단계는 모른다")를 같이 밝힌다.
+ */
+function sourceText(r: ShipRow): string {
+  if (!r.inferred) return r.updatedAt ? `## 배포 기록 · 갱신 ${r.updatedAt}` : "## 배포 기록";
+  const when = r.updatedAt ? ` (${r.updatedAt})` : "";
+  return `검증 회차에서 읽음${when} — PR·리뷰·머지·빌드는 dobby-ship 을 돌려야 알 수 있습니다`;
 }
 
 /**
@@ -59,10 +78,16 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
           key={r.env}
           style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
         >
-          <Tooltip title={r.updatedAt ? `갱신 ${r.updatedAt}` : undefined}>
+          <Tooltip title={sourceText(r)}>
             <Tag
               color={ENV_COLOR[r.env] ?? "default"}
-              style={{ margin: 0, minWidth: 48, textAlign: "center" }}
+              style={{
+                margin: 0,
+                minWidth: 48,
+                textAlign: "center",
+                // 미루어 만든 행은 테두리를 점선으로 — 기록과 섞이면 추측이 사실처럼 읽힌다.
+                borderStyle: r.inferred ? "dashed" : undefined,
+              }}
             >
               {r.env}
             </Tag>
@@ -84,9 +109,10 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
           </div>
           <Text
             style={{ fontSize: 12, whiteSpace: "nowrap" }}
-            type={r.blocked ? "danger" : undefined}
+            type={r.blocked ? "danger" : r.inferred ? "secondary" : undefined}
           >
             {r.stage}
+            {r.inferred && " (검증 기록)"}
           </Text>
           {r.pr &&
             (repoUrl ? (
@@ -132,24 +158,34 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
   );
 }
 
-/** 목록용 한 줄 요약. 표 칸이 좁아 환경과 상태만 태그로 찍는다. */
+/**
+ * 목록용 한 줄 요약. 표 칸이 좁아 환경과 상태만 태그로 찍는다.
+ *
+ * ⛔ 색은 **상태**가 정한다(빨강 막힘 · 초록 끝남 · 파랑 진행중). 환경별 색도 해 봤는데,
+ * 실패하거나 진행중인 칸이 초록과 같은 무게로 보여 어디가 문제인지 안 읽혔다.
+ * 어느 환경인지는 태그 안의 글자가 말해 준다.
+ */
 export function ShipTags({ rows }: { rows: ShipRow[] }) {
   if (!rows.length) return <Text type="secondary">-</Text>;
   return (
-    <>
+    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
       {rows.map((r) => (
         <Tooltip
           key={r.env}
-          title={`${r.stage}${r.pr ? ` · ${r.pr}` : ""}${r.note ? ` · ${r.note}` : ""}`}
+          title={`${r.stage}${r.pr ? ` · ${r.pr}` : ""}${r.note ? ` · ${r.note}` : ""} — ${sourceText(r)}`}
         >
           <Tag
             color={r.blocked ? "error" : r.done ? "success" : "processing"}
-            style={{ marginInlineEnd: 4 }}
+            style={{
+              margin: 0,
+              // 기록이 아니라 검증 회차에서 미루어 만든 값이라는 표시.
+              borderStyle: r.inferred ? "dashed" : undefined,
+            }}
           >
             {r.env} {r.blocked ? "⚠" : r.done ? "✓" : r.stage}
           </Tag>
         </Tooltip>
       ))}
-    </>
+    </span>
   );
 }

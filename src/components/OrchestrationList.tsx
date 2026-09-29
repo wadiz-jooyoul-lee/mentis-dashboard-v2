@@ -211,6 +211,9 @@ export default function OrchestrationList({
           {
             title: "배포",
             key: "ship",
+            // 한 오더가 dev·rc4·stage 셋을 다 거치면 태그가 셋이라 칸이 240px 까지 벌어져
+            // 오른쪽 "해결" 버튼이 화면 밖으로 밀렸다. 폭을 묶고 태그를 두 줄로 흘린다.
+            width: 168,
             render: (_: unknown, r: EpicSummary) => <ShipTags rows={r.ship} />,
           },
         ]

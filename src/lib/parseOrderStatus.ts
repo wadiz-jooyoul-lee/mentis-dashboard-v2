@@ -142,6 +142,14 @@ export type ShipRow = {
   milestone: number;
   /** 이 환경이 끝났나(반영 완료) */
   done: boolean;
+  /**
+   * 이 행이 `## 배포` 기록이 아니라 **검증 회차에서 미루어 만든 것**인가.
+   *
+   * 검증 기록이 말해 주는 사실은 "이 환경에서 검증했다" 하나뿐이다. PR·리뷰·머지·빌드가
+   * 어땠는지는 모르므로, 추론 행은 마지막 칸(검증)만 켜고 앞 네 칸은 비워 둔다.
+   * 화면에서도 기록과 갈라 보여야 한다 — 추론을 기록인 척 보여 주면 안 된다.
+   */
+  inferred: boolean;
 };
 
 /**
@@ -368,6 +376,7 @@ function parseShip(md: string): ShipRow[] {
           blocked: !!note || /⚠/.test(rawStage),
           milestone: shipMilestone(stage),
           done: /검증 완료/.test(stage),
+          inferred: false,
         };
       })
       .filter((x) => x.env && x.stage);
@@ -394,6 +403,7 @@ function parseShip(md: string): ShipRow[] {
       milestone: shipMilestone(stage),
       // 옛 `배포 완료` 는 "번들이 올라갔다"는 뜻이라 끝난 것이 아니다 — 끝은 `검증 완료` 뿐.
       done: /검증 완료/.test(stage),
+      inferred: false,
     },
   ];
 }
