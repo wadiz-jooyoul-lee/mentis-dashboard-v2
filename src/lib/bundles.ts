@@ -44,6 +44,8 @@ export type BundleImpact = {
   direct: boolean;
   /** 이 번들에 닿는 변경 파일 수. 1~2개면 스치기만 한 것이라 사람이 걸러 볼 만하다. */
   count: number;
+  /** 공유 코드가 새로 들여온 이름 중 이 번들 소스가 실제로 쓰는 것. 있으면 다시 빌드해야 한다. */
+  used?: string[];
   /** 왜 이 번들이 켜졌나 — 실제로 닿는 변경 파일들(많으면 앞의 몇 개). */
   reasons: string[];
 };
@@ -249,6 +251,50 @@ export async function changedFiles(key: string, worktree: string, base: string):
   return [...collect(await git(worktree, ["log", "--name-only", "--format=", `--grep=${key}`]))];
 }
 
+const NAME = /[A-Za-z_][A-Za-z0-9_]{3,}/g;
+/** 두 낱말 이상 붙은 이름만(`MAKER_NEWS`·`makerName`·`InviteCode`). `Code` 같은 낱말은 문구에도 흔하다. */
+const COMPOUND = /[A-Za-z0-9]_[A-Za-z0-9]|[a-z0-9][A-Z]/;
+const COMMENT = /^\+\s*(\/\/|\/?\*)/;
+
+/**
+ * 공유 꾸러미 변경이 새로 들여온 이름 — 추가된 줄의 이름 중 변경 전 그 꾸러미에 없던 것만.
+ * 흔한 이름(`makerName`·`string`)은 변경 전에도 있으므로 여기서 걸러진다.
+ */
+export async function newSharedNames(worktree: string, base: string, files: string[]): Promise<string[]> {
+  const fork =
+    (await git(worktree, ["merge-base", `origin/${base}`, "HEAD"])).trim() ||
+    (await git(worktree, ["merge-base", base, "HEAD"])).trim();
+  if (!fork) return [];
+  const byPkg = new Map<string, string[]>();
+  for (const f of files) {
+    const pkg = f.match(PACKAGE_PATH)?.[0];
+    if (pkg) byPkg.set(pkg, [...(byPkg.get(pkg) ?? []), f]);
+  }
+  const found = new Set<string>();
+  for (const [pkg, pkgFiles] of byPkg) {
+    const added = (await git(worktree, ["diff", fork, "--", ...pkgFiles]))
+      .split("\n")
+      .filter((l) => l.startsWith("+") && !l.startsWith("+++") && !COMMENT.test(l));
+    const names = new Set(added.flatMap((l) => l.match(NAME) ?? []).filter((n) => COMPOUND.test(n)));
+    for (const n of names) {
+      if (!(await git(worktree, ["grep", "-w", "-l", n, fork, "--", pkg])).trim()) found.add(n);
+    }
+  }
+  return [...found].slice(0, 20);
+}
+
+/** 번들 폴더 소스에서 쓰는 이름. 더 긴 경로의 다른 번들(static 안의 admin)은 뺀다. */
+async function namesUsedIn(repoRoot: string, bundle: Bundle, names: string[]): Promise<string[]> {
+  const prefix = BUNDLE_ROOTS.find(([b]) => b === bundle)![1];
+  const nested = BUNDLE_ROOTS.filter(([b, p]) => b !== bundle && p.startsWith(prefix)).map(([, p]) => p);
+  const used: string[] = [];
+  for (const n of names) {
+    const hits = (await git(repoRoot, ["grep", "-w", "-l", "-F", n, "--", prefix])).split("\n").filter(Boolean);
+    if (hits.some((f) => !nested.some((p) => f.startsWith(p)))) used.push(n);
+  }
+  return used;
+}
+
 /**
  * 파일 목록 → 번들 판정.
  *
@@ -258,7 +304,8 @@ export async function changedFiles(key: string, worktree: string, base: string):
 export async function bundlesOf(
   files: string[],
   repoRoot: string,
-  repo: string
+  repo: string,
+  newNames: string[] = []
 ): Promise<BundleImpact[]> {
   const whole = WHOLE_REPO[repo];
   if (whole) {
@@ -293,10 +340,13 @@ export async function bundlesOf(
     const all = [...new Set([...reached, ...rootWide])];
     if (all.length === 0) continue;
     const prefix = prefix0;
+    const direct = reached.some((f) => f.startsWith(prefix));
+    const used = direct || newNames.length === 0 ? [] : await namesUsedIn(repoRoot, b, newNames);
     impacts.push({
       bundle: b,
-      direct: reached.some((f) => f.startsWith(prefix)),
+      direct,
       count: all.length,
+      ...(used.length > 0 && { used }),
       // 그 번들 폴더 안의 파일을 앞세운다 — 직접 고친 곳이 먼저 눈에 들어와야 한다.
       reasons: all
         .sort((x, y) => Number(y.startsWith(prefix)) - Number(x.startsWith(prefix)) || x.localeCompare(y))
