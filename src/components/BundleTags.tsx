@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Tag, Tooltip, Skeleton } from "antd";
-import type { Bundle, BundleReport } from "@/lib/bundles";
+import type { Bundle, BundleImpact, BundleReport } from "@/lib/bundles";
 
 /** 번들마다 고정 색. 색만 보고 어느 번들인지 알아보게 한다. */
 const COLOR: Record<Bundle, string> = {
@@ -67,7 +67,7 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
           정작 확인해야 할 번들이 묻힌다(실측 FE1-1787: 확인할 것은 static·global·
           wadiz-web 셋인데 account·admin 이 같은 줄에 나란히 섰다). */}
       {[...report.impacts]
-        .sort((a, b) => Number(b.direct) - Number(a.direct))
+        .sort((a, b) => Number(lit(b)) - Number(lit(a)) || Number(b.direct) - Number(a.direct))
         .map((i) => (
         <Tooltip
           key={i.bundle}
@@ -75,7 +75,9 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
             <span>
               {i.direct
                 ? `이 번들 폴더의 파일을 고쳤습니다 (닿는 변경 ${i.count}개) — 다시 빌드해야 합니다`
-                : `공유 코드를 거쳐 닿습니다 (${i.count}개) — 이 번들이 그 코드를 실제로 쓰는지 확인하고 판단하세요`}
+                : i.used
+                  ? `공유 코드가 새로 들여온 ${i.used.join(", ")} 을(를) 이 번들이 씁니다 — 다시 빌드해야 합니다`
+                  : `공유 코드를 거쳐 닿습니다 (${i.count}개) — 이 번들이 그 코드를 실제로 쓰는지 확인하고 판단하세요`}
               <br />
               {i.reasons.map((r) => (
                 <span key={r} style={{ display: "block" }}>
@@ -89,9 +91,9 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
           {/* 직접 고친 번들만 색을 쓴다. 공유 코드 탓은 색 없이 점선·흐리게 —
               "빌드해야 하는 것"과 "닿을 수도 있는 것"이 한눈에 갈려야 한다. */}
           <Tag
-            color={i.direct ? COLOR[i.bundle] : undefined}
+            color={lit(i) ? COLOR[i.bundle] : undefined}
             style={
-              i.direct
+              lit(i)
                 ? { margin: 0 }
                 : {
                     margin: 0,
@@ -109,6 +111,9 @@ export default function BundleTags({ epicKey }: { epicKey: string }) {
     </span>
   );
 }
+
+/** 다시 빌드해야 하는 번들 — 직접 고쳤거나, 공유 코드가 새로 들여온 이름을 쓴다. */
+const lit = (i: BundleImpact) => i.direct || !!i.used?.length;
 
 /** 경로가 길어 툴팁이 넘친다. 가운데를 접어 맨 앞 두 칸과 파일 이름만 남긴다. */
 function shorten(p: string): string {

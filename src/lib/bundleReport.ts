@@ -6,6 +6,7 @@ import {
   ALL_BUNDLES,
   bundlesOf,
   changedFiles,
+  newSharedNames,
   type BundleImpact,
   type BundleReport,
 } from "@/lib/bundles";
@@ -73,7 +74,8 @@ export async function buildBundleReport(key: string): Promise<BundleReport> {
     const files = await changedFiles(key, dir, getDefaultBase());
     if (files.length === 0) continue;
     fileCount += files.length;
-    impacts.push(...(await bundlesOf(files, dir, wt.repo)));
+    const newNames = await newSharedNames(dir, getDefaultBase(), files);
+    impacts.push(...(await bundlesOf(files, dir, wt.repo, newNames)));
   }
 
   const report: BundleReport = {
