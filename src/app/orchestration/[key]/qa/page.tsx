@@ -1,37 +1,26 @@
 import { notFound } from "next/navigation";
-import ConsoleTabs from "@/components/ConsoleTabs";
 import { getEpic } from "@/lib/orchestration";
-import { listConsoleAgents } from "@/lib/transcript";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
+import QaView from "@/components/QaView";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrderConsolePage({
-  params,
-}: {
-  params: Promise<{ key: string }>;
-}) {
+export default async function QaPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
   if (!ORDER_KEY_RE.test(key)) notFound();
-
   const epic = getEpic(key);
-  const agents = listConsoleAgents(key).map((a) => ({
-    id: a.id,
-    label: a.slug + (a.phase ? " · " + a.phase : ""),
-  }));
-
   return (
-    <ConsoleTabs
-      orderKey={key}
+    <QaView
+      epicKey={key}
       title={epic?.title ?? null}
-      resolved={epic?.resolved ?? false}
-      agents={agents}
-      height={480}
+      qa={epic?.qa ?? null}
+      ship={epic?.ship ?? []}
+      repoUrl={epic?.repoUrl ?? null}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}
+      resolved={epic?.resolved ?? false}
       hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
       hasDesign={epic?.hasDesignDoc ?? false}
-      hasQa={!!epic?.qa}
       orderKind={epic?.orderKind ?? null}
     />
   );

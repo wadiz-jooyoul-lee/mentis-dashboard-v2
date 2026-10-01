@@ -238,6 +238,7 @@ export default function OrchestrationChanges({
         resolved={epic?.resolved ?? false}
         hasJira={epic?.hasJiraDoc || isJiraIssueKey(epicKey)}
         hasDesign={epic?.hasDesignDoc ?? false}
+        hasQa={!!epic?.qa}
         orderKind={epic?.orderKind ?? null}
         extra={<QuipsControl epicKey={epicKey} />}
       />

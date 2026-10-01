@@ -24,6 +24,7 @@ export default function ConsoleTabs({
   resolved = false,
   hasJira = false,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
 }: {
   orderKey: string;
@@ -35,6 +36,7 @@ export default function ConsoleTabs({
   resolved?: boolean;
   hasJira?: boolean;
   hasDesign?: boolean;
+  hasQa?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   const items = [
@@ -65,6 +67,7 @@ export default function ConsoleTabs({
         resolved={resolved}
         hasJira={hasJira}
         hasDesign={hasDesign}
+        hasQa={hasQa}
         orderKind={orderKind}
       />
       <Space orientation="vertical" size={16} style={{ width: "100%", marginTop: 12 }}>

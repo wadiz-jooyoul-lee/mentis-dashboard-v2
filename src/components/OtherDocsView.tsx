@@ -25,6 +25,7 @@ export default function OtherDocsView({
   resolved = false,
   hasJira = false,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
 }: {
   epicKey: string;
@@ -35,6 +36,7 @@ export default function OtherDocsView({
   resolved?: boolean;
   hasJira?: boolean;
   hasDesign?: boolean;
+  hasQa?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   const header = (
@@ -46,6 +48,7 @@ export default function OtherDocsView({
       resolved={resolved}
       hasJira={hasJira}
       hasDesign={hasDesign}
+      hasQa={hasQa}
       orderKind={orderKind}
     />
   );

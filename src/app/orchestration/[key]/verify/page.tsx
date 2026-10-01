@@ -27,6 +27,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ key: st
       worktreeRemoved={epic.worktreeRemoved}
       hasJira={epic.hasJiraDoc || isJiraIssueKey(key)}
       hasDesign={epic?.hasDesignDoc ?? false}
+      hasQa={!!epic?.qa}
       orderKind={epic.orderKind ?? null}
       runs={epic.runs}
       testGuideMd={epic.testGuideMd}

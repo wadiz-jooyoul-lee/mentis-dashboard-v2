@@ -38,6 +38,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "design") return `/orchestration/${key}/design`;
   if (tab === "explain") return `/orchestration/${key}/explain`;
   if (tab === "verify") return `/orchestration/${key}/verify`;
+  if (tab === "qa") return `/orchestration/${key}/qa`;
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
   if (tab === "artifact") return `/orchestration/${key}/artifact`;
@@ -52,6 +53,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/design")) return "design";
   if (pathname.endsWith("/explain")) return "explain";
   if (pathname.endsWith("/verify")) return "verify";
+  if (pathname.endsWith("/qa")) return "qa";
   if (pathname.endsWith("/jira")) return "jira";
   if (pathname.endsWith("/artifact")) return "artifact";
   if (pathname.endsWith("/retro")) return "retro";
@@ -73,6 +75,7 @@ export default function OrderHeader({
   resolved = false,
   hasJira = false,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
   extra,
 }: {
@@ -89,6 +92,8 @@ export default function OrderHeader({
   hasJira?: boolean;
   /** design.md/outcome.md가 있어 "설계/결과" 탭을 노출할지(과거 오더는 문서가 없어 미노출). */
   hasDesign?: boolean;
+  /** QA 감시가 돈 오더면 true(qa-watch.md 존재). QA 탭을 켠다. */
+  hasQa?: boolean;
   /** 오더 종류. "summary"(작업 내용 정리)면 탭을 축소하고 explain을 "작업 내용"으로 라벨링. */
   orderKind?: "development" | "deliverable" | "summary" | null;
   extra?: React.ReactNode;
@@ -102,9 +107,13 @@ export default function OrderHeader({
   const rawActive = activeTab(pathname);
   const active = isSummary && rawActive === "board" ? "explain" : rawActive;
   // 설계/결과는 "구현 내용" 앞에 끼운다(문서가 있을 때만 — 과거 오더 미노출).
-  const baseTabs = hasDesign
+  const baseTabs0 = hasDesign
     ? TABS.flatMap((t) => (t.key === "explain" ? [{ key: "design", label: "설계/결과" }, t] : [t]))
     : TABS;
+  // QA 탭은 QA 감시가 돈 오더에만 보인다 — 개발 → 검증 → QA 순이라 "검증" 뒤에 끼운다.
+  const baseTabs = hasQa
+    ? baseTabs0.flatMap((t) => (t.key === "verify" ? [t, { key: "qa", label: "QA" }] : [t]))
+    : baseTabs0;
   // 문서·아티팩트·회고는 내용이 없어도 항상 노출한다(빈 화면이 안내·생성 버튼을 제공).
   // 문서 탭 = 전용 탭이 없는 루트 .md 모음. 전체 메타 기준 75/109 오더가 이런 문서를 갖고 있다.
   const items = isSummary

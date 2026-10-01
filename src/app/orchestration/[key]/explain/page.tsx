@@ -22,6 +22,7 @@ export default async function ExplainPage({ params }: { params: Promise<{ key: s
       worktreeRemoved={epic?.worktreeRemoved ?? false}
       hasJira={epic?.hasJiraDoc || isJiraIssueKey(key)}
       hasDesign={epic?.hasDesignDoc ?? false}
+      hasQa={!!epic?.qa}
       orderKind={epic?.orderKind ?? null}
     />
   );
