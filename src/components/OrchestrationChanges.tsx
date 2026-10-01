@@ -14,7 +14,7 @@ import { isJiraIssueKey } from "@/lib/keys";
 import GroupAvatar from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import { dobbyColor } from "@/lib/dobby";
-import type { QuipsFile, QuipEntry } from "@/lib/quips";
+import { quipList, type QuipsFile, type QuipEntry } from "@/lib/quipTypes";
 import "./markdown.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -292,7 +292,7 @@ export default function OrchestrationChanges({
                 <Card
                   title={
                     <Space size={8} align="center" wrap>
-                      <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatarMap.get(a.agent)} state={a.state} size={26} quip={quips?.changes?.[a.agent]} />
+                      <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatarMap.get(a.agent)} state={a.state} size={26} quips={quipList(quips?.changes?.[a.agent])} />
                       <Tooltip title={a.desc || undefined}>
                         <Text strong style={{ fontSize: 16 }}>
                           {a.name || a.agent}
