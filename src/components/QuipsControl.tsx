@@ -17,7 +17,6 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const polls = useRef(0);
-  const triggered = useRef(false);
   const manualRef = useRef(false); // 현재 진행 중인 실행이 수동(버튼)인지
 
   const stopPoll = () => {
@@ -114,23 +113,29 @@ export default function QuipsControl({ epicKey }: { epicKey: string }) {
     [epicKey, poll]
   );
 
+  // 예약 콜백이 start의 최신 판을 부르게 한다. 아래 이펙트가 start에 의존하지 않게 하는 장치.
+  const startRef = useRef(start);
+  startRef.current = start;
+
   useEffect(() => {
-    if (triggered.current) return;
-    triggered.current = true;
     // 진입 즉시가 아니라 **브라우저가 한가해진 뒤**에 시작한다(최하위 우선순위).
     // 예전에는 마운트하자마자 API를 불러 화면이 뜨는 중에 서버 작업이 끼어들었다.
     // requestIdleCallback을 지원하지 않는 브라우저는 지연 타이머로 대체한다.
+    //
+    // ⛔ 의존성은 반드시 비워 둔다. start를 의존성에 넣으면 그 참조가 바뀔 때
+    //    이펙트가 다시 돌면서 **cleanup이 예약을 취소**하는데, 예약을 한 번만 걸도록
+    //    막아 둔 탓에 다시 걸리지 않아 자동 생성이 영영 죽는다(실측: 등록 12ms 뒤 취소).
     const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
     let idleId: number | undefined;
     let timerId: number | undefined;
-    if (ric) idleId = ric(() => start(false), { timeout: 5000 });
-    else timerId = window.setTimeout(() => start(false), 2000);
+    if (ric) idleId = ric(() => startRef.current(false), { timeout: 5000 });
+    else timerId = window.setTimeout(() => startRef.current(false), 2000);
     return () => {
       if (idleId !== undefined) window.cancelIdleCallback?.(idleId);
       if (timerId !== undefined) window.clearTimeout(timerId);
       stopPoll();
     };
-  }, [start]);
+  }, []);
 
   if (!canAct) return null; // 읽기 전용 화면에는 리프레시 버튼을 그리지 않는다
   return (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -17,14 +18,20 @@ import {
   Empty,
   Alert,
   Tooltip,
+  Button,
 } from "antd";
-import { WarningOutlined, FileTextOutlined } from "@ant-design/icons";
-import GroupAvatar from "@/components/GroupAvatar";
+import {
+  WarningOutlined,
+  FileTextOutlined,
+  MessageOutlined,
+  MutedOutlined,
+} from "@ant-design/icons";
+import GroupAvatar, { type QuipPlacement } from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import { ShipProgress } from "@/components/ShipProgress";
-import type { QuipsFile, Quip } from "@/lib/quips";
+import { quipList, type QuipsFile, type Quip } from "@/lib/quipTypes";
 import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
@@ -138,7 +145,8 @@ function AgentCard({
   epicKey,
   changeSlug,
   avatar,
-  quip,
+  quips,
+  placement,
 }: {
   a: AgentRow;
   epicKey: string;
@@ -146,11 +154,15 @@ function AgentCard({
   changeSlug?: string;
   /** 배정된 그룹 아바타 */
   avatar?: AssignedAvatar;
-  /** 이 에이전트의 board 소감(있으면 호버 말풍선) */
-  quip?: Quip | null;
+  /** 이 에이전트의 board 소감 목록(스스로 돌아가며 말풍선을 띄운다) */
+  quips?: Quip[];
+  /** 말풍선을 띄울 방향(옆 열이 빈 쪽) */
+  placement?: QuipPlacement;
 }) {
   const router = useRouter();
   const stale = isStale(a);
+  // 소감이 스스로 말하는 게 거슬릴 때 끄는 스위치. 꺼도 호버하면 보여 준다.
+  const [muted, setMuted] = useState(false);
   // 로그 유무와 무관하게 모든 에이전트 카드를 클릭 가능 → 변경 페이지의 해당 에이전트 섹션으로.
   const clickable = !!a.agent && a.agent !== "-";
   const anchor = a.agent.trim().replace(/\s+/g, "-");
@@ -164,14 +176,44 @@ function AgentCard({
       hoverable={clickable}
       onClick={goToChanges}
       style={{
+        position: "relative", // 오른쪽 위 뮤트 버튼의 기준
         marginBottom: 8,
         borderColor: stale ? "#ffccc7" : undefined,
         cursor: clickable ? "pointer" : undefined,
       }}
     >
+      {(quips?.length ?? 0) >= 2 && (
+        <Tooltip title={muted ? "소감 켜기" : "소감 끄기"}>
+          <Button
+            type="text"
+            size="small"
+            aria-label={muted ? "소감 켜기" : "소감 끄기"}
+            icon={muted ? <MutedOutlined /> : <MessageOutlined />}
+            onClick={(e) => {
+              e.stopPropagation(); // 카드 클릭(코드 변경 페이지 이동)과 겹치지 않게
+              setMuted((v) => !v);
+            }}
+            style={{
+              position: "absolute",
+              top: 2,
+              right: 2,
+              color: muted ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.25)",
+            }}
+          />
+        </Tooltip>
+      )}
       <Space orientation="vertical" size={4} style={{ width: "100%" }}>
         <Space size={6} wrap align="center">
-          <GroupAvatar slug={a.agent} name={a.name || a.agent} avatar={avatar} state={a.state} size={34} quip={quip} />
+          <GroupAvatar
+            slug={a.agent}
+            name={a.name || a.agent}
+            avatar={avatar}
+            state={a.state}
+            size={34}
+            quips={quips}
+            mode={muted ? "hover" : "auto"}
+            placement={placement}
+          />
           {a.agent && (
             <Tooltip title={a.desc || undefined}>
               <Tag
@@ -241,9 +283,9 @@ export default function OrchestrationBoard({
 
   // 오케스트레이터(오더 지휘 메인 세션) 아바타 + 브리핑 소감.
   const orchAvatar = epic?.avatars?.[ORCHESTRATOR_SLUG];
-  const orchQuip = quips?.board?.[ORCHESTRATOR_SLUG] ?? null;
+  const orchQuips = quipList(quips?.board?.[ORCHESTRATOR_SLUG]);
   const orchestratorAvatar = (size: number) => (
-    <GroupAvatar slug={ORCHESTRATOR_SLUG} name="오케스트레이터" avatar={orchAvatar} quip={orchQuip} size={size} />
+    <GroupAvatar slug={ORCHESTRATOR_SLUG} name="오케스트레이터" avatar={orchAvatar} quips={orchQuips} size={size} />
   );
 
   // slug → 에이전트 표시 이름. **상태표(orchestration.md '이름')가 실제(카드에 뜨는) 이름**이며 최우선.
@@ -323,6 +365,14 @@ export default function OrchestrationBoard({
   // 고정 열(정식 순서) + 정의 밖 상태는 뒤에 추가(사라지지 않게)
   const extras = Object.keys(counts).filter((s) => !STATE_ORDER.includes(s));
   const cols = [...STATE_ORDER, ...extras];
+  // 말풍선은 옆 열을 덮으므로 **비어 있는 쪽**으로 띄운다. 양옆이 다 차 있으면 위로.
+  // 양끝 열은 보드 바깥 여백을 빈 쪽으로 본다(폭이 모자라면 antd가 화면 안으로 밀어 넣는다).
+  const colCount = cols.map((c) => counts[c] ?? 0);
+  const placementFor = (i: number): QuipPlacement => {
+    if (i === 0 || colCount[i - 1] === 0) return "left";
+    if (i === cols.length - 1 || colCount[i + 1] === 0) return "right";
+    return "top";
+  };
   const total = o.agents.length;
   const staleAgents = o.agents.filter(isStale);
 
@@ -402,9 +452,10 @@ export default function OrchestrationBoard({
       {/* 칸반 보드 */}
       <Title level={4}>에이전트 상태</Title>
       <Row gutter={[12, 12]}>
-        {cols.map((col) => {
+        {cols.map((col, colIdx) => {
           const b = agentStateBadge(col);
           const items = o.agents.filter((a) => a.state === col);
+          const placement = placementFor(colIdx);
           // 5개 고정 열 → 폭을 균등하게 나눠 전체 너비를 채운다(좁은 화면에선 줄바꿈).
           return (
             <Col
@@ -431,7 +482,8 @@ export default function OrchestrationBoard({
                     epicKey={epicKey}
                     changeSlug={changeSlugFor(a.agent)}
                     avatar={avatarMap.get(a.agent)}
-                    quip={quips?.board?.[a.agent]}
+                    quips={quipList(quips?.board?.[a.agent])}
+                    placement={placement}
                   />
                 ))}
               </div>
@@ -530,7 +582,7 @@ export default function OrchestrationBoard({
                     avatar={avatarMap.get(g.agent)}
                     state={o?.agents.find((x) => x.agent === g.agent)?.state}
                     size={24}
-                    quip={quips?.reviews?.[g.agent]}
+                    quips={quipList(quips?.reviews?.[g.agent])}
                   />
                   <Text strong>{nameBySlug.get(g.agent) ?? g.agent}</Text>
                   <Tag>{g.reviews.length}개 라운드</Tag>
