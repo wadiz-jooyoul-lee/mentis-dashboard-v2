@@ -345,15 +345,11 @@ export default function IssueReport({
   const inProgress =
     status?.state === "테스트중" || status?.state === "분석중";
 
-  // 기본은 **최신 회차**다(runs 는 최신순). "지금 어떤 상태인가"가 먼저 보여야 한다.
-  //
-  // 예전에는 회차가 둘 이상이면 "전체 모아 보기"가 기본이었는데, 모아 보기는 시나리오를
-  // **번호로 묶는다**(testSummary.ts). 그런데 회차마다 번호를 새로 매기는 일이 있어서
-  // (FE1-1800: 3회차 `S4` 실패를 4회차가 `S1` 로 다시 매겨 통과) 이미 해소된 실패가
-  // 계속 빨갛게 남고, 서로 다른 시나리오가 같은 번호로 합쳐지기도 한다.
-  // 누적해서 보고 싶으면 고르면 된다 — 기본으로 띄워 오해를 주지는 않는다.
+  // 회차가 둘 이상이면 "전체"가 기본 — 재실행에서 무엇이 달라졌는지 먼저 보이게.
   const ALL = "__all__";
-  const [selectedId, setSelectedId] = useState(runs[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(
+    summary && runs.length > 1 ? ALL : (runs[0]?.id ?? "")
+  );
   const showAll = selectedId === ALL && !!summary;
   const selected = showAll ? null : (runs.find((r) => r.id === selectedId) ?? runs[0] ?? null);
 
