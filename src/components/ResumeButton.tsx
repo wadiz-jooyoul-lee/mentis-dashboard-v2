@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Popover, Space, Typography, message, Empty, Spin, Alert } from "antd";
+import { useEffect, useState } from "react";
+import { Button, Popover, Space, Tag, Tooltip, Typography, message, Empty, Spin, Alert } from "antd";
 import { PlayCircleOutlined, CopyOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
@@ -59,6 +59,10 @@ type Session = {
   sessionId: string | null;
   cwd: string | null;
   cwdExists: boolean;
+  /** 지금 떠 있는 그 세션의 이름(말을 걸 때 쓰는 주소). 꺼져 있으면 null. */
+  sessionName: string | null;
+  /** 그 세션의 상태 — idle(쉬는 중) · busy(작업 중). */
+  sessionStatus: string | null;
   /** 사라진 워크트리들(멀티 repo면 여러 개). 비어 있으면 코드 폴더가 다 살아 있다는 뜻. */
   restore: Restore[];
 };
@@ -115,13 +119,29 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         sessionId: j.sessionId ?? null,
         cwd: j.cwd ?? null,
         cwdExists: !!j.cwdExists,
+        sessionName: j.sessionName ?? null,
+        sessionStatus: j.sessionStatus ?? null,
         restore: Array.isArray(j.restore) ? j.restore : [],
       });
     } catch {
-      setData({ sessionId: null, cwd: null, cwdExists: false, restore: [] });
+      setData({
+        sessionId: null,
+        cwd: null,
+        cwdExists: false,
+        sessionName: null,
+        sessionStatus: null,
+        restore: [],
+      });
     }
     setLoading(false);
   };
+
+  // 세션 이름은 **눌러 보기 전에도** 보여야 하므로(이 오더를 누가 맡고 있는지가 한눈에 보이는 게 목적)
+  // 버튼을 열 때가 아니라 화면이 뜰 때 한 번 읽는다. 서버 쪽은 5초 메모이즈돼 있다.
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epicKey]);
 
   const onOpenChange = (o: boolean) => {
     setOpen(o);
@@ -218,18 +238,44 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
     </div>
   );
 
+  const copyName = async () => {
+    if (!data?.sessionName) return;
+    const ok = await copyText(data.sessionName);
+    if (ok) message.success(`세션 이름 복사됨 — ${data.sessionName}`);
+    else message.error("복사 실패 — 이름을 직접 선택해 복사하세요");
+  };
+
+  // 부모가 <Space size={4}>라 조각(fragment)으로 내보내면 둘이 한 칸으로 묶여 간격이 사라진다.
   return (
-    <Popover
-      title="세션 이어가기 (claude --resume)"
-      trigger="click"
-      open={open}
-      onOpenChange={onOpenChange}
-      content={content}
-      placement="bottomRight"
-    >
-      <Button type="link" icon={<PlayCircleOutlined />}>
-        이어가기
-      </Button>
-    </Popover>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      {/* 세션이 **지금 떠 있을 때만** 이름을 보여준다. 꺼진 세션 이름을 띄우면
+          복사해 말을 걸었다가 "그런 세션 없다"는 답을 받게 된다. */}
+      {data?.sessionName && (
+        <Tooltip
+          // 이름은 겹칠 수 있다(폴더 이름 + 무작위 2자리). 어느 폴더의 세션인지 함께 보여 구분한다.
+          title={`이 오더를 맡은 세션${data.cwd ? ` · ${data.cwd}` : ""} · 눌러서 이름 복사`}
+        >
+          <Tag
+            color={data.sessionStatus === "busy" ? "processing" : "success"}
+            onClick={copyName}
+            style={{ cursor: "pointer", marginInlineEnd: 0 }}
+          >
+            {data.sessionName}
+          </Tag>
+        </Tooltip>
+      )}
+      <Popover
+        title="세션 이어가기 (claude --resume)"
+        trigger="click"
+        open={open}
+        onOpenChange={onOpenChange}
+        content={content}
+        placement="bottomRight"
+      >
+        <Button type="link" icon={<PlayCircleOutlined />}>
+          이어가기
+        </Button>
+      </Popover>
+    </span>
   );
 }
