@@ -11,6 +11,7 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
+import { liveSessionByUuid } from "@/lib/sessionRegistry";
 import {
   parseOrchestration,
   type Orchestration,
@@ -69,6 +70,13 @@ export type OrderSession = {
   /** 세션의 작업 경로가 지금도 있는가. */
   cwdExists: boolean;
   /**
+   * 지금 떠 있는 그 세션의 **이름** — 다른 세션이 말을 걸 때 쓰는 주소(예: `dobby-playground-2c`).
+   * 꺼져 있으면 null. 이름은 바뀔 수 있어 메타에 적어 두지 않고 세션 ID로 그때그때 찾는다.
+   */
+  sessionName: string | null;
+  /** 그 세션의 상태 — idle(쉬는 중) · busy(작업 중). */
+  sessionStatus: string | null;
+  /**
    * **사라진 워크트리** 목록 — 되살리는 데 필요한 정보.
    *
    * 세션의 `작업 경로`는 오케스트레이터가 돌던 폴더(원본 저장소 등)라 보통 삭제되지 않는다.
@@ -82,7 +90,8 @@ export type OrderSession = {
 
 export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
-  if (!md) return { sessionId: null, cwd: null, cwdExists: false, restore: [] };
+  if (!md)
+    return { sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null, restore: [] };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
@@ -102,7 +111,15 @@ export function readOrderSession(key: string): OrderSession {
       (abs.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), "");
     restore.push({ repo, branch: w.branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
   }
-  return { sessionId, cwd, cwdExists, restore };
+  const live = liveSessionByUuid(sessionId);
+  return {
+    sessionId,
+    cwd,
+    cwdExists,
+    sessionName: live?.name ?? null,
+    sessionStatus: live?.status ?? null,
+    restore,
+  };
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
