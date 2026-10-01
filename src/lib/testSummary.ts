@@ -179,8 +179,18 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
   // (1회차 `홈 — 친구 활동 더보기` / 2회차 `/web/main`). 번호가 없을 때만 이름으로 묶는다.
   const seen = new Map<
     string,
-    { num: string; name: string; conds: string[]; runs: number[]; verdicts: Verdict[]; note: string }
+    {
+      num: string;
+      name: string;
+      page: string;
+      conds: string[];
+      runs: number[];
+      verdicts: Verdict[];
+      note: string;
+    }
   >();
+  // 페이지(URL) → 회차별 판정. 번호가 바뀌어 안 묶인 재확인을 이어 붙이는 데 쓴다(아래 "해소" 판정).
+  const byPage = new Map<string, { run: number; verdict: Verdict }[]>();
 
   for (const id of entries) {
     const dir = path.join(runsDir, id);
@@ -219,7 +229,10 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
       const name = (s.check || s.page || "").trim();
       const key = num || name;
       if (!key) continue;
-      const cur = seen.get(key) ?? { num, name, conds: [], runs: [], verdicts: [], note: "" };
+      const page = (s.page || "").trim();
+      if (page) byPage.set(page, [...(byPage.get(page) ?? []), { run: no, verdict: s.verdict }]);
+      const cur = seen.get(key) ?? { num, name, page: "", conds: [], runs: [], verdicts: [], note: "" };
+      if (page) cur.page = page;
       // 이름·조건은 최근 회차 것으로 갱신한다(뒤 회차가 더 다듬어져 있는 편이다).
       if (name) cur.name = name;
       const conds = parseConds(s.cond || "");
@@ -238,14 +251,33 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
   const items: ItemLine[] = [...seen.values()].map((v) => {
     const last = v.verdicts[v.verdicts.length - 1];
     const varied = new Set(v.verdicts).size > 1;
+    const lastRun = v.runs[v.runs.length - 1];
+
+    // 실패로 끝났더라도, **그 뒤 회차에서 같은 페이지를 다시 봐서 전부 통과**했으면 해소로 본다.
+    //
+    // 왜 필요한가: 이 묶음은 시나리오 **번호**를 키로 쓰는데, 재확인 회차가 번호를 새로
+    // 매기는 일이 있다(FE1-1800: 3회차 `S4` 실패를 4회차가 `S1` 로 다시 매겨 통과).
+    // 그러면 `S4` 키에는 실패 하나만 남아 **이미 고친 것이 영영 빨갛게 남는다**.
+    // 번호를 물려받는 규칙은 dobby-test 에 들어갔지만(v0.2.59) 그 전에 쌓인 기록이 남아 있다.
+    //
+    // 페이지가 같다고 반드시 같은 확인은 아니므로, **뒤 회차가 하나라도 실패면 해소로 보지
+    // 않는다**. 해소로 본 경우에는 왜 그렇게 봤는지를 note 에 적어 사람이 되짚을 수 있게 한다.
+    const later = v.page ? (byPage.get(v.page) ?? []).filter((x) => x.run > lastRun) : [];
+    const resolved =
+      last === "fail" && later.length > 0 && later.every((x) => x.verdict === "pass");
+    const resolvedNote = resolved
+      ? `${lastRun}회차 실패 — ${later[later.length - 1].run}회차에 같은 페이지를 다시 확인해 통과했습니다.` +
+        (v.note ? ` (당시 기록: ${v.note})` : "")
+      : "";
+
     return {
       num: v.num,
       conds: v.conds,
       name: v.name,
-      runs: v.runs,
-      verdict: last,
-      changed: varied ? v.verdicts : null,
-      note: v.note,
+      runs: resolved ? [...v.runs, ...later.map((x) => x.run)] : v.runs,
+      verdict: resolved ? "pass" : last,
+      changed: resolved ? [...v.verdicts, "pass" as Verdict] : varied ? v.verdicts : null,
+      note: resolved ? resolvedNote : v.note,
     };
   });
 
