@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Button, Popover, Space, Tag, Tooltip, Typography, message, Empty, Spin, Alert } from "antd";
+import workStateLine from "@/components/WorkStateText";
+import type { WorkState } from "@/lib/workStateTypes";
 import { PlayCircleOutlined, CopyOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
@@ -63,6 +65,8 @@ type Session = {
   sessionName: string | null;
   /** 그 세션의 상태 — idle(쉬는 중) · busy(작업 중). */
   sessionStatus: string | null;
+  /** 그 세션이 지금 무엇을 하는지(8가지 중 하나). 꺼져 있으면 null. */
+  sessionWorkState: WorkState | null;
   /** 사라진 워크트리들(멀티 repo면 여러 개). 비어 있으면 코드 폴더가 다 살아 있다는 뜻. */
   restore: Restore[];
 };
@@ -121,6 +125,7 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         cwdExists: !!j.cwdExists,
         sessionName: j.sessionName ?? null,
         sessionStatus: j.sessionStatus ?? null,
+        sessionWorkState: j.sessionWorkState ?? null,
         restore: Array.isArray(j.restore) ? j.restore : [],
       });
     } catch {
@@ -130,6 +135,7 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         cwdExists: false,
         sessionName: null,
         sessionStatus: null,
+        sessionWorkState: null,
         restore: [],
       });
     }
@@ -251,18 +257,22 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
       {/* 세션이 **지금 떠 있을 때만** 이름을 보여준다. 꺼진 세션 이름을 띄우면
           복사해 말을 걸었다가 "그런 세션 없다"는 답을 받게 된다. */}
       {data?.sessionName && (
-        <Tooltip
-          // 이름은 겹칠 수 있다(폴더 이름 + 무작위 2자리). 어느 폴더의 세션인지 함께 보여 구분한다.
-          title={`이 오더를 맡은 세션${data.cwd ? ` · ${data.cwd}` : ""} · 눌러서 이름 복사`}
-        >
-          <Tag
-            color={data.sessionStatus === "busy" ? "processing" : "success"}
-            onClick={copyName}
-            style={{ cursor: "pointer", marginInlineEnd: 0 }}
+        // 이름 아래에 "지금 뭘 하는지"를 한 줄 더 붙인다. 보드 목록과 같은 모양·색을 쓴다.
+        <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <Tooltip
+            // 이름은 겹칠 수 있다(폴더 이름 + 무작위 2자리). 어느 폴더의 세션인지 함께 보여 구분한다.
+            title={`이 오더를 맡은 세션${data.cwd ? ` · ${data.cwd}` : ""} · 눌러서 이름 복사`}
           >
-            {data.sessionName}
-          </Tag>
-        </Tooltip>
+            <Tag
+              color={data.sessionStatus === "busy" ? "processing" : "success"}
+              onClick={copyName}
+              style={{ cursor: "pointer", marginInlineEnd: 0 }}
+            >
+              {data.sessionName}
+            </Tag>
+          </Tooltip>
+          {workStateLine(data.sessionWorkState)}
+        </span>
       )}
       <Popover
         title="세션 이어가기 (claude --resume)"

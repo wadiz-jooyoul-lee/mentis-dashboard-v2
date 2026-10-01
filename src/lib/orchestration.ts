@@ -12,6 +12,7 @@ import { spawnSync } from "node:child_process";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
 import { liveSessionByUuid } from "@/lib/sessionRegistry";
+import { workState, type WorkState } from "@/lib/workState";
 import {
   parseOrchestration,
   type Orchestration,
@@ -77,6 +78,15 @@ export type OrderSession = {
   /** 그 세션의 상태 — idle(쉬는 중) · busy(작업 중). */
   sessionStatus: string | null;
   /**
+   * 그 세션이 **지금 무엇을 하는지**(8가지 중 하나). 세션이 꺼져 있으면 null.
+   *
+   * 목록(listEpics)과 달리 여기서는 **끝난 오더인지를 따지지 않는다** — 상세 화면의 이
+   * 값은 세션 이름 바로 아래 붙어 "이 세션이 지금 뭘 한다"로 읽히기 때문이다. 그건 오더가
+   * 끝났든 아니든 사실이다. 목록의 열은 오더 줄에 붙어 "이 오더가 …"로 읽히므로 거기서만
+   * 자격을 가린다.
+   */
+  sessionWorkState: WorkState | null;
+  /**
    * **사라진 워크트리** 목록 — 되살리는 데 필요한 정보.
    *
    * 세션의 `작업 경로`는 오케스트레이터가 돌던 폴더(원본 저장소 등)라 보통 삭제되지 않는다.
@@ -91,7 +101,15 @@ export type OrderSession = {
 export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
   if (!md)
-    return { sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null, restore: [] };
+    return {
+      sessionId: null,
+      cwd: null,
+      cwdExists: false,
+      sessionName: null,
+      sessionStatus: null,
+      sessionWorkState: null,
+      restore: [],
+    };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
@@ -118,6 +136,7 @@ export function readOrderSession(key: string): OrderSession {
     cwdExists,
     sessionName: live?.name ?? null,
     sessionStatus: live?.status ?? null,
+    sessionWorkState: live ? workState(sessionId) : null,
     restore,
   };
 }
@@ -293,6 +312,11 @@ export type EpicSummary = {
   phaseLabel: string;
   /** dobby-ship 배포 단계 — 환경마다 한 행. 목록 "배포" 컬럼용. 없으면 빈 배열. */
   ship: ShipRow[];
+  /**
+   * 이 오더를 맡은 **세션이 지금 무엇을 하는지**(8가지 중 하나). 보여줄 자격이 없으면 null.
+   * 위 `phase`(오더가 어디까지 왔는지)와 뜻이 다르다 — 섞지 말 것.
+   */
+  workState: WorkState | null;
 };
 
 // "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
@@ -342,17 +366,64 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
     ship: shipFromTestRuns(orderDir(key), st?.ship ?? []),
+    // listEpics가 자격을 가린 뒤 채운다(여기서는 알 수 없다 — 다른 오더와 비교해야 한다).
+    workState: null,
   };
 }
 
 export function listEpics(): EpicSummary[] {
   const epics: EpicSummary[] = [];
+  const uuids = new Map<string, string | null>();
   for (const key of epicKeys()) {
     const statusMd = readFileSafe(path.join(orderDir(key), "status.md"));
     epics.push(summarize(key, orchestrationOf(key, statusMd), statusMd));
+    uuids.set(key, sessionUuidOf(statusMd));
   }
   epics.sort((a, b) => (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
+  fillWorkStates(epics, uuids);
   return epics;
+}
+
+/** status.md `## 세션`의 세션 UUID. 없으면 null. */
+function sessionUuidOf(statusMd: string | null): string | null {
+  if (!statusMd) return null;
+  const sec = statusMd.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? statusMd;
+  return sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
+}
+
+/**
+ * 각 오더에 **세션 작업 상태**를 채운다. 아무 오더에나 붙이면 거짓이 된다 —
+ * 작업 상태는 **세션의 것**이지 오더의 것이 아니기 때문이다. 두 가지로 자격을 가린다.
+ *
+ * ① **끝난 오더에는 붙이지 않는다.** 그 세션은 이미 다른 일을 하고 있다.
+ *    실측: 끝난 단계(해결·종료)인데 세션 상태가 붙는 오더가 8건이었고, 그중 FE1-1576은
+ *    9월 1일에 끝났는데 "질문 대기"로 뜨고 있었다. 기준은 화면의 "작업 상태" 열과 같게
+ *    맞춘다(worktreeRemoved · 종료 · 해결).
+ * ② **한 세션이 여러 오더에 걸리면 가장 최근 것 하나만.** 세션은 하나인데 같은 상태가
+ *    여러 줄에 똑같이 떠서 몇 개가 기다리는 중인지 셀 수 없게 된다.
+ *    실측 3쌍: static-25(FE1-1301·FE-10884) · wadiz-frontend-a8(FE1-1576·FE1-1423) ·
+ *    dobby-playground-fc(FE1-1800·FE1-1957).
+ *
+ * 목록은 이미 lastActivity 최신순으로 정렬돼 있으므로 **먼저 만난 쪽이 최근 것**이다.
+ */
+function fillWorkStates(epics: EpicSummary[], uuids: Map<string, string | null>): void {
+  const taken = new Set<string>();
+  for (const e of epics) {
+    const uuid = uuids.get(e.epicKey);
+    if (!uuid) continue;
+    // `완료`는 phaseKey 정규화 규칙에 없어 phase가 unknown으로 떨어진다(실측 7건:
+    // FE1-1843·FE1-2059·FE1-1748·TASK 4건). 끝난 오더인데 자격 검사를 그냥 통과해
+    // 엉뚱한 상태가 붙으므로 라벨로 한 번 더 막는다. 공용 파서는 건드리지 않는다 —
+    // 다른 화면의 단계 표시까지 바뀐다.
+    const label = e.phaseLabel.replace(/\*/g, "").trim();
+    const finished =
+      e.worktreeRemoved || e.phase === "종료" || e.phase === "해결" || label === "완료";
+    if (finished || taken.has(uuid)) continue;
+    const st = workState(uuid);
+    if (!st) continue;
+    taken.add(uuid);
+    e.workState = st;
+  }
 }
 
 /** 아티팩트 한 건 + 그것을 낸 오더 정보(아티팩트 모아보기 화면용). */

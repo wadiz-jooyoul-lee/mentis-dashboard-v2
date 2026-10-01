@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
+import workStateLine from "@/components/WorkStateText";
 import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
@@ -57,6 +58,10 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
   return { text: "작업중", color: "processing" };
 }
 
+/**
+ * 세션 작업 상태별 색. 사용자가 무언가 해 줘야 움직이는 상태(권한·질문)는 **주황**으로
+ * 묶어 눈에 띄게 한다 — 이 열의 목적이 "나를 기다리는 세션을 놓치지 않는 것"이다.
+ */
 /** 작업상태 필터 값. "전체"는 필터 없음. */
 type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
 
@@ -190,10 +195,10 @@ export default function OrchestrationList({
       key: "workStatus",
       render: (_: unknown, r: EpicSummary) => {
         const s = workStatus(r);
-        if (s.text === "종료") {
-          // 종료(워크트리 정리 완료) = 도비 해방. 얼굴 + 호버 툴팁.
-          return (
-            <Tag color={s.color}>
+        const tag =
+          s.text === "종료" ? (
+            // 종료(워크트리 정리 완료) = 도비 해방. 얼굴 + 호버 툴팁.
+            <Tag color={s.color} style={{ marginInlineEnd: 0 }}>
               <Tooltip title="도비는 자유에요">
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <DobbyIcon size={14} expression="happy" color={dobbyColor("종료")} />
@@ -201,9 +206,18 @@ export default function OrchestrationList({
                 </span>
               </Tooltip>
             </Tag>
+          ) : (
+            <Tag color={s.color} style={{ marginInlineEnd: 0 }}>{s.text}</Tag>
           );
-        }
-        return <Tag color={s.color}>{s.text}</Tag>;
+        const line = workStateLine(r.workState);
+        // 둘째 줄이 없으면 태그만 — 예전과 똑같이 보인다(끝난 오더 대부분이 여기 해당).
+        if (!line) return tag;
+        return (
+          <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+            {tag}
+            {line}
+          </div>
+        );
       },
     },
     ...(anyShip
