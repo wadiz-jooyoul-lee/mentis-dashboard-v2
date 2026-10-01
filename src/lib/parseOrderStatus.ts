@@ -210,7 +210,7 @@ export type OrderStatus = {
 };
 
 /** "## 이슈/작업" 섹션 본문(다음 ## 전까지)을 뽑는다. */
-function sectionBody(md: string, heading: RegExp): string {
+export function sectionBody(md: string, heading: RegExp): string {
   const lines = md.split("\n");
   const out: string[] = [];
   let inSec = false;

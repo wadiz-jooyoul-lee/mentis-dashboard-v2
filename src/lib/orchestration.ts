@@ -25,6 +25,7 @@ import {
 } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import { memoByFileStat } from "@/lib/fileMemo";
+import { parseQa, type QaInfo } from "@/lib/parseQa";
 import { findTable, columnIndex, fieldLine } from "@/lib/md";
 import {
   assignOrderAvatars,
@@ -789,6 +790,11 @@ export type EpicDetail = {
   hasJiraDoc: boolean;
   hasDesignDoc: boolean;
   hasExplainerDoc: boolean;
+  /**
+   * QA 감시(dobby-qa) 상태. `qa-watch.md` 가 있을 때만 채워진다 —
+   * 그 파일이 곧 "이 오더에 QA 가 돌았다"는 표시이고, 헤더는 이것으로 QA 탭을 켠다.
+   */
+  qa: QaInfo | null;
 };
 
 /**
@@ -1415,6 +1421,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     hasDesignDoc:
       fs.existsSync(path.join(dir, "design.md")) || fs.existsSync(path.join(dir, "outcome.md")),
     hasExplainerDoc: fs.existsSync(path.join(dir, "explainer.md")),
+    qa: parseQa(readFileSafe(path.join(dir, "qa-watch.md")), statusMd),
   };
 }
 

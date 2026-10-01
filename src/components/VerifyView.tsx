@@ -19,6 +19,7 @@ export default function VerifyView({
   resolved = false,
   hasJira,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
   runs,
   summary = null,
@@ -31,6 +32,7 @@ export default function VerifyView({
   resolved?: boolean;
   hasJira: boolean;
   hasDesign?: boolean;
+  hasQa?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
   runs: ReportRun[];
   /** 모든 회차를 모은 요약. 회차가 없으면 null. */
@@ -47,6 +49,7 @@ export default function VerifyView({
         resolved={resolved}
         hasJira={hasJira}
         hasDesign={hasDesign}
+        hasQa={hasQa}
         orderKind={orderKind}
       />
       <div style={{ marginTop: 16 }}>

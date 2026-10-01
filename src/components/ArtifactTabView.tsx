@@ -64,6 +64,7 @@ export default function ArtifactTabView({
   resolved = false,
   hasJira,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
 }: {
   epicKey: string;
@@ -80,6 +81,7 @@ export default function ArtifactTabView({
   resolved?: boolean;
   hasJira: boolean;
   hasDesign?: boolean;
+  hasQa?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   // origin은 클라이언트에서만 — hydration 불일치 방지 위해 mount 후 설정.
@@ -103,6 +105,7 @@ export default function ArtifactTabView({
         resolved={resolved}
         hasJira={hasJira}
         hasDesign={hasDesign}
+        hasQa={hasQa}
         orderKind={orderKind}
       />
 

@@ -150,6 +150,7 @@ export default function ExplainerView({
   resolved = false,
   hasJira = false,
   hasDesign = false,
+  hasQa = false,
   orderKind = null,
 }: {
   epicKey: string;
@@ -161,6 +162,7 @@ export default function ExplainerView({
   resolved?: boolean;
   hasJira?: boolean;
   hasDesign?: boolean;
+  hasQa?: boolean;
   orderKind?: "development" | "deliverable" | "summary" | null;
 }) {
   return (
@@ -173,6 +175,7 @@ export default function ExplainerView({
         resolved={resolved}
         hasJira={hasJira}
         hasDesign={hasDesign}
+        hasQa={hasQa}
         orderKind={orderKind}
       />
       {!md ? (

@@ -22,6 +22,7 @@ export default async function DocsPage({ params }: { params: Promise<{ key: stri
       resolved={epic.resolved}
       hasJira={epic.hasJiraDoc || isJiraIssueKey(key)}
       hasDesign={epic.hasDesignDoc}
+      hasQa={!!epic.qa}
       orderKind={epic.orderKind ?? null}
     />
   );
