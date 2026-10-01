@@ -19,8 +19,14 @@ export type LiveSession = {
   cwd: string | null;
   /** interactive(사람이 쓰는 대화 세션) / background(백그라운드 잡). */
   kind: string | null;
-  /** idle(쉬는 중) · busy(작업 중) 등. 없을 수 있다. */
+  /** idle(쉬는 중) · busy(작업 중) · waiting(무언가 기다리는 중). 없을 수 있다. */
   status: string | null;
+  /** status=waiting일 때 무엇을 기다리는지. 예: "permission prompt". */
+  waitingFor: string | null;
+  /** 백그라운드 세션에만 있다 — done(끝남) · blocked(멈춤). 대화형은 늘 null. */
+  state: string | null;
+  /** 프로세스 번호. 없으면 프로그램이 이미 꺼진 것이다(blocked와 묶어 판정). */
+  pid: number | null;
 };
 
 let cache: { at: number; val: LiveSession[] } | null = null;
@@ -37,7 +43,9 @@ function liveSessions(): LiveSession[] {
 
   let val: LiveSession[] = [];
   try {
-    const r = spawnSync("claude", ["agents", "--json"], { encoding: "utf8", timeout: 3000 });
+    // --all 을 붙여 **끝난 백그라운드 세션까지** 받는다. 안 붙이면 state="done" 이 통째로
+    // 빠져서 "끝남"을 판정할 길이 없다(실측: 19건 → 24건).
+    const r = spawnSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", timeout: 3000 });
     const raw = r.status === 0 ? JSON.parse(r.stdout) : null;
     if (Array.isArray(raw)) {
       val = raw
@@ -48,6 +56,9 @@ function liveSessions(): LiveSession[] {
           cwd: typeof a.cwd === "string" ? a.cwd : null,
           kind: typeof a.kind === "string" ? a.kind : null,
           status: typeof a.status === "string" ? a.status : null,
+          waitingFor: typeof a.waitingFor === "string" ? a.waitingFor : null,
+          state: typeof a.state === "string" ? a.state : null,
+          pid: typeof a.pid === "number" ? a.pid : null,
         }));
     }
   } catch {
@@ -67,4 +78,16 @@ function liveSessions(): LiveSession[] {
 export function liveSessionByUuid(uuid: string | null): LiveSession | null {
   if (!uuid) return null;
   return liveSessions().find((a) => a.sessionId === uuid && a.kind === "interactive") ?? null;
+}
+
+/**
+ * 세션 UUID로 **종류를 가리지 않고** 찾는다(백그라운드 잡 포함).
+ *
+ * 작업 상태 판정(workState)은 백그라운드 전용 값 — 끝남·살아서 멈춤·꺼진 채 멈춤 — 을
+ * 가려야 해서 대화형만 봐서는 안 된다. 말을 걸 주소를 보여주는 쪽(liveSessionByUuid)과
+ * 목적이 다르므로 따로 둔다.
+ */
+export function sessionByUuid(uuid: string | null): LiveSession | null {
+  if (!uuid) return null;
+  return liveSessions().find((a) => a.sessionId === uuid) ?? null;
 }
