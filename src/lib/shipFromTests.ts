@@ -44,6 +44,9 @@ export function shipFromTestRuns(orderDir: string, recorded: ShipRow[]): ShipRow
   const summary = summarizeRuns(orderDir);
   if (!summary?.runs.length) return recorded;
 
+  // 환경만 보고 거른다 — **어느 저장소든 그 환경에 기록이 있으면 추론하지 않는다.**
+  // 회차에는 저장소가 적히지 않아서(검증은 화면 하나를 보지 저장소를 보지 않는다) 저장소까지
+  // 열쇠에 넣으면, 저장소 둘짜리 오더에서 「기록 2행 + 추론 1행」 이 되어 같은 검증이 두 번 보인다.
   const known = new Set(recorded.map((r) => r.env));
   // 한 환경을 여러 회차 돌렸으면 마지막 회차가 지금 상태다. 회차는 시각 순이라 뒤가 이긴다.
   const latest = new Map<string, (typeof summary.runs)[number]>();
@@ -64,6 +67,9 @@ export function shipFromTestRuns(orderDir: string, recorded: ShipRow[]): ShipRow
     // 않는다 — 진행중으로 보이면 «기다리면 되는 일» 로 읽혀 사람이 손대야 할 자리가 묻힌다.
     // 결과가 나쁘면 끝난 것으로 두고 **빨갛게** 세운다.
     return {
+      // 회차는 어느 저장소를 검증했는지 말해 주지 않는다. 짐작해 적으면 PR·빌드 링크가
+      // 엉뚱한 저장소로 간다(실측 FE1-1301 의 404 가 그 경우였다) — 비워 둔다.
+      repo: null,
       env,
       stage: "검증 완료",
       pr: null,

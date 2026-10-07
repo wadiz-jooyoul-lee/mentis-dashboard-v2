@@ -58,25 +58,51 @@ function milestoneStyle(i: number, r: ShipRow): TagStyle {
  * 추론이면 그 사실과 한계("앞 단계는 모른다")를 같이 밝힌다.
  */
 function sourceText(r: ShipRow): string {
-  if (!r.inferred) return r.updatedAt ? `## 배포 기록 · 갱신 ${r.updatedAt}` : "## 배포 기록";
+  const who = r.repo ? `${r.repo} · ` : "";
+  if (!r.inferred) return who + (r.updatedAt ? `## 배포 기록 · 갱신 ${r.updatedAt}` : "## 배포 기록");
   const when = r.updatedAt ? ` (${r.updatedAt})` : "";
-  return `검증 회차에서 읽음${when} — PR·리뷰·머지·빌드는 dobby-ship 을 돌려야 알 수 있습니다`;
+  return `검증 회차에서 읽음${when} — 저장소·PR·리뷰·머지·빌드는 dobby-ship 을 돌려야 알 수 있습니다`;
 }
 
+/** 행의 저장소에 맞는 GitHub 주소. 행에 저장소가 없으면(옛 기록·추론 행) 오더 전체 값으로 떨어진다. */
+function rowRepoUrl(r: ShipRow, fallback?: string | null): string | null {
+  if (!r.repo) return fallback ?? null;
+  const owner = REPO_OWNER[r.repo];
+  // 모르는 저장소면 주소를 지어내지 않는다 — 틀린 링크보다 링크가 없는 편이 낫다.
+  return owner ? `https://github.com/${owner}` : (fallback ?? null);
+}
+
+/** 저장소 이름 → owner/repo. dobby-lib.sh 의 `_ship_owner` 와 같은 표다. */
+const REPO_OWNER: Record<string, string> = {
+  "wadiz-frontend": "wadiz-fe/wadiz-frontend",
+  "com.wadiz.web": "wadiz-web/com.wadiz.web",
+};
+
+/** 저장소 이름을 좁은 칸에 들어가게 줄인다. 어느 쪽인지만 구분되면 된다. */
+const REPO_SHORT: Record<string, string> = {
+  "wadiz-frontend": "FE",
+  "com.wadiz.web": "WEB",
+};
+
 /**
- * dobby-ship 배포 단계를 환경마다 한 줄씩 보여 준다(오더 상세 관제 카드).
+ * dobby-ship 배포 단계를 (저장소, 환경)마다 한 줄씩 보여 준다(오더 상세 관제 카드).
  *
  * 아홉 단계를 다섯 칸으로 접는다 — 아홉 칸은 화면에서 너무 잘게 나뉜다.
  * 정확한 낱말은 오른쪽에 그대로 적는다. 막힌 환경(⚠)은 그 칸이 빨갛게 된다.
- * repoUrl 이 있으면 PR 번호와 번들 이름이 GitHub 으로 이어진다(없으면 글자만).
+ * PR 번호와 번들 이름은 **그 행의 저장소**로 이어진다(모르면 글자만).
  */
 export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: string | null }) {
   if (!rows.length) return null;
+  // 저장소가 둘인 오더에서만 저장소 배지를 보여 준다 — 하나뿐이면 모든 줄에 같은 글자가
+  // 붙어 자리만 먹는다.
+  const multiRepo = new Set(rows.map((r) => r.repo).filter(Boolean)).size > 1;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {rows.map((r) => (
+      {rows.map((r) => {
+        const href = rowRepoUrl(r, repoUrl);
+        return (
         <div
-          key={r.env}
+          key={`${r.repo ?? "-"}:${r.env}`}
           style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
         >
           <Tooltip title={sourceText(r)}>
@@ -93,6 +119,13 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
               {r.env}
             </Tag>
           </Tooltip>
+          {multiRepo && (
+            <Tooltip title={r.repo ?? "저장소를 알 수 없습니다"}>
+              <Text type="secondary" style={{ fontSize: 11, minWidth: 28 }}>
+                {r.repo ? (REPO_SHORT[r.repo] ?? r.repo) : "?"}
+              </Text>
+            </Tooltip>
+          )}
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
             {SHIP_MILESTONES.map((m, i) => {
               const t = milestoneStyle(i, r);
@@ -116,9 +149,9 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
             {r.inferred && " (검증 기록)"}
           </Text>
           {r.pr &&
-            (repoUrl ? (
+            (href ? (
               <a
-                href={`${repoUrl}/pull/${r.pr.replace(/[^0-9]/g, "")}`}
+                href={`${href}/pull/${r.pr.replace(/[^0-9]/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
                 style={{ fontSize: 12 }}
@@ -132,9 +165,9 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
             ))}
           {parseBuild(r.build).map((b) => (
             <Tooltip key={b.name} title={b.runId ? `실행 ${b.runId}` : undefined}>
-              {repoUrl && b.runId ? (
+              {href && b.runId ? (
                 <a
-                  href={`${repoUrl}/actions/runs/${b.runId}`}
+                  href={`${href}/actions/runs/${b.runId}`}
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontSize: 12 }}
@@ -154,9 +187,29 @@ export function ShipProgress({ rows, repoUrl }: { rows: ShipRow[]; repoUrl?: str
             </Text>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
+}
+
+/**
+ * 목록용으로 **환경마다 한 개**가 되게 접는다.
+ *
+ * 저장소가 둘인 오더는 한 환경에 행이 둘이라, 그대로 찍으면 `rc4 ✓ rc4 ✓` 처럼 같은 태그가
+ * 두 번 보인다. 좁은 칸에서 그건 정보가 아니라 소음이다. **가장 덜 간 쪽**을 남긴다 —
+ * 목록이 답해야 하는 질문은 "이 오더가 어디까지 갔나"이고, 한쪽이라도 안 끝났으면 안 끝난 것이다.
+ * 막힌 행이 있으면 그게 1순위다(사람이 손댈 자리를 묻지 않는다).
+ */
+function collapseByEnv(rows: ShipRow[]): ShipRow[] {
+  const worst = new Map<string, ShipRow>();
+  for (const r of rows) {
+    const prev = worst.get(r.env);
+    if (!prev) { worst.set(r.env, r); continue; }
+    if (r.blocked && !prev.blocked) { worst.set(r.env, r); continue; }
+    if (r.blocked === prev.blocked && r.milestone < prev.milestone) worst.set(r.env, r);
+  }
+  return [...worst.values()];
 }
 
 /**
@@ -170,9 +223,9 @@ export function ShipTags({ rows }: { rows: ShipRow[] }) {
   if (!rows.length) return <Text type="secondary">-</Text>;
   return (
     <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
-      {rows.map((r) => (
+      {collapseByEnv(rows).map((r) => (
         <Tooltip
-          key={r.env}
+          key={`${r.repo ?? "-"}:${r.env}`}
           title={`${r.stage}${r.pr ? ` · ${r.pr}` : ""}${r.note ? ` · ${r.note}` : ""} — ${sourceText(r)}`}
         >
           <Tag
