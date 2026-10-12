@@ -86,12 +86,30 @@ export type OrderSession = {
    * (세션 전사는 `~/.claude/projects/` 아래 워크트리 밖에 있어 삭제와 무관하게 남는다 — 실측 확인.)
    */
   restore: { repo: string; branch: string; worktreePath: string; srcRepo: string }[];
+  /**
+   * **코드가 있는 곳** — 살아 있는 워크트리들.
+   *
+   * 세션의 `작업 경로`는 그 세션이 떠 있던 폴더일 뿐 **코드가 있는 곳이 아니다.** 실측:
+   * 메타 8건의 세션이 `~/work/wadiz-frontend/static`(메인 저장소)에서 떴는데, 그 저장소는
+   * 지금 딴 이슈 브랜치에 체크아웃돼 있고 코드는 `subtree/{repo}-{키}` 워크트리에 있다.
+   * 이어가기만 보여 주면 사용자가 엉뚱한 폴더에서 코드를 찾게 되므로 함께 보여 준다.
+   */
+  worktrees: { repo: string; branch: string; path: string }[];
+  /**
+   * 세션의 작업 경로가 **이 오더의 워크트리가 아닌 다른 체크아웃**인가.
+   * 참이면 이어가기가 다른 브랜치가 걸린 폴더를 연다 — 화면에서 그 사실을 알려야 한다.
+   * (작업 경로를 워크트리로 바꿀 수는 없다. 전사가 그 폴더에 묶여 있어 --resume 이 못 찾는다.)
+   */
+  cwdIsForeignCheckout: boolean;
 };
 
 export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
   if (!md)
-    return { sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null, restore: [] };
+    return {
+      sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null,
+      restore: [], worktrees: [], cwdIsForeignCheckout: false,
+    };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
@@ -99,18 +117,30 @@ export function readOrderSession(key: string): OrderSession {
   const cwd = cwdRaw ? expandHome(cwdRaw.trim().replace(/^`|`$/g, "").trim()) || null : null;
   const cwdExists = !!cwd && fs.existsSync(cwd);
 
-  // 기록된 워크트리 중 **사라진 것**만 복구 대상으로 모은다(멀티 repo면 여러 개).
+  // 기록된 워크트리를 **사라진 것(복구 대상)**과 **살아 있는 것(코드 위치)**으로 가른다.
   const st = parseOrderStatus(md, key);
   const restore: OrderSession["restore"] = [];
+  const worktrees: OrderSession["worktrees"] = [];
   for (const w of st.worktrees) {
     if (!w.path || !w.branch) continue;
     const abs = expandHome(w.path);
-    if (fs.existsSync(abs)) continue;
     const repo =
       w.repo ||
       (abs.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), "");
-    restore.push({ repo, branch: w.branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
+    if (fs.existsSync(abs)) worktrees.push({ repo, branch: w.branch, path: abs });
+    else restore.push({ repo, branch: w.branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
   }
+
+  // 작업 경로가 이 오더의 워크트리가 아닌 **다른 저장소 체크아웃**인가.
+  // 그러면 이어가기가 딴 브랜치가 걸린 폴더를 연다(실측 FE1-1301: 메인 저장소가
+  // feature/FE1-1883 에 체크아웃돼 있었고 코드는 subtree 워크트리에 있었다).
+  // playground 처럼 git 저장소가 아닌 폴더는 오케스트레이터 자리라 정상이다.
+  let cwdIsForeignCheckout = false;
+  if (cwd && cwdExists && worktrees.length > 0) {
+    const top = gitToplevel(cwd);
+    cwdIsForeignCheckout = !!top && !worktrees.some((w) => w.path === top);
+  }
+
   const live = liveSessionByUuid(sessionId);
   return {
     sessionId,
@@ -119,7 +149,19 @@ export function readOrderSession(key: string): OrderSession {
     sessionName: live?.name ?? null,
     sessionStatus: live?.status ?? null,
     restore,
+    worktrees,
+    cwdIsForeignCheckout,
   };
+}
+
+/** 그 경로가 속한 git 저장소의 최상위. git 저장소가 아니면 null(playground 가 그렇다). */
+function gitToplevel(dir: string): string | null {
+  const r = spawnSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    timeout: 3000,
+  });
+  if (r.status !== 0) return null;
+  return (r.stdout ?? "").trim() || null;
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
