@@ -122,10 +122,17 @@ export type ResolutionInfo = {
 };
 
 /**
- * dobby-ship 배포 단계(status.md `## 배포` 표의 한 행 = 한 환경).
- * 한 오더가 여러 번·여러 환경으로 나가므로 환경마다 행이 하나씩 쌓인다.
+ * dobby-ship 배포 단계(status.md `## 배포` 표의 한 행 = 한 저장소의 한 환경).
+ * 한 오더가 여러 번·여러 환경으로, 그리고 저장소 둘로 나가므로 행이 그만큼 쌓인다.
  */
 export type ShipRow = {
+  /**
+   * 저장소 이름(`wadiz-frontend` · `com.wadiz.web`). PR·빌드 링크를 그 저장소로 건다.
+   *
+   * 옛 기록(저장소 칸이 없던 6칸 표)과 검증 회차에서 미루어 만든 행은 null 이다.
+   * 그때는 오더 전체의 `shipRepo` 로 떨어진다 — 틀린 링크보다 링크가 없는 편이 낫다.
+   */
+  repo: string | null;
   /** dev · rc1 · rc4 · stage */
   env: string;
   /** 아홉 어휘 중 하나(⚠ 는 떼어 blocked 로 옮긴다) */
@@ -349,6 +356,9 @@ function parseShip(md: string): ShipRow[] {
   const t = body ? findTable(body, "환경") : null;
   if (t) {
     const ci = {
+      // 저장소 칸은 dobby-ship 이 저장소 둘을 맡게 되면서 생겼다. 옛 6칸 표에는 없어서 -1 이고,
+      // 그 경우 행의 저장소는 null 이 된다(오더 전체의 shipRepo 로 떨어진다).
+      repo: columnIndex(t.headers, "저장소"),
       env: columnIndex(t.headers, "환경"),
       stage: columnIndex(t.headers, "단계"),
       pr: columnIndex(t.headers, "PR"),
@@ -367,6 +377,7 @@ function parseShip(md: string): ShipRow[] {
         const stage = normalizeStage(rawStage.replace(/\s*⚠\s*$/, "").trim());
         const note = cell(r, ci.note);
         return {
+          repo: ci.repo >= 0 ? cell(r, ci.repo) : null,
           env,
           stage,
           pr: cell(r, ci.pr),
@@ -395,6 +406,7 @@ function parseShip(md: string): ShipRow[] {
   const pr = line.match(/#(\d+)/)?.[0] ?? null;
   return [
     {
+      repo: null,
       env,
       stage,
       pr,
