@@ -65,6 +65,10 @@ type Session = {
   sessionStatus: string | null;
   /** 사라진 워크트리들(멀티 repo면 여러 개). 비어 있으면 코드 폴더가 다 살아 있다는 뜻. */
   restore: Restore[];
+  /** 살아 있는 워크트리 = **코드가 있는 곳**. 작업 경로와 다를 수 있다. */
+  worktrees: { repo: string; branch: string; path: string }[];
+  /** 작업 경로가 이 오더의 워크트리가 아닌 다른 체크아웃인가. */
+  cwdIsForeignCheckout: boolean;
 };
 
 /** 모노스페이스 값 한 줄 + 복사 버튼. */
@@ -122,6 +126,8 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         sessionName: j.sessionName ?? null,
         sessionStatus: j.sessionStatus ?? null,
         restore: Array.isArray(j.restore) ? j.restore : [],
+        worktrees: Array.isArray(j.worktrees) ? j.worktrees : [],
+        cwdIsForeignCheckout: !!j.cwdIsForeignCheckout,
       });
     } catch {
       setData({
@@ -131,6 +137,8 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         sessionName: null,
         sessionStatus: null,
         restore: [],
+        worktrees: [],
+        cwdIsForeignCheckout: false,
       });
     }
     setLoading(false);
@@ -159,6 +167,16 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
         />
       ) : (
         <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+          {/* ⛔ 떠 있는 세션은 --resume 으로 열 게 아니다 — 그 터미널로 돌아가야 한다.
+              이 안내가 없으면 사용자가 명령을 붙여넣고 "복원이 안 된다"고 받아들인다. */}
+          {data.sessionName && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ fontSize: 12 }}
+              title={`이 세션은 지금 떠 있습니다 — ${data.sessionName}${data.sessionStatus === "busy" ? " (작업 중)" : ""}. 아래 명령 대신 그 터미널로 돌아가세요. 떠 있는 세션을 --resume 하면 열리지 않습니다.`}
+            />
+          )}
           {data.sessionId && data.cwd ? (
             <>
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -217,9 +235,34 @@ export default function ResumeButton({ epicKey }: { epicKey: string }) {
           {data.cwd && (
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                작업 경로
+                작업 경로 {data.cwdIsForeignCheckout && "(세션이 떠 있던 곳 — 코드가 있는 곳이 아닙니다)"}
               </Text>
               <CopyRow label="작업 경로" value={data.cwd} />
+            </div>
+          )}
+          {/* 코드가 있는 곳. 작업 경로는 그 세션이 떠 있던 폴더일 뿐이다 — 실측 8건이
+              메인 저장소에서 떴고, 그 저장소는 지금 딴 이슈 브랜치에 체크아웃돼 있다. */}
+          {data.worktrees.length > 0 && (
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                코드가 있는 곳 (워크트리)
+              </Text>
+              {data.cwdIsForeignCheckout && (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ fontSize: 12, marginBottom: 6 }}
+                  title="이어가기는 위 작업 경로로 이동합니다(전사가 그 폴더에 묶여 있어 바꿀 수 없습니다). 코드는 아래 워크트리에 있으니, 세션을 연 뒤 그쪽에서 작업하세요."
+                />
+              )}
+              {data.worktrees.map((w) => (
+                <div key={w.path} style={{ marginBottom: 4 }}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {w.repo} ({w.branch})
+                  </Text>
+                  <CopyRow label="워크트리" value={w.path} />
+                </div>
+              ))}
             </div>
           )}
           {data.sessionId && (
