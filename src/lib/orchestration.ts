@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
+import { buildCommitChanges, type RepoCommitChanges } from "@/lib/commitChanges";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
 import { liveSessionByUuid } from "@/lib/sessionRegistry";
@@ -816,6 +817,8 @@ export type EpicDetail = {
   contracts: Contract[];
   reviews: ReviewFile[];
   agentWorks: AgentWork[];
+  /** 작업 브랜치 커밋별 코드 변경(`withDiffs` 일 때만). */
+  commitChanges?: RepoCommitChanges[];
   /** 슬러그별 핀 고정 아바타(avatars.json). 에이전트 추가돼도 기존은 불변. */
   avatars: Record<string, AssignedAvatar>;
   /** go-dobby 오더 산출물(v1처럼 상세에 함께 표시) */
@@ -1453,6 +1456,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
   const agentWorks = opts.withDiffs
     ? buildAgentWorks(epicKey, orchestration, st)
     : slugStubs(epicKey);
+  const commitChanges = opts.withDiffs && st && statusMd ? buildCommitChanges(statusMd, st.worktrees) : undefined;
   const avatars = epicAvatars(
     epicKey,
     dir,
@@ -1470,6 +1474,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     contracts,
     reviews,
     agentWorks,
+    commitChanges,
     avatars,
     workType: workTypeOf(epicKey, statusMd),
     orderKind: st?.orderKind ?? null,

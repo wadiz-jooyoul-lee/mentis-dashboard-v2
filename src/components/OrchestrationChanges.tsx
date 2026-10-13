@@ -5,7 +5,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Typography, Space, Card, Empty, Tag, List, Collapse, Descriptions, Timeline, Tooltip } from "antd";
 import { FileOutlined, BranchesOutlined, CodeOutlined } from "@ant-design/icons";
-import type { EpicDetail, EditHunk, AgentWork } from "@/lib/orchestration";
+import type { EpicDetail, EditHunk, AgentWork, FileDiff } from "@/lib/orchestration";
+import type { RepoCommitChanges } from "@/lib/commitChanges";
 import type { AgentRow } from "@/lib/parseOrchestration";
 import { agentStateBadge } from "@/lib/parseOrchestration";
 import JobConsole from "@/components/JobConsole";
@@ -77,7 +78,8 @@ function DiffView({ hunks }: { hunks: EditHunk[] }) {
                 </div>
               ))
             : null}
-          {h.new.split("\n").map((l, j) => (
+          {/* 줄을 지우기만 한 덩어리(git diff)는 new 가 비어 있다. 빈 + 줄을 그리지 않는다. */}
+          {(h.new || !h.old ? h.new.split("\n") : []).map((l, j) => (
             <div key={`n${j}`} style={{ ...lineStyle, background: "#f6ffed", color: "#135200" }}>
               + {l}
             </div>
@@ -89,12 +91,13 @@ function DiffView({ hunks }: { hunks: EditHunk[] }) {
 }
 
 /** 로그가 있는 에이전트의 작업 내역(수정 파일·커밋·diff·요약). */
-function WorkBody({ w }: { w: AgentWork }) {
+function WorkBody({ w, hideCode }: { w: AgentWork; hideCode?: boolean }) {
   if (!w.found) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`로그 파일을 찾을 수 없음: ${w.logPath}`} />;
   }
   return (
     <Space orientation="vertical" size={16} style={{ width: "100%" }}>
+      {!hideCode && (
       <div>
         <Text strong>
           <FileOutlined /> 수정·생성 파일 ({w.files.length})
@@ -119,6 +122,7 @@ function WorkBody({ w }: { w: AgentWork }) {
           )}
         />
       </div>
+      )}
       {w.commits.length > 0 && (
         <div>
           <Text strong>
@@ -133,7 +137,7 @@ function WorkBody({ w }: { w: AgentWork }) {
           ))}
         </div>
       )}
-      {w.diffs.length > 0 && (
+      {!hideCode && w.diffs.length > 0 && (
         <div>
           <Text strong>
             <CodeOutlined /> 코드 변경 diff ({w.diffs.length}개 파일)
@@ -175,6 +179,125 @@ function WorkBody({ w }: { w: AgentWork }) {
         로그: {w.logPath}
       </Text>
     </Space>
+  );
+}
+
+/** 파일별 diff 접이식 목록. */
+function FileDiffList({ diffs }: { diffs: FileDiff[] }) {
+  return (
+    <Collapse
+      ghost
+      size="small"
+      items={diffs.map((fd) => ({
+        key: fd.file,
+        label: (
+          <Space size={6}>
+            <Text code style={{ fontSize: 12 }}>
+              {fd.file}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {fd.hunks.length}곳
+            </Text>
+          </Space>
+        ),
+        children: <DiffView hunks={fd.hunks} />,
+      }))}
+    />
+  );
+}
+
+/** 바뀐 파일 목록 + diff. diff 가 없는 파일(너무 크거나 바이너리)은 목록에만 보인다. */
+function ChangeBody({ files, diffs }: { files: string[]; diffs: FileDiff[] }) {
+  const noDiff = files.filter((f) => !diffs.some((d) => d.file === f));
+  return (
+    <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+      <FileDiffList diffs={diffs} />
+      {noDiff.length > 0 && (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          내용 생략(너무 크거나 글자가 아닌 파일): {noDiff.join(", ")}
+        </Text>
+      )}
+    </Space>
+  );
+}
+
+/**
+ * 작업 브랜치의 커밋별 코드 변경. v2 는 통합할 때마다 커밋하므로 커밋 하나가 통합 한 번이다.
+ * 각 커밋에 그 사이 진행한 세션(리뷰 차수·수정)을 붙여 어느 라운드의 변경인지 보이게 한다.
+ */
+function CommitChangesSection({ repos }: { repos: RepoCommitChanges[] }) {
+  if (repos.length === 0) return null;
+  return (
+    <Card title={<Text strong style={{ fontSize: 16 }}><BranchesOutlined /> 커밋별 코드 변경</Text>} style={{ marginBottom: 20 }}>
+      <Space orientation="vertical" size={20} style={{ width: "100%" }}>
+        {repos.map((r) => {
+          const items = [
+            {
+              key: "total",
+              label: (
+                <Space size={8} wrap>
+                  <Tag color="blue" style={{ margin: 0 }}>전체</Tag>
+                  <Text>{r.baseLabel}과 비교</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>파일 {r.total.files.length}개</Text>
+                </Space>
+              ),
+              children: <ChangeBody files={r.total.files} diffs={r.total.diffs} />,
+            },
+            ...r.commits.map((c, i) => ({
+              key: c.sha,
+              label: (
+                <Space orientation="vertical" size={2}>
+                  <Space size={8} wrap>
+                    <Tag style={{ margin: 0 }}>{i + 1}번째 커밋</Tag>
+                    <Text code style={{ fontSize: 12 }}>{c.short}</Text>
+                    <Text>{c.subject}</Text>
+                  </Space>
+                  <Space size={6} wrap>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {c.at} · 파일 {c.files.length}개
+                    </Text>
+                    {c.sessions.length > 0 ? (
+                      c.sessions.map((s, j) => (
+                        <Tag key={j} style={{ margin: 0, fontSize: 11 }}>{s}</Tag>
+                      ))
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 11 }}>이 사이에 기록된 세션 없음</Text>
+                    )}
+                  </Space>
+                </Space>
+              ),
+              children: <ChangeBody files={c.files} diffs={c.diffs} />,
+            })),
+            ...(r.uncommitted
+              ? [
+                  {
+                    key: "pending",
+                    label: (
+                      <Space size={8} wrap>
+                        <Tag color="orange" style={{ margin: 0 }}>커밋 전</Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>파일 {r.uncommitted.files.length}개</Text>
+                        {r.uncommitted.sessions.map((s, j) => (
+                          <Tag key={j} style={{ margin: 0, fontSize: 11 }}>{s}</Tag>
+                        ))}
+                      </Space>
+                    ),
+                    children: <ChangeBody files={r.uncommitted.files} diffs={r.uncommitted.diffs} />,
+                  },
+                ]
+              : []),
+          ];
+          return (
+            <div key={r.path}>
+              <Space size={8} wrap>
+                <Text strong>{r.repo}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }} code>{r.path}</Text>
+              </Space>
+              <Collapse size="small" style={{ marginTop: 8 }} items={items} />
+            </div>
+          );
+        })}
+      </Space>
+    </Card>
   );
 }
 
@@ -284,6 +407,8 @@ export default function OrchestrationChanges({
             </Space>
           </div>
 
+          <CommitChangesSection repos={epic?.commitChanges ?? []} />
+
           {agents.map((a, i) => {
             const w = workFor(a.agent);
             const c = contractFor(a.agent);
@@ -305,7 +430,9 @@ export default function OrchestrationChanges({
                   }
                 >
                   {w ? (
-                    <WorkBody w={w} />
+                    // 리뷰어는 코드를 고치지 않는다. 같은 세션 기록을 개발자와 함께 쓰는 경우가 있어
+                    // (검증 실패 수정 뒤 이어서 리뷰) 코드 변경이 리뷰어에게도 붙으므로 숨긴다.
+                    <WorkBody w={w} hideCode={/리뷰/.test(a.name ?? "")} />
                   ) : (
                     <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                       <Descriptions size="small" column={1} bordered>
