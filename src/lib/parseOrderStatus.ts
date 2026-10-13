@@ -160,6 +160,27 @@ export type ShipRow = {
 };
 
 /**
+ * 정기배포 릴리즈 노트 등록 기록(status.md `## 릴리즈 노트` 표의 한 행 = 한 배포일의 한 저장소).
+ * dobby-release 가 update-release-note 결과를 페이지·PR 로 다시 확인한 뒤 `dobby_release_note` 로 남긴다.
+ */
+export type ReleaseNoteRow = {
+  /** 정기배포일 YYYY-MM-DD */
+  date: string;
+  /** 저장소 이름(`wadiz-frontend` · `com.wadiz.web`) */
+  repo: string;
+  branch: string | null;
+  /** 릴리즈 노트 표의 행 번호 */
+  row: string | null;
+  /** release/v{날짜} 로 가는 PR. "#11180" — 없으면 null */
+  pr: string | null;
+  /** 머지됨 · 머지 안 함 · 충돌 · 건너뜀 · 확인 못 함 */
+  merge: string;
+  /** 릴리즈 노트 페이지 주소. 없으면 null */
+  page: string | null;
+  updatedAt: string | null;
+};
+
+/**
  * 아홉 단계를 화면용 다섯 칸으로 접는다.
  * 아홉 칸은 화면에서 너무 잘게 나뉜다 — 정확한 낱말은 옆에 그대로 적는다.
  */
@@ -213,6 +234,8 @@ export type OrderStatus = {
    * 멀티레포 오더는 워크트리만 봐서는 어느 저장소인지 알 수 없어 헬퍼가 직접 적어 준다.
    */
   shipRepo: string | null;
+  /** 정기배포 릴리즈 노트 등록 기록 — (배포일, 저장소)마다 한 행. 없으면 빈 배열(미등록). */
+  releaseNote: ReleaseNoteRow[];
   raw: string;
 };
 
@@ -349,6 +372,39 @@ function parseShipRepo(md: string): string | null {
   const body = sectionBody(md, /^배포$/);
   const m = body.match(/^\s*[-*]\s*\*\*저장소\*\*\s*[:：]\s*`?([^\s`]+)/m);
   return m ? m[1] : null;
+}
+
+/** "## 릴리즈 노트" 표를 (배포일, 저장소)마다 한 행으로 읽는다. 표가 없으면 빈 배열(미등록). */
+function parseReleaseNote(md: string): ReleaseNoteRow[] {
+  const body = sectionBody(md, /^릴리즈 노트$/);
+  const t = body ? findTable(body, "배포일") : null;
+  if (!t) return [];
+  const ci = {
+    date: columnIndex(t.headers, "배포일"),
+    repo: columnIndex(t.headers, "저장소"),
+    branch: columnIndex(t.headers, "브랜치"),
+    row: columnIndex(t.headers, "행"),
+    pr: columnIndex(t.headers, "PR"),
+    merge: columnIndex(t.headers, "머지"),
+    page: columnIndex(t.headers, "페이지"),
+    updated: columnIndex(t.headers, "갱신"),
+  };
+  const cell = (r: string[], i: number): string | null => {
+    const v = at(r, i).replace(/^`|`$/g, "").trim();
+    return v && v !== "-" ? v : null;
+  };
+  return rowsOf(t)
+    .map((r) => ({
+      date: cell(r, ci.date) ?? "",
+      repo: cell(r, ci.repo) ?? "",
+      branch: cell(r, ci.branch),
+      row: cell(r, ci.row),
+      pr: cell(r, ci.pr),
+      merge: cell(r, ci.merge) ?? "확인 못 함",
+      page: cell(r, ci.page),
+      updatedAt: cell(r, ci.updated),
+    }))
+    .filter((x) => x.date && x.repo);
 }
 
 function parseShip(md: string): ShipRow[] {
@@ -586,6 +642,7 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     resolution: parseResolution(md),
     ship: parseShip(md),
     shipRepo: parseShipRepo(md),
+    releaseNote: parseReleaseNote(md),
     raw: md,
   };
 }

@@ -15,6 +15,7 @@ import WorktreeDeleteButton from "@/components/WorktreeDeleteButton";
 import GroupAvatar from "@/components/GroupAvatar";
 import ResolveButton from "@/components/ResolveButton";
 import { ShipTags } from "@/components/ShipProgress";
+import { ReleaseNoteTags } from "@/components/ReleaseNoteTags";
 import { dobbyColor } from "@/lib/dobby";
 
 const { Title, Text } = Typography;
@@ -112,6 +113,8 @@ export default function OrchestrationList({
   // 배포 표가 있는 오더는 아직 드물다(110여 개 중 두 개). 하나도 없으면 컬럼 자체를 숨긴다 —
   // 안 그러면 빈 칸만 한 줄 늘어선다.
   const anyShip = epics.some((r) => r.ship.length > 0);
+  // 릴리즈 노트도 같은 이유로, 등록 기록이 하나라도 생기기 전에는 컬럼을 숨긴다.
+  const anyRelease = epics.some((r) => r.releaseNote.length > 0);
 
   const columns = [
     {
@@ -215,6 +218,22 @@ export default function OrchestrationList({
             // 오른쪽 "해결" 버튼이 화면 밖으로 밀렸다. 폭을 묶고 태그를 두 줄로 흘린다.
             width: 168,
             render: (_: unknown, r: EpicSummary) => <ShipTags rows={r.ship} />,
+          },
+        ]
+      : []),
+    ...(anyRelease
+      ? [
+          {
+            title: "릴리즈 노트",
+            key: "releaseNote",
+            width: 120,
+            // 개발 오더만 정기배포에 실린다 — 그 밖의 오더에 "미등록"을 띄우면 할 일처럼 보인다.
+            render: (_: unknown, r: EpicSummary) =>
+              (r.orderKind ?? "development") === "development" ? (
+                <ReleaseNoteTags rows={r.releaseNote} />
+              ) : (
+                <Text type="secondary">-</Text>
+              ),
           },
         ]
       : []),
