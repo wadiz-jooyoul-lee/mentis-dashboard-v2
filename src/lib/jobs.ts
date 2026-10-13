@@ -362,7 +362,7 @@ export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?:
   const wrap = `jq -nc --arg t "$l" '{type:"assistant",message:{content:[{type:"text",text:$t}]}}'`;
   const cmd =
     `code=1; last=""; while IFS= read -r l; do case "$l" in __EXIT__*) code="\${l#__EXIT__}" ;; ` +
-    `*) [ -n "$l" ] && last="$l"; ${wrap} ;; esac; done < <(bash ${shq(script)} ${shq(k)} --mode bypassPermissions 2>&1; echo "__EXIT__$?"); ` +
+    `*) [ -n "$l" ] && last="$l"; ${wrap} ;; esac; done < <(bash ${shq(script)} ${shq(k)} --mode bypassPermissions --approve-commit 2>&1; echo "__EXIT__$?"); ` +
     `jq -nc --arg r "$last" --argjson e "$([ "$code" = 0 ] && echo false || echo true)" '{type:"result",is_error:$e,result:$r}'`;
   fs.mkdirSync(jobDir(k), { recursive: true });
   const out = fs.openSync(logPath(k), "w");
