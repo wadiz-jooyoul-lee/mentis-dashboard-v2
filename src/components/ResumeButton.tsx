@@ -7,7 +7,7 @@ import { PlayCircleOutlined, CopyOutlined } from "@ant-design/icons";
 const { Text } = Typography;
 
 /** 클립보드 복사 — 보안 컨텍스트가 아니면(예: http://IP) navigator.clipboard가 없으므로 execCommand로 폴백. */
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
@@ -72,7 +72,7 @@ type Session = {
 };
 
 /** 모노스페이스 값 한 줄 + 복사 버튼. */
-function CopyRow({ label, value }: { label: string; value: string }) {
+export function CopyRow({ label, value }: { label: string; value: string }) {
   const copy = async () => {
     const ok = await copyText(value);
     if (ok) message.success(`${label} 복사됨`);

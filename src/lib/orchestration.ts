@@ -101,6 +101,13 @@ export type OrderSession = {
    * (작업 경로를 워크트리로 바꿀 수는 없다. 전사가 그 폴더에 묶여 있어 --resume 이 못 찾는다.)
    */
   cwdIsForeignCheckout: boolean;
+  /**
+   * dobby-order-v2 로 진행하는 오더인가. 근거는 status.md `## 지난 세션` 표 — 그 표는 v2 의
+   * 세션 기록 헬퍼(dobby_session_log)만 만든다. 참이면 "이어가기 v2"가 새 세션 명령을 권한다.
+   */
+  isV2: boolean;
+  /** `## 지난 세션` 표(단계마다 연 세션). 복기(`claude --resume`)용. 기록 순서 그대로. */
+  pastSessions: { time: string; step: string; sessionId: string; cwd: string }[];
 };
 
 export function readOrderSession(key: string): OrderSession {
@@ -108,7 +115,7 @@ export function readOrderSession(key: string): OrderSession {
   if (!md)
     return {
       sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null,
-      restore: [], worktrees: [], cwdIsForeignCheckout: false,
+      restore: [], worktrees: [], cwdIsForeignCheckout: false, isV2: false, pastSessions: [],
     };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
@@ -122,13 +129,16 @@ export function readOrderSession(key: string): OrderSession {
   const restore: OrderSession["restore"] = [];
   const worktrees: OrderSession["worktrees"] = [];
   for (const w of st.worktrees) {
-    if (!w.path || !w.branch) continue;
+    // 브랜치 칸 뒤에 붙은 설명 괄호("feature/X (feature/Y 에서 분기)")는 떼어 낸다 — 그대로 두면
+    // 복원 명령의 `worktree add` 인자에 설명 글자까지 들어간다.
+    const branch = w.branch.replace(/\s*\(.*$/, "").trim();
+    if (!w.path || !branch) continue;
     const abs = expandHome(w.path);
     const repo =
       w.repo ||
       (abs.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), "");
-    if (fs.existsSync(abs)) worktrees.push({ repo, branch: w.branch, path: abs });
-    else restore.push({ repo, branch: w.branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
+    if (fs.existsSync(abs)) worktrees.push({ repo, branch, path: abs });
+    else restore.push({ repo, branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
   }
 
   // 작업 경로가 이 오더의 워크트리가 아닌 **다른 저장소 체크아웃**인가.
@@ -141,6 +151,27 @@ export function readOrderSession(key: string): OrderSession {
     cwdIsForeignCheckout = !!top && !worktrees.some((w) => w.path === top);
   }
 
+  // `## 지난 세션` 표 — 머리가 "세션 아이디"인 표는 이것뿐이다(`## 세션`은 표가 아니다).
+  const past = findTable(md, "세션 아이디");
+  const pastSessions: OrderSession["pastSessions"] = [];
+  if (past) {
+    const ct = columnIndex(past.headers, "시각");
+    const cs = columnIndex(past.headers, "단계");
+    const ci = columnIndex(past.headers, "세션 아이디");
+    const cw = columnIndex(past.headers, "작업 경로");
+    for (const r of past.rows) {
+      const sid = (r[ci] ?? "").replace(/`/g, "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(sid)) continue;
+      pastSessions.push({
+        time: r[ct] ?? "",
+        step: r[cs] ?? "",
+        sessionId: sid,
+        cwd: expandHome((r[cw] ?? "").replace(/`/g, "").trim()),
+      });
+    }
+  }
+  const isV2 = /(?:^|\n)##\s*지난 세션/.test(md);
+
   const live = liveSessionByUuid(sessionId);
   return {
     sessionId,
@@ -151,6 +182,8 @@ export function readOrderSession(key: string): OrderSession {
     restore,
     worktrees,
     cwdIsForeignCheckout,
+    isV2,
+    pastSessions,
   };
 }
 
