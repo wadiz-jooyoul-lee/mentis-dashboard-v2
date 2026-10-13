@@ -30,13 +30,25 @@ const q = (v: string) => `"${v}"`;
  */
 function commandFor(t: Target, epicKey: string, isV2: boolean): string {
   const parts: string[] = [];
-  if (t.restoreFrom) {
-    parts.push(
-      `(git -C ${q(t.restoreFrom)} worktree prune; [ -d ${q(t.path)} ] || git -C ${q(t.restoreFrom)} worktree add ${q(t.path)} ${t.branch})`
-    );
-  }
+  if (t.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
   parts.push(`cd ${q(t.path)}`);
   parts.push(isV2 ? `claude ${q(`/dobby-order-v2 ${epicKey}`)}` : "claude");
+  return parts.join(" && ");
+}
+
+function restoreStep(t: Target, from: string): string {
+  return `(git -C ${q(from)} worktree prune; [ -d ${q(t.path)} ] || git -C ${q(from)} worktree add ${q(t.path)} ${t.branch})`;
+}
+
+/**
+ * 지난 세션을 `--resume` 으로 다시 여는 명령. 대화 기록은 ~/.claude/projects 에 세션이 떠 있던 폴더
+ * 경로 이름으로 남으므로, 그 폴더가 정리된 워크트리(또는 그 안)라면 같은 경로로 먼저 되살린다.
+ */
+function pastCommandFor(p: PastSession, targets: Target[]): string {
+  const t = targets.find((x) => x.restoreFrom && (p.cwd === x.path || p.cwd.startsWith(`${x.path}/`)));
+  const parts: string[] = [];
+  if (t?.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
+  parts.push(`cd ${q(p.cwd)}`, `claude --resume ${p.sessionId}`);
   return parts.join(" && ");
 }
 
@@ -144,7 +156,7 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
                           <Text type="secondary" style={{ fontSize: 11 }}>
                             {p.time} · {p.step}
                           </Text>
-                          <CopyRow label="복기 명령" value={`cd ${q(p.cwd)} && claude --resume ${p.sessionId}`} />
+                          <CopyRow label="복기 명령" value={pastCommandFor(p, targets)} />
                         </div>
                       ))}
                     </Space>
