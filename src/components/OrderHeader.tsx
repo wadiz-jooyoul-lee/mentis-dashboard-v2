@@ -190,6 +190,7 @@ export default function OrderHeader({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          flexWrap: "wrap",
           gap: 12,
           marginBottom: 4,
         }}
@@ -217,7 +218,7 @@ export default function OrderHeader({
             </Tooltip>
           )}
         </Space>
-        <Space align="center" size={4} style={{ flexShrink: 0 }}>
+        <Space align="center" size={4} wrap>
           {hasJiraIssue && (
             <Button
               type="link"
