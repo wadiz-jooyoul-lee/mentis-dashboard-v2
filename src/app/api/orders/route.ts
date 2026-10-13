@@ -21,6 +21,8 @@ import {
   startJiraEnrich,
   startJiraPost,
   startResolve,
+  startV2Run,
+  v2RunCheck,
   JOB_ID_RE,
 } from "@/lib/jobs";
 import {
@@ -74,6 +76,13 @@ export async function POST(req: NextRequest) {
   // 해결 표시/취소: /dobby-resolve {키} [undo] 백그라운드 실행(목록의 "해결 처리"/"해결 취소" 버튼).
   if (body?.resolve) {
     const r = startResolve(String(body?.key ?? ""), body?.undo === true);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // v2 자동 실행: 설계가 확정된 dobby-order-v2 오더를 run.sh 로 통합까지 진행.
+  if (body?.v2run) {
+    const r = startV2Run(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
@@ -229,6 +238,10 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ targets: prTargets(prKey) });
   }
+
+  // v2 자동 실행 가능 여부: ?v2run={오더키} → { ok, reason, running }
+  const v2Key = (sp.get("v2run") ?? "").trim();
+  if (v2Key) return NextResponse.json(v2RunCheck(v2Key));
 
   // 세션 이어가기: ?session={오더키} → { sessionId, cwd } (status.md ## 세션)
   const sessionKey = (sp.get("session") ?? "").trim();
