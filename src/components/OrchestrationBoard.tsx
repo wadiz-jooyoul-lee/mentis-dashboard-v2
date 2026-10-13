@@ -239,6 +239,8 @@ function AgentCard({
               count={Number(a.round) || a.round}
               color={agentStateBadge(a.state).color}
               overflowCount={999}
+              // 같은 라운드 칸이 리뷰어에겐 리뷰 차수, 개발자에겐 수정 횟수(dobby_fix_count)다.
+              title={/리뷰/.test(a.name ?? "") ? `${a.round}차 리뷰` : `수정 ${a.round}번`}
             />
           )}
           {a.updatedAt && (
