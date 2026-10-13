@@ -10,6 +10,7 @@ import JiraCopyButton from "@/components/JiraCopyButton";
 import ReleaseRowButton from "@/components/ReleaseRowButton";
 import ResumeButton from "@/components/ResumeButton";
 import ResumeV2Button from "@/components/ResumeV2Button";
+import V2RunButton from "@/components/V2RunButton";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
 import { dobbyColor } from "@/lib/dobby";
@@ -232,6 +233,7 @@ export default function OrderHeader({
           {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
           <ResumeButton epicKey={epicKey} />
           <ResumeV2Button epicKey={epicKey} />
+          <V2RunButton epicKey={epicKey} />
           <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>

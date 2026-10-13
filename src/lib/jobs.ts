@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
 
@@ -300,6 +301,88 @@ export function startRetro(
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
   spawnClaude(jobId, ["-p", `/dobby-retro ${k}${regen ? " regen" : ""}`], false);
   return { ok: true, jobId };
+}
+
+/** 설치된 go-dobby 의 dobby-order-v2 자동 실행 장치(run.sh) 경로. 없으면 null. */
+function v2RunScript(): string | null {
+  const lib = goDobbyLib();
+  if (!lib) return null;
+  const p = path.join(path.dirname(lib), "..", "skills", "dobby-order-v2", "run.sh");
+  return fs.existsSync(p) ? p : null;
+}
+
+/** run.sh 의 design_approved 와 같은 판정 — 승인 기록이 지금 design.md 지문(sha256 앞 8자)과 같은가. */
+function v2DesignApproved(dir: string): boolean {
+  try {
+    const rev = createHash("sha256").update(fs.readFileSync(path.join(dir, "design.md"))).digest("hex").slice(0, 8);
+    const ack = JSON.parse(fs.readFileSync(path.join(dir, "design-ack.json"), "utf8"));
+    return ack["사용자"] === rev || ack.auto === rev;
+  } catch {
+    return false;
+  }
+}
+
+/** v2 자동 실행을 지금 시작할 수 있는가. run.sh 가 멈추지 않고 진행하는 조건과 같게 판정한다. */
+export function v2RunCheck(key: string): { ok: boolean; reason?: string; running?: boolean } {
+  const k = key.trim();
+  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "잘못된 오더 키입니다" };
+  if (isRunning(k)) return { ok: false, reason: "이 오더의 작업이 이미 실행 중입니다", running: true };
+  const dir = path.join(getMetaDir(), k);
+  let md: string;
+  try {
+    md = fs.readFileSync(path.join(dir, "status.md"), "utf8");
+  } catch {
+    return { ok: false, reason: "오더 메타(status.md)가 없습니다" };
+  }
+  if (!/(?:^|\n)##\s*지난 세션/.test(md)) {
+    return { ok: false, reason: "dobby-order 로 진행한 오더입니다. dobby-order-v2 오더에서만 쓸 수 있습니다" };
+  }
+  const phase = md.match(/^- \*\*단계\*\*: *(.*)$/m)?.[1]?.trim() ?? "";
+  if (phase === "분석") {
+    if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
+  } else if (phase !== "구현" && phase !== "리뷰") {
+    return {
+      ok: false,
+      reason: !phase || phase === "착수" ? "설계 전입니다" : `지금 단계(${phase})에서는 자동으로 진행할 일이 없습니다`,
+    };
+  }
+  if (!v2RunScript()) return { ok: false, reason: "go-dobby 플러그인에서 run.sh 를 찾지 못했습니다" };
+  return { ok: true };
+}
+
+/**
+ * 설계가 확정된 v2 오더를 run.sh 로 통합까지 자동 진행한다. 잡 id는 오더 키(실시간 콘솔이 그 이름을 읽는다).
+ * run.sh 출력 한 줄을 stream-json 텍스트 한 줄로 감싸 run.log 에 쓰고, 끝나면 result 한 줄을 남긴다.
+ */
+export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  const check = v2RunCheck(k);
+  if (!check.ok) return { ok: false, reason: check.running ? "already_running" : check.reason };
+  const script = v2RunScript() as string;
+  const wrap = `jq -nc --arg t "$l" '{type:"assistant",message:{content:[{type:"text",text:$t}]}}'`;
+  const cmd =
+    `code=1; last=""; while IFS= read -r l; do case "$l" in __EXIT__*) code="\${l#__EXIT__}" ;; ` +
+    `*) [ -n "$l" ] && last="$l"; ${wrap} ;; esac; done < <(bash ${shq(script)} ${shq(k)} --mode bypassPermissions 2>&1; echo "__EXIT__$?"); ` +
+    `jq -nc --arg r "$last" --argjson e "$([ "$code" = 0 ] && echo false || echo true)" '{type:"result",is_error:$e,result:$r}'`;
+  fs.mkdirSync(jobDir(k), { recursive: true });
+  const out = fs.openSync(logPath(k), "w");
+  const workspace = getWorkspaceDir();
+  const child = spawn("bash", ["-c", cmd], {
+    cwd: workspace,
+    detached: true,
+    stdio: ["ignore", out, out],
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: "",
+      ORCHESTRATION_META: getMetaDir(),
+      ORCHESTRATION_META_PATH: getMetaDir(),
+      ORCHESTRATION_WORKSPACE: workspace,
+      ORCHESTRATION_REPOS_ROOT: getReposRoot(),
+    },
+  });
+  writeMeta({ key: k, pid: child.pid ?? -1, startedAt: Date.now() });
+  child.unref();
+  return { ok: true, jobId: k };
 }
 
 /** 잡 run.log의 마지막 result 텍스트(실패 원인 표시용). 없으면 null. */
