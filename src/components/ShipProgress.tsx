@@ -73,7 +73,7 @@ function rowRepoUrl(r: ShipRow, fallback?: string | null): string | null {
 }
 
 /** 저장소 이름 → owner/repo. dobby-lib.sh 의 `_ship_owner` 와 같은 표다. */
-const REPO_OWNER: Record<string, string> = {
+export const REPO_OWNER: Record<string, string> = {
   "wadiz-frontend": "wadiz-fe/wadiz-frontend",
   "com.wadiz.web": "wadiz-web/com.wadiz.web",
 };

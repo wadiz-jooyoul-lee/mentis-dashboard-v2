@@ -31,6 +31,7 @@ import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import { ShipProgress } from "@/components/ShipProgress";
+import { ReleaseNoteList } from "@/components/ReleaseNoteTags";
 import { quipList, type QuipsFile, type Quip } from "@/lib/quipTypes";
 import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
@@ -424,6 +425,17 @@ export default function OrchestrationBoard({
               </Text>
               <div style={{ marginTop: 6, minHeight: 24, display: "flex", alignItems: "center" }}>
                 <ShipProgress rows={ship} repoUrl={epic?.repoUrl ?? null} />
+              </div>
+            </Col>
+          )}
+          {/* 개발 오더만 정기배포에 실린다 — 산출물·작업 정리 오더에는 "미등록"이 소음이다. */}
+          {(epic?.orderKind ?? "development") === "development" && (
+            <Col xs={24}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                릴리즈 노트
+              </Text>
+              <div style={{ marginTop: 6 }}>
+                <ReleaseNoteList rows={epic?.releaseNote ?? []} epicKey={epicKey} />
               </div>
             </Col>
           )}

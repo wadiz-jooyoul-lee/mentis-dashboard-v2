@@ -23,6 +23,7 @@ import {
   phaseText,
   type PhaseKey,
   type ShipRow,
+  type ReleaseNoteRow,
 } from "@/lib/parseOrderStatus";
 import { listConsoleAgents } from "@/lib/transcript";
 import { memoByFileStat } from "@/lib/fileMemo";
@@ -368,6 +369,8 @@ export type EpicSummary = {
   phaseLabel: string;
   /** dobby-ship 배포 단계 — 환경마다 한 행. 목록 "배포" 컬럼용. 없으면 빈 배열. */
   ship: ShipRow[];
+  /** 정기배포 릴리즈 노트 등록 기록. 목록 "릴리즈 노트" 컬럼용. 없으면 빈 배열(미등록). */
+  releaseNote: ReleaseNoteRow[];
 };
 
 // "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
@@ -417,6 +420,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     phase: st?.phase ?? "unknown",
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
     ship: shipFromTestRuns(orderDir(key), st?.ship ?? []),
+    releaseNote: st?.releaseNote ?? [],
   };
 }
 
@@ -831,6 +835,8 @@ export type EpicDetail = {
   phaseLabel: string | null;
   /** dobby-ship 배포 단계 — 환경마다 한 행. 보드 관제 카드용. 없으면 빈 배열. */
   ship: ShipRow[];
+  /** 정기배포 릴리즈 노트 등록 기록. 보드 관제 카드용. 없으면 빈 배열(미등록). */
+  releaseNote: ReleaseNoteRow[];
   /** 이 오더 저장소의 GitHub 주소(PR·빌드 링크용). 못 알아내면 null. */
   repoUrl: string | null;
   analysisMd: string | null;
@@ -1478,6 +1484,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     ship: shipFromTestRuns(orderDir(epicKey), st?.ship ?? []),
+    releaseNote: st?.releaseNote ?? [],
     repoUrl: shipRepoUrl(epicKey, st?.shipRepo ?? null),
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
