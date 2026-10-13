@@ -17,8 +17,7 @@ import {
  * 판정에 git·grep 이 필요해 1.5초쯤 든다(실측: 사용 표 1.25초 + git log 1.39초).
  * 그래서 오더별로 메모리에 캐시한다 — 커밋이 더 붙으면 바뀔 수 있어 오래 들고 있지 않는다.
  *
- * 번들 태그(`/api/bundles/{키}`)와 릴리즈 노트 줄(`/api/orders/{키}/release-row`)이 같이 쓴다.
- * 캐시를 공유하므로 태그를 본 뒤 줄을 복사하면 두 번째는 기다리지 않는다.
+ * 번들 태그(`/api/bundles/{키}`)가 쓴다.
  */
 const CACHE_MS = 5 * 60 * 1000;
 const cache = new Map<string, { at: number; report: BundleReport }>();
