@@ -58,7 +58,7 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
   return { text: "작업중", color: "processing" };
 }
 
-/** 작업상태 필터 값. "전체"는 필터 없음. */
+/** 작업상태 필터 값. "전체"는 종료를 뺀 모두(작업중·해결됨). */
 type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
 
 /** 개발/비개발(work-type) 스코프. "전체"는 스코프 없음. code=개발·nonsource=비개발. */
@@ -97,14 +97,14 @@ export default function OrchestrationList({
 
   // 검색(에픽 키·제목) + 작업상태 필터. 서버가 이미 type으로 좁혀 넘긴 epics를 클라이언트에서 더 좁힌다.
   const [query, setQuery] = useState("");
-  // 처음에는 작업중만 보인다. "전체 상태"를 고르면 모든 오더를 보인다.
+  // 처음에는 작업중만 보인다. "전체 상태(종료 제외)"를 고르면 종료되지 않은 오더를 모두 보인다.
   const [status, setStatus] = useState<StatusFilter>("작업중");
   const q = query.trim().toLowerCase();
   const hasFilter = q !== "" || status !== "작업중";
   const filtered = epics.filter((r) => {
     const matchQ =
       !q || r.epicKey.toLowerCase().includes(q) || (r.title ?? "").toLowerCase().includes(q);
-    const matchS = status === "전체" || workStatus(r).text === status;
+    const matchS = status === "전체" ? workStatus(r).text !== "종료" : workStatus(r).text === status;
     return matchQ && matchS;
   });
 
@@ -114,18 +114,25 @@ export default function OrchestrationList({
   // 릴리즈 노트도 같은 이유로, 등록 기록이 하나라도 생기기 전에는 컬럼을 숨긴다.
   const anyRelease = epics.some((r) => r.releaseNote.length > 0);
 
+  // 에픽·제목 칸만 눌러서 상세로 이동한다. 나머지 칸(에이전트·배포·해결 등)은 눌러도 이동하지 않는다.
+  const openCell = (r: EpicSummary) => ({
+    onClick: () => router.push(`/orchestration/${r.epicKey}`),
+    style: { cursor: "pointer" },
+  });
+
   const columns = [
     {
       title: "에픽",
       dataIndex: "epicKey",
       key: "epicKey",
+      onCell: openCell,
       render: (key: string, r: EpicSummary) => (
         <Space size={8}>
           <GroupAvatar slug={key} avatar={r.avatar ?? undefined} size={28} showGroup />
           {/*
             키를 Link로 두면 마우스를 올릴 때 Next.js가 상세 화면을 미리 받아둔다(prefetch).
             router.push만 쓰면 prefetch가 전혀 동작하지 않아 클릭 후에야 받아오기 시작했다.
-            행 전체 클릭(onRowClick)은 그대로 유지 — 표 어디를 눌러도 이동한다.
+            에픽·제목 칸 어디를 눌러도 이동한다(openCell). 다른 칸은 눌러도 이동하지 않는다.
           */}
           <Link
             href={`/orchestration/${key}`}
@@ -150,6 +157,7 @@ export default function OrchestrationList({
       title: "제목",
       dataIndex: "title",
       key: "title",
+      onCell: openCell,
       width: 300,
       // 고정 너비에서 최대 2줄까지만, 넘치면 말줄임. hover 시 전체 제목 툴팁.
       // 자율(B) 모드 오더는 제목을 붉게 + 호버 시 Popover로 모드를 알린다.
@@ -316,9 +324,9 @@ export default function OrchestrationList({
                     <Select<StatusFilter>
                       value={status}
                       onChange={(v) => setStatus(v)}
-                      style={{ width: 140 }}
+                      style={{ width: 200 }}
                       options={[
-                        { value: "전체", label: "전체 상태" },
+                        { value: "전체", label: "전체 상태(종료 제외)" },
                         { value: "작업중", label: "작업중" },
                         { value: "해결됨", label: "해결됨" },
                         { value: "종료", label: "종료" },
@@ -346,7 +354,6 @@ export default function OrchestrationList({
                   groupLabel={hasFilter ? "검색 결과" : "작업중"}
                   columns={columns}
                   rowKey="epicKey"
-                  onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
                   emptyText={hasFilter ? "조건에 맞는 오더가 없습니다" : "작업중인 오더가 없습니다"}
                 />
 
@@ -359,8 +366,7 @@ export default function OrchestrationList({
                       dateOf={(r) => r.lastActivity}
                       columns={columns}
                       rowKey="epicKey"
-                      onRowClick={(r) => router.push(`/orchestration/${r.epicKey}`)}
-                      rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
+                          rowClassName={(r) => (workStatus(r).text !== "작업중" ? "row-resolved" : "")}
                       emptyText="진행 중인 오더가 없습니다"
                       pageSize={10}
                       storageKey="orders-by-date"

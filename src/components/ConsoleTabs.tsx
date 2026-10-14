@@ -11,7 +11,7 @@ const { Paragraph } = Typography;
  *  - 실시간: 대시보드가 띄운 run.log (제어 가능)
  *  - 기록 · 오케스트레이터: 부모 세션 .jsonl (클로드 히스토리, 읽기전용)
  *  - 기록 · {서브}: 각 서브에이전트 .output (읽기전용)
- * destroyInactiveTabPane 로 활성 탭만 마운트 → 열어 둔 콘솔 하나만 폴링한다.
+ * destroyOnHidden 로 활성 탭만 마운트 → 열어 둔 콘솔 하나만 폴링한다.
  * (antd는 클라이언트 컴포넌트에서만 사용 — 서버 컴포넌트 RSC 매니페스트 이슈 회피)
  */
 export default function ConsoleTabs({
@@ -76,7 +76,7 @@ export default function ConsoleTabs({
         <b> 기록</b>은 클로드 히스토리(세션·서브에이전트)를 재생/추적합니다(읽기 전용).
           진행 중이면 자동 추적, 끝났으면 재생으로 표시됩니다.
         </Paragraph>
-        <Tabs items={items} defaultActiveKey="__live__" destroyInactiveTabPane />
+        <Tabs items={items} defaultActiveKey="__live__" destroyOnHidden />
       </Space>
     </div>
   );

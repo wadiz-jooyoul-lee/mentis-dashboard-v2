@@ -230,6 +230,8 @@ export function ShipTags({ rows }: { rows: ShipRow[] }) {
         >
           <Tag
             color={r.blocked ? "error" : r.done ? "success" : "processing"}
+            // 바탕을 비우고 상태 색 테두리·글자만 보인다.
+            variant="outlined"
             style={{
               margin: 0,
               // 기록이 아니라 검증 회차에서 미루어 만든 값이라는 표시.
