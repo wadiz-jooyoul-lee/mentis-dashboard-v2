@@ -200,6 +200,64 @@ export function listConsoleAgents(key: string): ConsoleAgent[] {
   return out;
 }
 
+/** agent-logs.json 하위 키 → 한국어 단계 이름(/do 스킬의 세션 표와 같은 이름). 모르는 키는 null. */
+const STEP_NAMES: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^design$/, () => "설계"],
+  [/^takeover$/, () => "이어받기 설계"],
+  [/^analysis$/, () => "분석"],
+  [/^impl$/, () => "구현"],
+  [/^impl-change-(\d+)$/, (m) => `변경 ${m[1]} 구현`],
+  [/^round-(\d+)$/, (m) => `${m[1]}차 리뷰`],
+  [/^fix-(\d+)$/, (m) => `${m[1]}차 수정`],
+  [/^fix-test-/, () => "검증 실패 수정"],
+  [/^integrate$/, () => "통합"],
+  [/^verify$/, () => "검증"],
+];
+
+/** status.md '## 지난 세션' 표의 세션 아이디 → 단계 이름(플러그인이 적은 한국어). */
+function pastSessionSteps(key: string): Map<string, string> {
+  const out = new Map<string, string>();
+  try {
+    const md = fs.readFileSync(path.join(getMetaDir(), key, "status.md"), "utf8");
+    for (const m of md.matchAll(/^\|[^|]*\|\s*([^|]+?)\s*\|\s*`([0-9a-fA-F-]{36})`\s*\|/gm)) out.set(m[2], m[1]);
+  } catch {
+    /* noop */
+  }
+  return out;
+}
+
+/**
+ * 콘솔 드롭다운에 보일 사람용 이름. 키(id)는 그대로 두고 표시만 바꾼다.
+ * - 단계: 하위 키 규칙(STEP_NAMES) → 지난 세션 표의 단계 이름(세션 아이디로 찾음) → 하위 키 그대로
+ * - 에이전트: 보드 상태표의 이름 → 슬러그
+ * - 시각: 기록 파일이 마지막으로 바뀐 때(MM-DD HH:mm)
+ */
+export function consoleAgentLabels(
+  key: string,
+  nameBySlug: Map<string, string>,
+): { id: string; label: string; time: string | null }[] {
+  const steps = pastSessionSteps(key);
+  return listConsoleAgents(key).map((a) => {
+    const name = nameBySlug.get(a.slug) || a.slug;
+    let step: string | null = null;
+    if (a.phase) {
+      for (const [re, fn] of STEP_NAMES) {
+        const m = a.phase.match(re);
+        if (m) {
+          step = fn(m);
+          break;
+        }
+      }
+      step ??= steps.get(path.basename(a.path, ".jsonl")) ?? a.phase;
+    }
+    const t = mtimeMs(a.path);
+    const d = new Date(t);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const time = t > 0 ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}` : null;
+    return { id: a.id, label: step ? `${step} — ${name}` : name, time };
+  });
+}
+
 /** 서브에이전트 로그 경로 해석(id 우선 → slug+phase → slug의 impl/produce/첫번째). */
 function resolveAgent(key: string, agent: string, phase?: string): ConsoleAgent | null {
   const list = listConsoleAgents(key);

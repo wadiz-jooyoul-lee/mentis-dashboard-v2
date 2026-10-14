@@ -33,7 +33,8 @@ export default function ConsoleTabs({
 }: {
   orderKey: string;
   title?: string | null;
-  agents: { id: string; label: string }[];
+  /** 기록 콘솔. label 은 사람용 이름, time 은 기록이 마지막으로 바뀐 때. */
+  agents: { id: string; label: string; time?: string | null }[];
   height?: number;
   mode?: string | null;
   worktreeRemoved?: boolean;
@@ -46,9 +47,9 @@ export default function ConsoleTabs({
   initialSelected?: string | null;
 }) {
   const consoles = [
-    { key: "__live__", group: "대시보드 실행 로그", name: "대시보드 실행 로그" },
-    { key: "__session__", group: "기록", name: "오케스트레이터" },
-    ...agents.map((a) => ({ key: a.id, group: "기록", name: a.label })),
+    { key: "__live__", group: "대시보드 실행 로그", name: "대시보드 실행 로그", time: null as string | null | undefined },
+    { key: "__session__", group: "기록", name: "오케스트레이터", time: null },
+    ...agents.map((a) => ({ key: a.id, group: "기록", name: a.label, time: a.time })),
   ];
   const [selected, setSelected] = useState(initialSelected ?? "__live__");
   const [live, setLive] = useState<Record<string, boolean>>({});
@@ -70,14 +71,13 @@ export default function ConsoleTabs({
 
   const option = (c: (typeof consoles)[number]) => ({
     value: c.key,
-    label: live[c.key] ? (
+    label: (
       <Space size={6}>
-        <Badge status="processing" />
-        <b>{c.name}</b>
-        <Typography.Text type="success">진행 중</Typography.Text>
+        {live[c.key] && <Badge status="processing" />}
+        {live[c.key] ? <b>{c.name}</b> : c.name}
+        {live[c.key] && <Typography.Text type="success">진행 중</Typography.Text>}
+        {c.time && <Typography.Text type="secondary">{c.time}</Typography.Text>}
       </Space>
-    ) : (
-      c.name
     ),
   });
   const runningCount = consoles.filter((c) => live[c.key]).length;
@@ -113,7 +113,8 @@ export default function ConsoleTabs({
             options={["대시보드 실행 로그", "기록"].map((g) => ({
               label: g,
               title: g,
-              options: consoles.filter((c) => c.group === g).map((c) => ({ ...option(c), title: c.name })),
+              // 검색은 사람용 이름과 원래 키 둘 다로 된다
+              options: consoles.filter((c) => c.group === g).map((c) => ({ ...option(c), title: `${c.name} ${c.key}` })),
             }))}
           />
           {runningCount > 0 ? (
