@@ -24,7 +24,7 @@ const q = (v: string) => `"${v}"`;
 
 /**
  * 워크트리로 이동해 **새 세션**을 여는 명령. 옛 대화를 불러오지 않는다(`--resume` 을 쓰지 않는다).
- * v2 오더면 첫 지시로 `/dobby-order-v2 {키}` 를 넘겨 메타 문서를 읽고 다음 단계를 이어가게 한다.
+ * v2 오더면 첫 지시로 `/do {키}` 를 넘겨 메타 문서를 읽고 다음 단계를 이어가게 한다.
  * 사라진 워크트리는 이어가기와 같은 방식으로 먼저 되살리고(prune → 없을 때만 add), 실패하면
  * `&&` 에서 끊겨 claude 를 띄우지 않는다.
  */
@@ -32,7 +32,7 @@ function commandFor(t: Target, epicKey: string, isV2: boolean): string {
   const parts: string[] = [];
   if (t.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
   parts.push(`cd ${q(t.path)}`);
-  parts.push(isV2 ? `claude ${q(`/dobby-order-v2 ${epicKey}`)}` : "claude");
+  parts.push(isV2 ? `claude ${q(`/do ${epicKey}`)}` : "claude");
   return parts.join(" && ");
 }
 
@@ -113,7 +113,7 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
               type="info"
               showIcon
               style={{ fontSize: 12 }}
-              title="dobby-order-v2 로 진행한 오더가 아닙니다. 워크트리로 이동해 빈 새 세션만 엽니다. 무엇을 할지는 직접 입력하세요."
+              title="/do 로 진행한 오더가 아닙니다. 워크트리로 이동해 빈 새 세션만 엽니다. 무엇을 할지는 직접 입력하세요."
             />
           )}
           {targets.length === 0 ? (

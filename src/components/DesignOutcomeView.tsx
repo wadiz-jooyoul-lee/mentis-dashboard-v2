@@ -9,7 +9,7 @@ type Doc = "design" | "outcome";
 
 /**
  * "설계/결과" 탭 — 설계(design.md)와 결과(outcome.md)를 전환 단추로 골라 본다. 결과가 있으면 결과부터.
- * 두 문서는 오더(dobby-order·dobby-order-v2)가 직접 쓰므로 이 화면은 읽기만 한다.
+ * 두 문서는 오더(dobby-order·/do)가 직접 쓰므로 이 화면은 읽기만 한다.
  */
 export default function DesignOutcomeView({
   epicKey,

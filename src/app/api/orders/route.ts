@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
 
-  // v2 자동 실행: 설계가 확정된 dobby-order-v2 오더를 run.sh 로 통합까지 진행.
+  // v2 자동 실행: 설계가 확정된 /do 오더를 run.sh 로 통합까지 진행.
   if (body?.v2run) {
     const r = startV2Run(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });

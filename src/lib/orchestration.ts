@@ -104,7 +104,7 @@ export type OrderSession = {
    */
   cwdIsForeignCheckout: boolean;
   /**
-   * dobby-order-v2 로 진행하는 오더인가. 근거는 status.md `## 지난 세션` 표 — 그 표는 v2 의
+   * /do 로 진행하는 오더인가. 근거는 status.md `## 지난 세션` 표 — 그 표는 v2 의
    * 세션 기록 헬퍼(dobby_session_log)만 만든다. 참이면 "이어가기 v2"가 새 세션 명령을 권한다.
    */
   isV2: boolean;

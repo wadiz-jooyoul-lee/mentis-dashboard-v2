@@ -286,11 +286,11 @@ export function startRetro(
   return { ok: true, jobId };
 }
 
-/** 설치된 go-dobby 의 dobby-order-v2 자동 실행 장치(run.sh) 경로. 없으면 null. */
+/** 설치된 go-dobby 의 /do 자동 실행 장치(run.sh) 경로. 없으면 null. */
 function v2RunScript(): string | null {
   const lib = goDobbyLib();
   if (!lib) return null;
-  const p = path.join(path.dirname(lib), "..", "skills", "dobby-order-v2", "run.sh");
+  const p = path.join(path.dirname(lib), "..", "skills", "do", "run.sh");
   return fs.existsSync(p) ? p : null;
 }
 
@@ -318,7 +318,7 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
     return { ok: false, reason: "오더 메타(status.md)가 없습니다" };
   }
   if (!/(?:^|\n)##\s*지난 세션/.test(md)) {
-    return { ok: false, reason: "dobby-order 로 진행한 오더입니다. dobby-order-v2 오더에서만 쓸 수 있습니다" };
+    return { ok: false, reason: "dobby-order 로 진행한 오더입니다. /do 오더에서만 쓸 수 있습니다" };
   }
   const phase = md.match(/^- \*\*단계\*\*: *(.*)$/m)?.[1]?.trim() ?? "";
   if (phase === "분석") {
