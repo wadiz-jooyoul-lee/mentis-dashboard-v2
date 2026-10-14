@@ -273,23 +273,6 @@ export function startExplain(key: string): { ok: boolean; reason?: string; jobId
   return { ok: true, jobId };
 }
 
-/** 설계/결과 문서 생성: `/dobby-design {키} [outcome] [regen]`. 잡 id는 `design-{키}`. */
-export function startDesign(
-  key: string,
-  kind: "design" | "outcome",
-  regen = false
-): { ok: boolean; reason?: string; jobId?: string } {
-  const k = key.trim();
-  if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "invalid_key" };
-  const jobId = `design-${k}`;
-  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
-  // 오더 잡이 도는 중엔 오케스트레이터가 같은 파일을 쓸 수 있어 겹치지 않게 막는다.
-  if (isRunning(k)) return { ok: false, reason: "order_running" };
-  const args = `${kind === "outcome" ? " outcome" : ""}${regen ? " regen" : ""}`;
-  spawnClaude(jobId, ["-p", `/dobby-design ${k}${args}`], false);
-  return { ok: true, jobId };
-}
-
 /** 회고(retro.md) 생성: `/dobby-retro {키} [regen]`를 백그라운드로 실행. 잡 id는 `retro-{키}`. */
 export function startRetro(
   key: string,

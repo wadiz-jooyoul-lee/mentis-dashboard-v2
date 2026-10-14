@@ -4,7 +4,7 @@ import { useCanAct } from "@/components/CanAct";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Typography, Empty, Button, Collapse, Badge } from "antd";
 import FeedView from "@/components/FeedView";
-import MarkdownDoc from "@/components/MarkdownDoc";
+import StyledDoc from "@/components/doc/StyledDoc";
 import OrderHeader from "@/components/OrderHeader";
 import type { FeedItem, JobState } from "@/lib/jobs";
 
@@ -182,7 +182,7 @@ export default function ExplainerView({
         <GenerateExplainer epicKey={epicKey} docLabel={orderKind === "summary" ? "작업 내용" : "구현 내용"} />
       ) : (
         <>
-          <MarkdownDoc md={md} />
+          <StyledDoc md={md} idPrefix="xp" />
           {job && <JobRecord job={job} label={orderKind === "summary" ? "작업 내용" : "구현 내용"} />}
         </>
       )}

@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { getEpic } from "@/lib/orchestration";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
-import { getJobStatus } from "@/lib/jobs";
 import DesignOutcomeView from "@/components/DesignOutcomeView";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +21,6 @@ export default async function DesignPage({ params }: { params: Promise<{ key: st
       orderKind={epic.orderKind ?? null}
       designMd={epic.designMd}
       outcomeMd={epic.outcomeMd}
-      designMtime={epic.designMtime}
-      designJobState={getJobStatus(`design-${key}`).state}
-      orderRunning={getJobStatus(key).state === "running"}
     />
   );
 }
