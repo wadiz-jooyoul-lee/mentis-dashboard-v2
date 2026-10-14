@@ -8,10 +8,13 @@ export const dynamic = "force-dynamic";
 
 export default async function OrderConsolePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ agent?: string | string[] }>;
 }) {
   const { key } = await params;
+  const { agent } = await searchParams;
   if (!ORDER_KEY_RE.test(key)) notFound();
 
   const epic = getEpic(key);
@@ -33,6 +36,7 @@ export default async function OrderConsolePage({
       hasDesign={epic?.hasDesignDoc ?? false}
       hasQa={!!epic?.qa}
       orderKind={epic?.orderKind ?? null}
+      initialSelected={typeof agent === "string" ? agent : null}
     />
   );
 }

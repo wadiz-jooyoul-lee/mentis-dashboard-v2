@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
-import { getJobStatus, type FeedItem, type JobState } from "@/lib/jobs";
+import { getJobStatus, isRunning, type FeedItem, type JobState } from "@/lib/jobs";
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
@@ -313,7 +313,33 @@ export function getConsole(key: string, opts: ConsoleOpts = {}): ConsoleStatus {
   // 기본: 실시간(run.log). 기록으로 폴백하지 않는다(기록은 별도 소스로 제공).
   const job = getJobStatus(key);
   if (job.state !== "none") {
-    return { ...job, mode: "job", controllable: true, live: job.state === "running", label: "실시간(run.log)" };
+    return { ...job, mode: "job", controllable: true, live: job.state === "running", label: "대시보드 실행 로그(run.log)" };
   }
   return { state: "none" };
+}
+
+/**
+ * 콘솔 목록·보드 카드의 "진행 중" 표시용. 콘솔마다 지금 작업 중인지만 가볍게 판정한다.
+ * - live.__live__: 대시보드가 띄운 잡 프로세스가 살아 있는지
+ * - live.__session__ · 서브: 기록 파일이 최근(isFresh) 커졌는지 — 콘솔 화면의 "추적 중"과 같은 기준
+ * - latest: 슬러그별로 가장 최근에 바뀐 콘솔 id (보드 카드 → 그 에이전트의 콘솔로 이동)
+ */
+export function consoleLiveness(key: string): {
+  live: Record<string, boolean>;
+  latest: Record<string, string>;
+} {
+  const live: Record<string, boolean> = { __live__: isRunning(key) };
+  const sess = resolveParentSession(key);
+  live.__session__ = !!sess && isFresh(sess);
+  const latest: Record<string, string> = {};
+  const latestAt: Record<string, number> = {};
+  for (const a of listConsoleAgents(key)) {
+    live[a.id] = isFresh(a.path);
+    const t = mtimeMs(a.path);
+    if (!(a.slug in latestAt) || t > latestAt[a.slug]) {
+      latestAt[a.slug] = t;
+      latest[a.slug] = a.id;
+    }
+  }
+  return { live, latest };
 }
