@@ -310,7 +310,7 @@ export default function OrchestrationBoard({
   useEffect(() => {
     let alive = true;
     const load = () =>
-      fetch(`/api/orders?consoleLive=${encodeURIComponent(epicKey)}`, { cache: "no-store" })
+      fetch(`/api/orders?consoleLive=${encodeURIComponent(epicKey)}&agentsOnly=1`, { cache: "no-store" })
         .then((r) => r.json())
         .then((d) => alive && d?.live && d?.latest && setConsoleInfo(d))
         .catch(() => {});

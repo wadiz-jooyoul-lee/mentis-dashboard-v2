@@ -323,14 +323,22 @@ export function getConsole(key: string, opts: ConsoleOpts = {}): ConsoleStatus {
  * - live.__live__: 대시보드가 띄운 잡 프로세스가 살아 있는지
  * - live.__session__ · 서브: 기록 파일이 최근(isFresh) 커졌는지 — 콘솔 화면의 "추적 중"과 같은 기준
  * - latest: 슬러그별로 가장 최근에 바뀐 콘솔 id (보드 카드 → 그 에이전트의 콘솔로 이동)
+ * agentsOnly(보드용): __live__·__session__ 판정을 건너뛴다. ps 실행과 부모 세션 탐색
+ * (큰 기록 파일 읽기·projects 전체 스캔)이 5초마다 돌며 화면 이동 요청을 붙잡지 않게 한다.
  */
-export function consoleLiveness(key: string): {
+export function consoleLiveness(
+  key: string,
+  agentsOnly = false,
+): {
   live: Record<string, boolean>;
   latest: Record<string, string>;
 } {
-  const live: Record<string, boolean> = { __live__: isRunning(key) };
-  const sess = resolveParentSession(key);
-  live.__session__ = !!sess && isFresh(sess);
+  const live: Record<string, boolean> = {};
+  if (!agentsOnly) {
+    live.__live__ = isRunning(key);
+    const sess = resolveParentSession(key);
+    live.__session__ = !!sess && isFresh(sess);
+  }
   const latest: Record<string, string> = {};
   const latestAt: Record<string, number> = {};
   for (const a of listConsoleAgents(key)) {

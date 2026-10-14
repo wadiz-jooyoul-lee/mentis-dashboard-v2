@@ -222,12 +222,13 @@ export async function GET(req: NextRequest) {
 
   // 콘솔 목록·보드 카드의 진행 중 표시: ?consoleLive={오더키}
   //  → { live: { 콘솔id: 진행중여부 }, latest: { 슬러그: 가장 최근 콘솔id } }
+  //  &agentsOnly=1 (보드): 서브 콘솔만 판정한다.
   const liveKey = (sp.get("consoleLive") ?? "").trim();
   if (liveKey) {
     if (!ORDER_KEY_RE.test(liveKey)) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
-    return NextResponse.json(consoleLiveness(liveKey));
+    return NextResponse.json(consoleLiveness(liveKey, sp.get("agentsOnly") === "1"));
   }
 
   // 잡 결과 조회: ?jobResult={잡id} → 상태 + 마지막 result 텍스트(실패 표면화용)
