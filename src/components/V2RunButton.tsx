@@ -8,7 +8,7 @@ import { PlayCircleOutlined } from "@ant-design/icons";
 type Check = { ok: boolean; reason?: string; running?: boolean };
 
 /**
- * "자동 실행" 버튼 — 설계가 확정된 dobby-order-v2 오더를 run.sh 로 통합까지 단계마다 새 세션으로 진행한다.
+ * "자동 실행" 버튼 — 설계가 확정된 /do 오더를 run.sh 로 통합까지 단계마다 새 세션으로 진행한다.
  * 시작 조건은 서버(v2RunCheck)가 판정하고, 맞지 않으면 버튼을 끄고 이유를 보여 준다.
  */
 export default function V2RunButton({ epicKey }: { epicKey: string }) {
