@@ -92,7 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </span>
       </Header>
       <Content
-        style={{ padding: 24, maxWidth: 1080, margin: "0 auto", width: "100%" }}
+        style={{ padding: 24, maxWidth: 1440, margin: "0 auto", width: "100%" }}
       >
         {children}
       </Content>

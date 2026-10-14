@@ -58,7 +58,7 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
   return { text: "작업중", color: "processing" };
 }
 
-/** 작업상태 필터 값. "전체"는 필터 없음. */
+/** 작업상태 필터 값. "전체"는 종료를 뺀 모두(작업중·해결됨). */
 type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
 
 /** 개발/비개발(work-type) 스코프. "전체"는 스코프 없음. code=개발·nonsource=비개발. */
@@ -97,14 +97,14 @@ export default function OrchestrationList({
 
   // 검색(에픽 키·제목) + 작업상태 필터. 서버가 이미 type으로 좁혀 넘긴 epics를 클라이언트에서 더 좁힌다.
   const [query, setQuery] = useState("");
-  // 처음에는 작업중만 보인다. "전체 상태"를 고르면 모든 오더를 보인다.
+  // 처음에는 작업중만 보인다. "전체 상태(종료 제외)"를 고르면 종료되지 않은 오더를 모두 보인다.
   const [status, setStatus] = useState<StatusFilter>("작업중");
   const q = query.trim().toLowerCase();
   const hasFilter = q !== "" || status !== "작업중";
   const filtered = epics.filter((r) => {
     const matchQ =
       !q || r.epicKey.toLowerCase().includes(q) || (r.title ?? "").toLowerCase().includes(q);
-    const matchS = status === "전체" || workStatus(r).text === status;
+    const matchS = status === "전체" ? workStatus(r).text !== "종료" : workStatus(r).text === status;
     return matchQ && matchS;
   });
 
@@ -316,9 +316,9 @@ export default function OrchestrationList({
                     <Select<StatusFilter>
                       value={status}
                       onChange={(v) => setStatus(v)}
-                      style={{ width: 140 }}
+                      style={{ width: 200 }}
                       options={[
-                        { value: "전체", label: "전체 상태" },
+                        { value: "전체", label: "전체 상태(종료 제외)" },
                         { value: "작업중", label: "작업중" },
                         { value: "해결됨", label: "해결됨" },
                         { value: "종료", label: "종료" },
