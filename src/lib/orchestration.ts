@@ -864,11 +864,9 @@ export type EpicDetail = {
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
   retroMd: string | null;
-  /** 설계 문서(design.md — 사용자 수정 가능)와 구현 결과(outcome.md). 없으면 null. */
+  /** 설계 문서(design.md)와 구현 결과(outcome.md). 없으면 null. */
   designMd: string | null;
   outcomeMd: string | null;
-  /** design.md의 mtime(ms) — 대시보드 편집 저장의 충돌 감지용. 파일 없으면 null. */
-  designMtime: number | null;
   /** 아티팩트 탭 — dobby-share가 게시한 claude.ai 공개 아티팩트 목록(게시 순). 없으면 빈 배열. */
   artifactShares: ArtifactShare[];
   /** Jira 탭 — dobby-order가 저장한 이슈 원문(jira-issue.md). 있으면 Jira 탭 표시. */
@@ -1508,13 +1506,6 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     retroMd: readFileSafe(path.join(dir, "retro.md")),
     designMd: readFileSafe(path.join(dir, "design.md")),
     outcomeMd: readFileSafe(path.join(dir, "outcome.md")),
-    designMtime: (() => {
-      try {
-        return fs.statSync(path.join(dir, "design.md")).mtimeMs;
-      } catch {
-        return null;
-      }
-    })(),
     artifactShares: readArtifactShares(epicKey),
     jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
     jiraIssueCleanMd: readFileSafe(path.join(dir, "jira-issue-clean.md")),
