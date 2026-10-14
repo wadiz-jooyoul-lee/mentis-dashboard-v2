@@ -45,7 +45,6 @@ export default function DateFoldedTable<T extends object>({
   dateOf,
   columns,
   rowKey,
-  onRowClick,
   rowClassName,
   emptyText,
   groupLabel,
@@ -56,7 +55,6 @@ export default function DateFoldedTable<T extends object>({
   dateOf: (r: T) => string | null | undefined;
   columns: TableProps<T>["columns"];
   rowKey: TableProps<T>["rowKey"];
-  onRowClick?: (r: T) => void;
   rowClassName?: TableProps<T>["rowClassName"];
   emptyText?: string;
   groupLabel?: string;
@@ -159,14 +157,6 @@ export default function DateFoldedTable<T extends object>({
         size="middle"
         scroll={{ x: "max-content" }}
         rowClassName={rowClassName}
-        onRow={
-          onRowClick
-            ? (r) => ({
-                onClick: () => onRowClick(r),
-                style: { cursor: "pointer" },
-              })
-            : undefined
-        }
       />
     ),
   }));
