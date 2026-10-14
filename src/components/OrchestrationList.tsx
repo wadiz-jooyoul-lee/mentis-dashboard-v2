@@ -97,18 +97,16 @@ export default function OrchestrationList({
 
   // 검색(에픽 키·제목) + 작업상태 필터. 서버가 이미 type으로 좁혀 넘긴 epics를 클라이언트에서 더 좁힌다.
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("전체");
+  // 처음에는 작업중만 보인다. "전체 상태"를 고르면 모든 오더를 보인다.
+  const [status, setStatus] = useState<StatusFilter>("작업중");
   const q = query.trim().toLowerCase();
-  const hasFilter = q !== "" || status !== "전체";
+  const hasFilter = q !== "" || status !== "작업중";
   const filtered = epics.filter((r) => {
     const matchQ =
       !q || r.epicKey.toLowerCase().includes(q) || (r.title ?? "").toLowerCase().includes(q);
     const matchS = status === "전체" || workStatus(r).text === status;
     return matchQ && matchS;
   });
-  // 검색·상태 결과는 "최상위 테이블에만" 반영한다. 그게 없으면 작업중(미해결)만.
-  const active = epics.filter((r) => workStatus(r).text === "작업중");
-  const topItems = hasFilter ? filtered : active;
 
   // 배포 표가 있는 오더는 아직 드물다(110여 개 중 두 개). 하나도 없으면 컬럼 자체를 숨긴다 —
   // 안 그러면 빈 칸만 한 줄 늘어선다.
@@ -341,9 +339,9 @@ export default function OrchestrationList({
                   </Space>
                 </div>
 
-                {/* 상단: 검색·필터 결과만 반영(필터 없으면 작업중). 하단 전체 목록은 건드리지 않는다. */}
+                {/* 상단: 검색·필터 결과만 반영(처음에는 작업중). 하단 전체 목록은 건드리지 않는다. */}
                 <DateFoldedTable<EpicSummary>
-                  items={topItems}
+                  items={filtered}
                   dateOf={() => null}
                   groupLabel={hasFilter ? "검색 결과" : "작업중"}
                   columns={columns}
