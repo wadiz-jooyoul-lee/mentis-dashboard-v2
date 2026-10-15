@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { getMetaDir } from "@/lib/issues";
-import { getJobStatus, type FeedItem, type JobState } from "@/lib/jobs";
+import { getJobStatus, isRunning, type FeedItem, type JobState } from "@/lib/jobs";
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
@@ -200,6 +200,64 @@ export function listConsoleAgents(key: string): ConsoleAgent[] {
   return out;
 }
 
+/** agent-logs.json 하위 키 → 한국어 단계 이름(/do 스킬의 세션 표와 같은 이름). 모르는 키는 null. */
+const STEP_NAMES: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^design$/, () => "설계"],
+  [/^takeover$/, () => "이어받기 설계"],
+  [/^analysis$/, () => "분석"],
+  [/^impl$/, () => "구현"],
+  [/^impl-change-(\d+)$/, (m) => `변경 ${m[1]} 구현`],
+  [/^round-(\d+)$/, (m) => `${m[1]}차 리뷰`],
+  [/^fix-(\d+)$/, (m) => `${m[1]}차 수정`],
+  [/^fix-test-/, () => "검증 실패 수정"],
+  [/^integrate$/, () => "통합"],
+  [/^verify$/, () => "검증"],
+];
+
+/** status.md '## 지난 세션' 표의 세션 아이디 → 단계 이름(플러그인이 적은 한국어). */
+function pastSessionSteps(key: string): Map<string, string> {
+  const out = new Map<string, string>();
+  try {
+    const md = fs.readFileSync(path.join(getMetaDir(), key, "status.md"), "utf8");
+    for (const m of md.matchAll(/^\|[^|]*\|\s*([^|]+?)\s*\|\s*`([0-9a-fA-F-]{36})`\s*\|/gm)) out.set(m[2], m[1]);
+  } catch {
+    /* noop */
+  }
+  return out;
+}
+
+/**
+ * 콘솔 드롭다운에 보일 사람용 이름. 키(id)는 그대로 두고 표시만 바꾼다.
+ * - 단계: 하위 키 규칙(STEP_NAMES) → 지난 세션 표의 단계 이름(세션 아이디로 찾음) → 하위 키 그대로
+ * - 에이전트: 보드 상태표의 이름 → 슬러그
+ * - 시각: 기록 파일이 마지막으로 바뀐 때(MM-DD HH:mm)
+ */
+export function consoleAgentLabels(
+  key: string,
+  nameBySlug: Map<string, string>,
+): { id: string; label: string; time: string | null }[] {
+  const steps = pastSessionSteps(key);
+  return listConsoleAgents(key).map((a) => {
+    const name = nameBySlug.get(a.slug) || a.slug;
+    let step: string | null = null;
+    if (a.phase) {
+      for (const [re, fn] of STEP_NAMES) {
+        const m = a.phase.match(re);
+        if (m) {
+          step = fn(m);
+          break;
+        }
+      }
+      step ??= steps.get(path.basename(a.path, ".jsonl")) ?? a.phase;
+    }
+    const t = mtimeMs(a.path);
+    const d = new Date(t);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const time = t > 0 ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}` : null;
+    return { id: a.id, label: step ? `${step} — ${name}` : name, time };
+  });
+}
+
 /** 서브에이전트 로그 경로 해석(id 우선 → slug+phase → slug의 impl/produce/첫번째). */
 function resolveAgent(key: string, agent: string, phase?: string): ConsoleAgent | null {
   const list = listConsoleAgents(key);
@@ -313,7 +371,41 @@ export function getConsole(key: string, opts: ConsoleOpts = {}): ConsoleStatus {
   // 기본: 실시간(run.log). 기록으로 폴백하지 않는다(기록은 별도 소스로 제공).
   const job = getJobStatus(key);
   if (job.state !== "none") {
-    return { ...job, mode: "job", controllable: true, live: job.state === "running", label: "실시간(run.log)" };
+    return { ...job, mode: "job", controllable: true, live: job.state === "running", label: "대시보드 실행 로그(run.log)" };
   }
   return { state: "none" };
+}
+
+/**
+ * 콘솔 목록·보드 카드의 "진행 중" 표시용. 콘솔마다 지금 작업 중인지만 가볍게 판정한다.
+ * - live.__live__: 대시보드가 띄운 잡 프로세스가 살아 있는지
+ * - live.__session__ · 서브: 기록 파일이 최근(isFresh) 커졌는지 — 콘솔 화면의 "추적 중"과 같은 기준
+ * - latest: 슬러그별로 가장 최근에 바뀐 콘솔 id (보드 카드 → 그 에이전트의 콘솔로 이동)
+ * agentsOnly(보드용): __live__·__session__ 판정을 건너뛴다. ps 실행과 부모 세션 탐색
+ * (큰 기록 파일 읽기·projects 전체 스캔)이 5초마다 돌며 화면 이동 요청을 붙잡지 않게 한다.
+ */
+export function consoleLiveness(
+  key: string,
+  agentsOnly = false,
+): {
+  live: Record<string, boolean>;
+  latest: Record<string, string>;
+} {
+  const live: Record<string, boolean> = {};
+  if (!agentsOnly) {
+    live.__live__ = isRunning(key);
+    const sess = resolveParentSession(key);
+    live.__session__ = !!sess && isFresh(sess);
+  }
+  const latest: Record<string, string> = {};
+  const latestAt: Record<string, number> = {};
+  for (const a of listConsoleAgents(key)) {
+    live[a.id] = isFresh(a.path);
+    const t = mtimeMs(a.path);
+    if (!(a.slug in latestAt) || t > latestAt[a.slug]) {
+      latestAt[a.slug] = t;
+      latest[a.slug] = a.id;
+    }
+  }
+  return { live, latest };
 }

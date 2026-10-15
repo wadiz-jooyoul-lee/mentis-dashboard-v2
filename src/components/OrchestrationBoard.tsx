@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -25,6 +25,7 @@ import {
   FileTextOutlined,
   MessageOutlined,
   MutedOutlined,
+  CodeOutlined,
 } from "@ant-design/icons";
 import GroupAvatar, { type QuipPlacement } from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
@@ -148,6 +149,7 @@ function AgentCard({
   avatar,
   quips,
   placement,
+  console: con,
 }: {
   a: AgentRow;
   epicKey: string;
@@ -159,6 +161,8 @@ function AgentCard({
   quips?: Quip[];
   /** 말풍선을 띄울 방향(옆 열이 빈 쪽) */
   placement?: QuipPlacement;
+  /** 이 에이전트의 가장 최근 콘솔(id)과 지금 진행 중인지. 콘솔 기록이 없으면 undefined. */
+  console?: { id: string; live: boolean };
 }) {
   const router = useRouter();
   const stale = isStale(a);
@@ -264,6 +268,24 @@ function AgentCard({
             코드 변경 보기 →
           </Tag>
         )}
+        {con && (
+          <Link
+            href={`/orchestration/console/${epicKey}?agent=${encodeURIComponent(con.id)}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Tag
+              icon={con.live ? undefined : <CodeOutlined />}
+              color={con.live ? "processing" : "default"}
+              style={{ margin: 0, width: "fit-content" }}
+            >
+              {con.live ? (
+                <Badge status="processing" text={<b>콘솔 진행 중 →</b>} />
+              ) : (
+                "콘솔 보기 →"
+              )}
+            </Tag>
+          </Link>
+        )}
       </Space>
     </Card>
   );
@@ -279,6 +301,30 @@ export default function OrchestrationBoard({
   quips?: QuipsFile | null;
 }) {
   const o = epic?.orchestration ?? null;
+
+  // 카드별 "콘솔 보기": 슬러그마다 가장 최근 콘솔과 진행 중 여부(5초마다 갱신).
+  const [consoleInfo, setConsoleInfo] = useState<{
+    live: Record<string, boolean>;
+    latest: Record<string, string>;
+  }>({ live: {}, latest: {} });
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch(`/api/orders?consoleLive=${encodeURIComponent(epicKey)}&agentsOnly=1`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => alive && d?.live && d?.latest && setConsoleInfo(d))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 5000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [epicKey]);
+  const consoleFor = (slug: string) => {
+    const id = consoleInfo.latest[slug];
+    return id ? { id, live: !!consoleInfo.live[id] } : undefined;
+  };
 
   // 이 오더의 에이전트들에 그룹 아바타 배정(같은 그룹 응집, 모자라면 다음 그룹, 40:40:20).
   // 핀 고정 아바타(서버 avatars.json). 에이전트가 추가돼도 기존 담당은 안 바뀐다.
@@ -499,6 +545,7 @@ export default function OrchestrationBoard({
                     avatar={avatarMap.get(a.agent)}
                     quips={quipList(quips?.board?.[a.agent])}
                     placement={placement}
+                    console={consoleFor(a.agent)}
                   />
                 ))}
               </div>

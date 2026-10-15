@@ -1,24 +1,27 @@
 import { notFound } from "next/navigation";
 import ConsoleTabs from "@/components/ConsoleTabs";
 import { getEpic } from "@/lib/orchestration";
-import { listConsoleAgents } from "@/lib/transcript";
+import { consoleAgentLabels } from "@/lib/transcript";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderConsolePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ agent?: string | string[] }>;
 }) {
   const { key } = await params;
+  const { agent } = await searchParams;
   if (!ORDER_KEY_RE.test(key)) notFound();
 
   const epic = getEpic(key);
-  const agents = listConsoleAgents(key).map((a) => ({
-    id: a.id,
-    label: a.slug + (a.phase ? " · " + a.phase : ""),
-  }));
+  const nameBySlug = new Map(
+    (epic?.orchestration?.agents ?? []).filter((a) => a.name).map((a) => [a.agent, a.name as string]),
+  );
+  const agents = consoleAgentLabels(key, nameBySlug);
 
   return (
     <ConsoleTabs
@@ -33,6 +36,7 @@ export default async function OrderConsolePage({
       hasDesign={epic?.hasDesignDoc ?? false}
       hasQa={!!epic?.qa}
       orderKind={epic?.orderKind ?? null}
+      initialSelected={typeof agent === "string" ? agent : null}
     />
   );
 }

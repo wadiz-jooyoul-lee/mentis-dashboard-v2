@@ -55,10 +55,10 @@ flowchart LR
 | | \`deliverables/\` · \`summary.md\` | 산출물 · 종료 서머리 |
 | **변경 (changes)** | \`agent-logs.json\` + 대화로그 | 에이전트별 수정 파일 · 커밋 · diff |
 | **구현 내용 (explain)** | \`explainer.md\` | 비전공자용 설명 + 흐름도 |
-| **콘솔 (console)** | \`.mentis-jobs/{키}/run.log\` (실시간) | 대시보드가 띄운 잡 진행 로그 |
+| **콘솔 (console)** | \`.mentis-jobs/{키}/run.log\` (대시보드 실행 로그) | 대시보드가 띄운 잡 진행 로그 |
 | | 세션 전사 \`.jsonl\` (기록) | 오케스트레이터 · 서브에이전트 대화 기록 |
 
-> 콘솔의 **"실시간"** 은 대시보드가 띄운 \`run.log\`를, **"기록"** 은 Claude 세션 전사(\`~/.claude/projects/…\`)를 읽습니다.
+> 콘솔의 **"대시보드 실행 로그"** 는 대시보드가 띄운 \`run.log\`를, **"기록"** 은 Claude 세션 전사(\`~/.claude/projects/…\`)를 읽습니다.
 `;
 
 export default function DataMapView() {

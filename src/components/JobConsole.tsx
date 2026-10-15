@@ -36,6 +36,7 @@ export default function JobConsole({
   initial,
   height = 320,
   onChange,
+  liveHint = false,
 }: {
   orderKey: string;
   /** "session" 이면 부모 세션 기록(읽기전용). 기본(미지정)은 실시간 run.log. */
@@ -46,6 +47,8 @@ export default function JobConsole({
   initial?: ConsoleStatus;
   height?: number | string;
   onChange?: () => void;
+  /** 바깥(콘솔 목록)이 이 콘솔을 진행 중으로 본다. 열 때 유휴였던 기록이 나중에 커져도 추적을 시작한다. */
+  liveHint?: boolean;
 }) {
   const [s, setS] = useState<ConsoleStatus>(initial ?? { state: "none" });
   const [busy, setBusy] = useState(false);
@@ -84,17 +87,18 @@ export default function JobConsole({
   // 폴링: 이 콘솔이 열려 있는 동안만(언마운트 시 해제).
   //  - 제어형(잡): 실행 중이거나 예약 대기 중일 때
   //  - 기록형(서브/세션): 파일이 아직 커지는 중(추적)일 때만. 유휴(재생)면 멈춘다.
+  //  - 진행 중인 콘솔은 5초마다 갱신. 예약 대기는 이번 턴이 끝나는 즉시 넘기려고 1초.
   useEffect(() => {
-    const active = controllable
-      ? s.state === "running" || (!!pending && !!sessionId)
-      : mode === "transcript" && live;
+    const active =
+      liveHint ||
+      (controllable ? s.state === "running" || (!!pending && !!sessionId) : mode === "transcript" && live);
     if (!active) return;
-    const iv = controllable ? (pending ? 1000 : 2000) : 2500;
+    const iv = controllable && pending ? 1000 : 5000;
     timer.current = setInterval(refresh, iv);
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, [controllable, s.state, mode, live, pending, sessionId, refresh]);
+  }, [controllable, s.state, mode, live, liveHint, pending, sessionId, refresh]);
 
   // 예약 자동 주입(제어형 잡만): 실행이 끝났고 예약+세션이 있으면 즉시 이어서.
   useEffect(() => {
