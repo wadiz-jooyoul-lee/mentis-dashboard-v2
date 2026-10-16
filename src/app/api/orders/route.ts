@@ -254,7 +254,7 @@ export async function GET(req: NextRequest) {
   const v2Key = (sp.get("v2run") ?? "").trim();
   if (v2Key) return NextResponse.json(v2RunCheck(v2Key));
 
-  // 세션 이어가기: ?session={오더키} → { sessionId, cwd } (status.md ## 세션)
+  // 이어가기 v2: ?session={오더키} → { sessionId, sessionName, restore, worktrees, isV2 } (status.md)
   const sessionKey = (sp.get("session") ?? "").trim();
   if (sessionKey) {
     if (!ORDER_KEY_RE.test(sessionKey)) {

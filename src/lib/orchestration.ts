@@ -62,69 +62,41 @@ function orderDir(key: string): string {
 }
 
 /**
- * status.md `## 세션`에서 오케스트레이터 세션 ID·작업 경로(cwd)를 뽑는다.
- * 사용자가 터미널에서 `cd <cwd> && claude --resume <세션ID>`로 그 세션을 이어가기 위함.
- * 둘 다 없을 수 있다(방어적). 세션 섹션이 없으면 문서 전체에서 찾는다.
+ * "이어가기 v2" 버튼이 쓰는 정보 — 코드가 있는 워크트리, 되살릴 워크트리, 지금 떠 있는 세션.
+ * status.md 가 없거나 칸이 비어 있을 수 있다(방어적).
  */
 export type OrderSession = {
+  /** status.md `## 세션`의 세션 ID. 지금 떠 있는 세션을 찾는 데 쓴다. 섹션이 없으면 문서 전체에서 찾는다. */
   sessionId: string | null;
-  cwd: string | null;
-  /** 세션의 작업 경로가 지금도 있는가. */
-  cwdExists: boolean;
   /**
    * 지금 떠 있는 그 세션의 **이름** — 다른 세션이 말을 걸 때 쓰는 주소(예: `dobby-playground-2c`).
    * 꺼져 있으면 null. 이름은 바뀔 수 있어 메타에 적어 두지 않고 세션 ID로 그때그때 찾는다.
    */
   sessionName: string | null;
-  /** 그 세션의 상태 — idle(쉬는 중) · busy(작업 중). */
-  sessionStatus: string | null;
   /**
    * **사라진 워크트리** 목록 — 되살리는 데 필요한 정보.
-   *
-   * 세션의 `작업 경로`는 오케스트레이터가 돌던 폴더(원본 저장소 등)라 보통 삭제되지 않는다.
-   * 그래서 "작업 경로가 없을 때"만 복구를 안내하면 실제로는 한 번도 뜨지 않는다(종료 오더 46개
-   * 실측: 45개가 작업 경로 살아 있음). 판단 기준은 **기록된 워크트리가 사라졌는가**여야 한다.
    * 브랜치는 dobby-end가 보존하므로 `git worktree add`로 같은 경로에 복원할 수 있다.
-   * (세션 전사는 `~/.claude/projects/` 아래 워크트리 밖에 있어 삭제와 무관하게 남는다 — 실측 확인.)
    */
   restore: { repo: string; branch: string; worktreePath: string; srcRepo: string }[];
   /**
    * **코드가 있는 곳** — 살아 있는 워크트리들.
-   *
-   * 세션의 `작업 경로`는 그 세션이 떠 있던 폴더일 뿐 **코드가 있는 곳이 아니다.** 실측:
-   * 메타 8건의 세션이 `~/work/wadiz-frontend/static`(메인 저장소)에서 떴는데, 그 저장소는
-   * 지금 딴 이슈 브랜치에 체크아웃돼 있고 코드는 `subtree/{repo}-{키}` 워크트리에 있다.
-   * 이어가기만 보여 주면 사용자가 엉뚱한 폴더에서 코드를 찾게 되므로 함께 보여 준다.
+   * 세션이 떠 있던 폴더는 코드가 있는 곳이 아닐 수 있다(실측: 메인 저장소에서 뜬 세션의 코드는
+   * `subtree/{repo}-{키}` 워크트리에 있었다). 그래서 이어가기는 워크트리로 이동한다.
    */
   worktrees: { repo: string; branch: string; path: string }[];
-  /**
-   * 세션의 작업 경로가 **이 오더의 워크트리가 아닌 다른 체크아웃**인가.
-   * 참이면 이어가기가 다른 브랜치가 걸린 폴더를 연다 — 화면에서 그 사실을 알려야 한다.
-   * (작업 경로를 워크트리로 바꿀 수는 없다. 전사가 그 폴더에 묶여 있어 --resume 이 못 찾는다.)
-   */
-  cwdIsForeignCheckout: boolean;
   /**
    * /do 로 진행하는 오더인가. 근거는 status.md `## 지난 세션` 표 — 그 표는 v2 의
    * 세션 기록 헬퍼(dobby_session_log)만 만든다. 참이면 "이어가기 v2"가 새 세션 명령을 권한다.
    */
   isV2: boolean;
-  /** `## 지난 세션` 표(단계마다 연 세션). 복기(`claude --resume`)용. 기록 순서 그대로. */
-  pastSessions: { time: string; step: string; sessionId: string; cwd: string }[];
 };
 
 export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
-  if (!md)
-    return {
-      sessionId: null, cwd: null, cwdExists: false, sessionName: null, sessionStatus: null,
-      restore: [], worktrees: [], cwdIsForeignCheckout: false, isV2: false, pastSessions: [],
-    };
+  if (!md) return { sessionId: null, sessionName: null, restore: [], worktrees: [], isV2: false };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
-  const cwdRaw = sec.match(/작업\s*경로[^\n]*?[:：]\s*([^\n]+)/)?.[1] ?? null;
-  const cwd = cwdRaw ? expandHome(cwdRaw.trim().replace(/^`|`$/g, "").trim()) || null : null;
-  const cwdExists = !!cwd && fs.existsSync(cwd);
 
   // 기록된 워크트리를 **사라진 것(복구 대상)**과 **살아 있는 것(코드 위치)**으로 가른다.
   const st = parseOrderStatus(md, key);
@@ -143,60 +115,10 @@ export function readOrderSession(key: string): OrderSession {
     else restore.push({ repo, branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
   }
 
-  // 작업 경로가 이 오더의 워크트리가 아닌 **다른 저장소 체크아웃**인가.
-  // 그러면 이어가기가 딴 브랜치가 걸린 폴더를 연다(실측 FE1-1301: 메인 저장소가
-  // feature/FE1-1883 에 체크아웃돼 있었고 코드는 subtree 워크트리에 있었다).
-  // playground 처럼 git 저장소가 아닌 폴더는 오케스트레이터 자리라 정상이다.
-  let cwdIsForeignCheckout = false;
-  if (cwd && cwdExists && worktrees.length > 0) {
-    const top = gitToplevel(cwd);
-    cwdIsForeignCheckout = !!top && !worktrees.some((w) => w.path === top);
-  }
-
-  // `## 지난 세션` 표 — 머리가 "세션 아이디"인 표는 이것뿐이다(`## 세션`은 표가 아니다).
-  const past = findTable(md, "세션 아이디");
-  const pastSessions: OrderSession["pastSessions"] = [];
-  if (past) {
-    const ct = columnIndex(past.headers, "시각");
-    const cs = columnIndex(past.headers, "단계");
-    const ci = columnIndex(past.headers, "세션 아이디");
-    const cw = columnIndex(past.headers, "작업 경로");
-    for (const r of past.rows) {
-      const sid = (r[ci] ?? "").replace(/`/g, "").trim();
-      if (!/^[0-9a-f-]{36}$/i.test(sid)) continue;
-      pastSessions.push({
-        time: r[ct] ?? "",
-        step: r[cs] ?? "",
-        sessionId: sid,
-        cwd: expandHome((r[cw] ?? "").replace(/`/g, "").trim()),
-      });
-    }
-  }
   const isV2 = /(?:^|\n)##\s*지난 세션/.test(md);
 
   const live = liveSessionByUuid(sessionId);
-  return {
-    sessionId,
-    cwd,
-    cwdExists,
-    sessionName: live?.name ?? null,
-    sessionStatus: live?.status ?? null,
-    restore,
-    worktrees,
-    cwdIsForeignCheckout,
-    isV2,
-    pastSessions,
-  };
-}
-
-/** 그 경로가 속한 git 저장소의 최상위. git 저장소가 아니면 null(playground 가 그렇다). */
-function gitToplevel(dir: string): string | null {
-  const r = spawnSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-    timeout: 3000,
-  });
-  if (r.status !== 0) return null;
-  return (r.stdout ?? "").trim() || null;
+  return { sessionId, sessionName: live?.name ?? null, restore, worktrees, isV2 };
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */
