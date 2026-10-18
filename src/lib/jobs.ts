@@ -10,6 +10,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
+import { fieldLine } from "@/lib/md";
 
 export { ORDER_KEY_RE };
 
@@ -92,6 +93,8 @@ type Meta = {
   stoppedAt?: number;
   /** 보관(목록에서 숨김). 데이터는 유지. */
   archived?: boolean;
+  /** /do 자동 실행(run.sh) 잡. 같은 키 폴더를 쓰는 dobby-order 잡과 구분한다. */
+  kind?: "v2run";
 };
 
 function readMeta(key: string): Meta | null {
@@ -363,9 +366,47 @@ export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?:
       ORCHESTRATION_REPOS_ROOT: getReposRoot(),
     },
   });
-  writeMeta({ key: k, pid: child.pid ?? -1, startedAt: Date.now() });
+  writeMeta({ key: k, pid: child.pid ?? -1, startedAt: Date.now(), kind: "v2run" });
   child.unref();
   return { ok: true, jobId: k };
+}
+
+export type V2RunFinished = {
+  key: string;
+  title: string | null;
+  /** true = 정상 완료, false = 중간 멈춤 */
+  ok: boolean;
+  startedAt: number;
+  /** 끝난 시각 — run.log 마지막 수정 시각 */
+  endedAt: number;
+  result: string | null;
+};
+
+/** 최근(withinMs 안에) 끝난 /do 자동 실행. 사용자가 정지시킨 것은 뺀다. 완료 알림용. */
+export function listFinishedV2Runs(withinMs = 24 * 60 * 60 * 1000): V2RunFinished[] {
+  const out: V2RunFinished[] = [];
+  for (const key of allJobKeys()) {
+    if (!ORDER_KEY_RE.test(key)) continue;
+    const m = readMeta(key);
+    if (m?.kind !== "v2run" || m.stoppedAt) continue;
+    let endedAt: number;
+    try {
+      endedAt = fs.statSync(logPath(key)).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (Date.now() - endedAt > withinMs) continue;
+    const { state } = getJobStatus(key);
+    if (state !== "done" && state !== "failed") continue;
+    let title: string | null = null;
+    try {
+      title = fieldLine(fs.readFileSync(path.join(getMetaDir(), key, "status.md"), "utf8"), "제목");
+    } catch {
+      /* 제목 없이 보여 준다 */
+    }
+    out.push({ key, title, ok: state === "done", startedAt: m.startedAt, endedAt, result: jobResultText(key) });
+  }
+  return out.sort((a, b) => a.endedAt - b.endedAt);
 }
 
 /** 잡 run.log의 마지막 result 텍스트(실패 원인 표시용). 없으면 null. */

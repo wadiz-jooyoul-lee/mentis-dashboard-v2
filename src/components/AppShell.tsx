@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Layout, Menu } from "antd";
 import AutoRefresh from "@/components/AutoRefresh";
 import InProgressBackupTrigger from "@/components/InProgressBackupTrigger";
+import V2RunNotifier from "@/components/V2RunNotifier";
 import { CanActProvider } from "@/components/CanAct";
 import LanToggle from "@/components/LanToggle";
 import MantisIcon from "@/components/MantisIcon";
@@ -37,6 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <CanActProvider>
     <InProgressBackupTrigger />
+    <V2RunNotifier />
     <Layout style={{ minHeight: "100vh" }}>
       <Header
         style={{

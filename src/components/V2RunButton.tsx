@@ -30,6 +30,10 @@ export default function V2RunButton({ epicKey }: { epicKey: string }) {
   }, [load]);
 
   const run = async () => {
+    // 끝났을 때 맥 알림 센터로 알리기 위한 권한 — 사용자 클릭 안에서만 물을 수 있다.
+    if (typeof Notification !== "undefined" && window.isSecureContext && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
     setBusy(true);
     let res: { ok?: boolean; error?: string } = {};
     try {

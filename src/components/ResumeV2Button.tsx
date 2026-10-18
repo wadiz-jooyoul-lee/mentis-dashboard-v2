@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Alert, Button, Empty, Popover, Space, Spin, Typography } from "antd";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { CopyRow } from "@/components/CopyRow";
+import { resumeCommand, resumeTargets, type ResumeTarget } from "@/lib/resumeCommand";
 
 const { Text } = Typography;
 
@@ -14,29 +15,6 @@ type Session = {
   worktrees: { repo: string; branch: string; path: string }[];
   isV2: boolean;
 };
-
-/** 저장소 하나의 행 — 워크트리 경로·브랜치와, 그 워크트리를 되살려야 하는지. */
-type Target = { repo: string; branch: string; path: string; restoreFrom: string | null };
-
-const q = (v: string) => `"${v}"`;
-
-/**
- * 워크트리로 이동해 **새 세션**을 여는 명령. 옛 대화를 불러오지 않는다(`--resume` 을 쓰지 않는다).
- * v2 오더면 첫 지시로 `/do {키}` 를 넘겨 메타 문서를 읽고 다음 단계를 이어가게 한다.
- * 사라진 워크트리는 먼저 되살리고(prune → 없을 때만 add), 실패하면
- * `&&` 에서 끊겨 claude 를 띄우지 않는다.
- */
-function commandFor(t: Target, epicKey: string, isV2: boolean): string {
-  const parts: string[] = [];
-  if (t.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
-  parts.push(`cd ${q(t.path)}`);
-  parts.push(isV2 ? `claude ${q(`/do ${epicKey}`)}` : "claude");
-  return parts.join(" && ");
-}
-
-function restoreStep(t: Target, from: string): string {
-  return `(git -C ${q(from)} worktree prune; [ -d ${q(t.path)} ] || git -C ${q(from)} worktree add ${q(t.path)} ${t.branch})`;
-}
 
 /**
  * "이어가기 v2" 버튼 — 코드가 있는 워크트리로 이동해 새 세션을 여는 명령을 복사해 준다.
@@ -71,12 +49,7 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
     if (o) load();
   };
 
-  const targets: Target[] = data
-    ? [
-        ...data.worktrees.map((w) => ({ ...w, restoreFrom: null })),
-        ...data.restore.map((r) => ({ repo: r.repo, branch: r.branch, path: r.worktreePath, restoreFrom: r.srcRepo })),
-      ]
-    : [];
+  const targets: ResumeTarget[] = data ? resumeTargets(data) : [];
 
   const content = (
     <div style={{ width: 480, maxWidth: "82vw" }}>
@@ -117,7 +90,7 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
                   <Text type="secondary" style={{ fontSize: 11 }}>
                     {t.repo} ({t.branch}){t.restoreFrom && " · 워크트리가 정리되어 먼저 되살립니다"}
                   </Text>
-                  <CopyRow label="명령" value={commandFor(t, epicKey, data.isV2)} />
+                  <CopyRow label="명령" value={resumeCommand(t, epicKey, data.isV2)} />
                 </div>
               ))}
             </>

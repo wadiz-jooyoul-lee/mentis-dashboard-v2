@@ -23,6 +23,7 @@ import {
   startResolve,
   startV2Run,
   v2RunCheck,
+  listFinishedV2Runs,
   JOB_ID_RE,
 } from "@/lib/jobs";
 import {
@@ -36,6 +37,7 @@ import { denyRemote } from "@/lib/localOnly";
 import { worktreeInfo, removeWorktrees } from "@/lib/worktree";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
+import { resumeCommand, resumeTargets } from "@/lib/resumeCommand";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -253,6 +255,20 @@ export async function GET(req: NextRequest) {
   // v2 자동 실행 가능 여부: ?v2run={오더키} → { ok, reason, running }
   const v2Key = (sp.get("v2run") ?? "").trim();
   if (v2Key) return NextResponse.json(v2RunCheck(v2Key));
+
+  // 끝난 v2 자동 실행(완료 알림): ?v2finished=1 → { runs: [{ ..., commands: [{ repo, branch, command }] }] }
+  if (sp.get("v2finished") === "1") {
+    const runs = listFinishedV2Runs().map((r) => {
+      const s = readOrderSession(r.key);
+      const commands = resumeTargets(s).map((t) => ({
+        repo: t.repo,
+        branch: t.branch,
+        command: resumeCommand(t, r.key, s.isV2),
+      }));
+      return { ...r, commands };
+    });
+    return NextResponse.json({ runs });
+  }
 
   // 이어가기 v2: ?session={오더키} → { sessionId, sessionName, restore, worktrees, isV2 } (status.md)
   const sessionKey = (sp.get("session") ?? "").trim();
