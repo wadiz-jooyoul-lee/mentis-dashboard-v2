@@ -36,6 +36,6 @@ export function resumeCommand(t: ResumeTarget, epicKey: string, isV2: boolean): 
 }
 
 /** 사라진 워크트리를 같은 경로로 되살리는 단계(prune → 없을 때만 add). */
-export function restoreStep(t: ResumeTarget, from: string): string {
+function restoreStep(t: ResumeTarget, from: string): string {
   return `(git -C ${q(from)} worktree prune; [ -d ${q(t.path)} ] || git -C ${q(from)} worktree add ${q(t.path)} ${t.branch})`;
 }

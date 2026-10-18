@@ -270,7 +270,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ runs });
   }
 
-  // 세션 이어가기: ?session={오더키} → { sessionId, cwd } (status.md ## 세션)
+  // 이어가기 v2: ?session={오더키} → { sessionId, sessionName, restore, worktrees, isV2 } (status.md)
   const sessionKey = (sp.get("session") ?? "").trim();
   if (sessionKey) {
     if (!ORDER_KEY_RE.test(sessionKey)) {

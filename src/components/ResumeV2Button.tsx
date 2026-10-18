@@ -1,42 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Collapse, Empty, Popover, Space, Spin, Typography } from "antd";
+import { Alert, Button, Empty, Popover, Space, Spin, Typography } from "antd";
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { CopyRow } from "@/components/ResumeButton";
-import { resumeCommand, resumeTargets, restoreStep, type ResumeTarget } from "@/lib/resumeCommand";
+import { CopyRow } from "@/components/CopyRow";
+import { resumeCommand, resumeTargets, type ResumeTarget } from "@/lib/resumeCommand";
 
 const { Text } = Typography;
 
 type Restore = { repo: string; branch: string; worktreePath: string; srcRepo: string };
-type PastSession = { time: string; step: string; sessionId: string; cwd: string };
 type Session = {
   sessionName: string | null;
   restore: Restore[];
   worktrees: { repo: string; branch: string; path: string }[];
   isV2: boolean;
-  pastSessions: PastSession[];
 };
-
-const q = (v: string) => `"${v}"`;
-
-/**
- * 지난 세션을 `--resume` 으로 다시 여는 명령. 대화 기록은 ~/.claude/projects 에 세션이 떠 있던 폴더
- * 경로 이름으로 남으므로, 그 폴더가 정리된 워크트리(또는 그 안)라면 같은 경로로 먼저 되살린다.
- */
-function pastCommandFor(p: PastSession, targets: ResumeTarget[]): string {
-  const t = targets.find((x) => x.restoreFrom && (p.cwd === x.path || p.cwd.startsWith(`${x.path}/`)));
-  const parts: string[] = [];
-  if (t?.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
-  parts.push(`cd ${q(p.cwd)}`, `claude --resume ${p.sessionId}`);
-  return parts.join(" && ");
-}
 
 /**
  * "이어가기 v2" 버튼 — 코드가 있는 워크트리로 이동해 새 세션을 여는 명령을 복사해 준다.
- * 기존 "이어가기"(`claude --resume`)는 옛 대화 전체를 다시 불러와 호출마다 비싸고, 세션이 떠 있던
- * 폴더(코드가 없는 곳일 때가 많다)로만 돌아간다. v2 오더는 단계마다 새 세션이 메타 문서만 읽고
- * 이어가므로 옛 대화가 필요 없다. 옛 세션은 "지난 세션 복기"로만 연다.
+ * 옛 대화를 `claude --resume` 으로 다시 불러오면 호출마다 비싸다. v2 오더는 단계마다 새 세션이
+ * 메타 문서만 읽고 이어가므로 옛 대화가 필요 없다.
  */
 export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
   const [open, setOpen] = useState(false);
@@ -53,10 +36,9 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
         restore: Array.isArray(j.restore) ? j.restore : [],
         worktrees: Array.isArray(j.worktrees) ? j.worktrees : [],
         isV2: !!j.isV2,
-        pastSessions: Array.isArray(j.pastSessions) ? j.pastSessions : [],
       });
     } catch {
-      setData({ sessionName: null, restore: [], worktrees: [], isV2: false, pastSessions: [] });
+      setData({ sessionName: null, restore: [], worktrees: [], isV2: false });
     }
     setLoading(false);
   };
@@ -112,33 +94,6 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
                 </div>
               ))}
             </>
-          )}
-          {data.pastSessions.length > 0 && (
-            <Collapse
-              size="small"
-              style={{ width: "100%" }}
-              items={[
-                {
-                  key: "past",
-                  label: `지난 세션 복기 (${data.pastSessions.length}개)`,
-                  children: (
-                    <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        그 단계에서 무슨 일이 있었는지 볼 때만 엽니다. 옛 대화 전체를 다시 불러오므로 이어서 작업하는 데는 쓰지 마세요.
-                      </Text>
-                      {[...data.pastSessions].reverse().map((p) => (
-                        <div key={`${p.sessionId}-${p.step}`}>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {p.time} · {p.step}
-                          </Text>
-                          <CopyRow label="복기 명령" value={pastCommandFor(p, targets)} />
-                        </div>
-                      ))}
-                    </Space>
-                  ),
-                },
-              ]}
-            />
           )}
         </Space>
       )}

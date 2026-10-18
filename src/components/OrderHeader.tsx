@@ -7,7 +7,6 @@ import { LinkOutlined } from "@ant-design/icons";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
 import JiraCopyButton from "@/components/JiraCopyButton";
-import ResumeButton from "@/components/ResumeButton";
 import ResumeV2Button from "@/components/ResumeV2Button";
 import V2RunButton from "@/components/V2RunButton";
 import ResolveButton from "@/components/ResolveButton";
@@ -230,7 +229,6 @@ export default function OrderHeader({
           )}
           {hasJiraIssue && <JiraCopyButton epicKey={epicKey} />}
           {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
-          <ResumeButton epicKey={epicKey} />
           <ResumeV2Button epicKey={epicKey} />
           <V2RunButton epicKey={epicKey} />
           <ResolveButton epicKey={epicKey} resolved={resolved} />
