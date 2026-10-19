@@ -1,6 +1,6 @@
 import { listEpics } from "@/lib/orchestration";
 import { getMetaDir } from "@/lib/issues";
-import { listJobs, listArchivedJobs } from "@/lib/jobs";
+import { listJobs } from "@/lib/jobs";
 import OrchestrationList from "@/components/OrchestrationList";
 import { deletabilityOf } from "@/lib/worktree";
 
@@ -26,7 +26,6 @@ export default async function OrchestrationPage({
       deletable={deletable}
       sourceDir={getMetaDir()}
       initialJobs={listJobs()}
-      initialArchived={listArchivedJobs()}
     />
   );
 }

@@ -725,7 +725,14 @@ function parseFeed(log: string): FeedItem[] {
   return items;
 }
 
-export type JobWithKey = Exclude<JobStatus, { state: "none" }> & { key: string };
+export type JobWithKey = Exclude<JobStatus, { state: "none" }> & {
+  key: string;
+  /** 끝난 시각 — run.log 마지막 수정 시각. 실행 중이면 없다. */
+  endedAt?: number;
+};
+
+/** 오더 런처에 끝난 실행을 남겨 두는 기간. 지나면 목록에서만 빠지고 콘솔 탭에서는 계속 볼 수 있다. */
+const FINISHED_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function allJobKeys(): string[] {
   const dir = jobsRoot();
@@ -740,29 +747,34 @@ function allJobKeys(): string[] {
   }
 }
 
-function listJobsBy(archived: boolean): JobWithKey[] {
+/** 오더 런처 목록: 실행 중인 것 전부 + 최근 7일 안에 끝난 것(보관한 것 제외). */
+export function listJobs(): JobWithKey[] {
   const jobs: JobWithKey[] = [];
   for (const key of allJobKeys()) {
-    // 오더 런처엔 **실제 오더 런만** 노출한다. 잡 키가 오더 키(ORDER_KEY_RE) 또는
-    // 문서전용 `task-…`인 것만 통과 — 버튼이 뒤에서 띄운 부가 잡(explain·quips·jira·
-    // resolve·backfill 등, 접두어가 붙어 오더 키 형식이 아님)은 각 버튼이 상태를 따로
-    // 보여주므로 여기서 제외한다.
-    if (!(ORDER_KEY_RE.test(key) || key.startsWith("task-"))) continue;
+    // 오더 런처엔 **실제 오더 런만** 노출한다. 잡 키가 오더 키(ORDER_KEY_RE)인 것만 통과 —
+    // 버튼이 뒤에서 띄운 부가 잡(explain·quips·jira·resolve·backfill 등, 접두어가 붙어
+    // 오더 키 형식이 아님)은 각 버튼이 상태를 따로 보여주므로 여기서 제외한다.
+    // 문서전용 `task-…` 잡도 제외 — 끝난 실행은 콘솔 탭 링크로만 보여 주는데 콘솔 탭 주소가 받지 않는 키다.
+    if (!ORDER_KEY_RE.test(key)) continue;
     const m = readMeta(key);
-    if (!m) continue;
-    if ((m.archived === true) !== archived) continue;
+    if (!m || m.archived === true) continue;
     const s = getJobStatus(key);
-    if (s.state !== "none") jobs.push({ ...s, key });
+    if (s.state === "none") continue;
+    if (s.state === "running") {
+      jobs.push({ ...s, key });
+      continue;
+    }
+    let endedAt: number;
+    try {
+      endedAt = fs.statSync(logPath(key)).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (Date.now() - endedAt > FINISHED_WITHIN_MS) continue;
+    jobs.push({ ...s, key, endedAt });
   }
   jobs.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   return jobs;
-}
-
-export function listJobs(): JobWithKey[] {
-  return listJobsBy(false);
-}
-export function listArchivedJobs(): JobWithKey[] {
-  return listJobsBy(true);
 }
 
 export function getJobStatus(key: string): JobStatus {

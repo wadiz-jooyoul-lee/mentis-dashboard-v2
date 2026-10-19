@@ -2,8 +2,9 @@
 import { useCanAct } from "@/components/CanAct";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Card, Input, Button, Space, Collapse, Badge, Typography, message, Empty, Segmented } from "antd";
-import { PlayCircleOutlined } from "@ant-design/icons";
+import { PlayCircleOutlined, RightOutlined } from "@ant-design/icons";
 import JobConsole from "@/components/JobConsole";
 import type { JobWithKey, JobState } from "@/lib/jobs";
 
@@ -26,19 +27,19 @@ const BADGE: Record<Exclude<JobState, "none">, { status: "processing" | "success
   stopped: { status: "default", text: "정지됨" },
 };
 
-export default function OrderLauncher({
-  initialJobs,
-  initialArchived,
-}: {
-  initialJobs: JobWithKey[];
-  initialArchived: JobWithKey[];
-}) {
+/** 끝난 시각 표시: 10/16 14:20 */
+const endedText = (ms: number) => {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+export default function OrderLauncher({ initialJobs }: { initialJobs: JobWithKey[] }) {
   const canAct = useCanAct();
   const [text, setText] = useState("");
   const [env, setEnv] = useState("");
   const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState<JobWithKey[]>(initialJobs);
-  const [archived, setArchived] = useState<JobWithKey[]>(initialArchived);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -46,13 +47,15 @@ export default function OrderLauncher({
       const r = await fetch("/api/orders", { cache: "no-store" });
       const data = await r.json();
       setJobs(data.jobs ?? []);
-      setArchived(data.archived ?? []);
     } catch {
       /* 무시 */
     }
   }, []);
 
-  const anyRunning = jobs.some((j) => j.state === "running");
+  // 실행 중인 것은 펼쳐 보는 콘솔로, 끝난 것(최근 7일)은 콘솔 탭 링크 한 줄로 보여 준다.
+  const running = jobs.filter((j) => j.state === "running");
+  const finished = jobs.filter((j) => j.state !== "running").sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
+  const anyRunning = running.length > 0;
   useEffect(() => {
     if (anyRunning) {
       timer.current = setInterval(refresh, 2500);
@@ -88,16 +91,7 @@ export default function OrderLauncher({
     }
   };
 
-  const unarchive = async (k: string) => {
-    await fetch("/api/orders", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: k, unarchive: true }),
-    });
-    await refresh();
-  };
-
-  const jobPanels = jobs.map((j) => ({
+  const jobPanels = running.map((j) => ({
     key: j.key,
     label: (
       <Space>
@@ -106,24 +100,6 @@ export default function OrderLauncher({
       </Space>
     ),
     children: <JobConsole orderKey={j.key} initial={j} onChange={refresh} />,
-  }));
-
-  const archivedPanels = archived.map((j) => ({
-    key: j.key,
-    label: (
-      <Space>
-        <Text type="secondary">{j.key}</Text>
-        <Badge {...BADGE[j.state]} />
-      </Space>
-    ),
-    children: (
-      <Space orientation="vertical" style={{ width: "100%" }}>
-        <Button size="small" onClick={() => unarchive(j.key)}>
-          복원
-        </Button>
-        <JobConsole orderKey={j.key} initial={j} onChange={refresh} />
-      </Space>
-    ),
   }));
 
   // 다른 기기 열람: 오더 실행은 이 맥의 Claude를 띄우는 것이라 화면 자체를 읽기 전용 안내로 대체
@@ -167,22 +143,26 @@ export default function OrderLauncher({
           실행 (⌘/Ctrl+Enter)
         </Button>
 
-        {jobs.length > 0 ? (
-          <Collapse items={jobPanels} defaultActiveKey={anyRunning ? [jobs.find((j) => j.state === "running")!.key] : []} />
-        ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="실행 중이거나 최근 실행한 잡이 없습니다" />
+        {running.length > 0 && <Collapse items={jobPanels} defaultActiveKey={[running[0].key]} />}
+
+        {finished.length > 0 && (
+          <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+            <Text type="secondary">최근 7일 동안 끝난 실행 — 로그는 오더 콘솔 탭에서 볼 수 있습니다.</Text>
+            {finished.map((j) => (
+              <Link key={j.key} href={`/orchestration/console/${j.key}`}>
+                <Space>
+                  <Text strong>{j.key}</Text>
+                  <Badge {...BADGE[j.state]} />
+                  {j.endedAt && <Text type="secondary">{endedText(j.endedAt)} 종료</Text>}
+                  <RightOutlined />
+                </Space>
+              </Link>
+            ))}
+          </Space>
         )}
 
-        {archived.length > 0 && (
-          <Collapse
-            items={[
-              {
-                key: "archived",
-                label: <Text type="secondary">보관된 잡 ({archived.length})</Text>,
-                children: <Collapse items={archivedPanels} />,
-              },
-            ]}
-          />
+        {jobs.length === 0 && (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="실행 중이거나 최근 7일 안에 끝난 실행이 없습니다" />
         )}
       </Space>
     </Card>
