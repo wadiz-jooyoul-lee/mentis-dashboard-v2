@@ -74,14 +74,12 @@ export default function OrchestrationList({
   deletable,
   sourceDir,
   initialJobs = [],
-  initialArchived = [],
 }: {
   /** 오더별 워크트리 삭제 가능 여부. 키가 없으면 지울 워크트리가 없다는 뜻(버튼 미노출). */
   deletable: Record<string, { removable: boolean; reason: string | null }>;
   epics: EpicSummary[];
   sourceDir: string;
   initialJobs?: JobWithKey[];
-  initialArchived?: JobWithKey[];
 }) {
   const router = useRouter();
 
@@ -380,7 +378,7 @@ export default function OrchestrationList({
             key: "launcher",
             label: "오더 실행",
             children: (
-              <OrderLauncher initialJobs={initialJobs} initialArchived={initialArchived} />
+              <OrderLauncher initialJobs={initialJobs} />
             ),
           },
         ]}

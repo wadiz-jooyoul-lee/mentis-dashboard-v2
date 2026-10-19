@@ -9,7 +9,6 @@ import {
   archiveJob,
   unarchiveJob,
   listJobs,
-  listArchivedJobs,
   setPending,
   clearPending,
   applyPending,
@@ -292,7 +291,7 @@ export async function GET(req: NextRequest) {
 
   const key = (sp.get("key") ?? "").trim();
   if (!key) {
-    return NextResponse.json({ jobs: listJobs(), archived: listArchivedJobs() });
+    return NextResponse.json({ jobs: listJobs() });
   }
   if (!JOB_ID_RE.test(key)) {
     return NextResponse.json({ state: "none" });
