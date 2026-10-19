@@ -9,16 +9,25 @@ export type ResumeTarget = { repo: string; branch: string; path: string; restore
 type SessionWorktrees = {
   worktrees: { repo: string; branch: string; path: string }[];
   restore: { repo: string; branch: string; worktreePath: string; srcRepo: string }[];
+  primary: string | null;
+  isV2: boolean;
 };
 
 const q = (v: string) => `"${v}"`;
 
-/** 살아 있는 워크트리 먼저, 사라져 되살려야 하는 워크트리를 뒤에. */
+/**
+ * 살아 있는 워크트리 먼저, 사라져 되살려야 하는 워크트리를 뒤에.
+ * v2 오더는 **하나만** 낸다 — /do 세션은 메타 문서를 전체 경로로 읽고 설계 문서가 고칠 저장소 경로를
+ * 적어 두므로 어느 워크트리에서 열어도 된다. 자동 실행(run.sh)과 같은 폴더가 되도록 표 첫 줄을 고른다.
+ */
 export function resumeTargets(s: SessionWorktrees): ResumeTarget[] {
-  return [
+  const all = [
     ...s.worktrees.map((w) => ({ ...w, restoreFrom: null })),
     ...s.restore.map((r) => ({ repo: r.repo, branch: r.branch, path: r.worktreePath, restoreFrom: r.srcRepo })),
   ];
+  if (!s.isV2) return all;
+  const one = all.find((t) => t.path === s.primary) ?? all[0];
+  return one ? [one] : [];
 }
 
 /**
