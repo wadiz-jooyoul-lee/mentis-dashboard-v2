@@ -324,9 +324,11 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
     return { ok: false, reason: "dobby-order 로 진행한 오더입니다. /do 오더에서만 쓸 수 있습니다" };
   }
   const phase = md.match(/^- \*\*단계\*\*: *(.*)$/m)?.[1]?.trim() ?? "";
+  // `/do {키} auto env=` 오더는 통합 뒤 배포·검증까지 run.sh 가 이어 간다(판단 요청에 답한 뒤 다시 띄울 때도 여기로 온다).
+  const autoDeploy = /^- \*\*자동 배포 환경\*\*: *\S+/m.test(md);
   if (phase === "분석") {
     if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
-  } else if (phase !== "구현" && phase !== "리뷰") {
+  } else if (phase !== "구현" && phase !== "리뷰" && !(autoDeploy && (phase === "통합" || phase === "검증"))) {
     return {
       ok: false,
       reason: !phase || phase === "착수" ? "설계 전입니다" : `지금 단계(${phase})에서는 자동으로 진행할 일이 없습니다`,
