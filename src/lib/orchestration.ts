@@ -85,6 +85,11 @@ export type OrderSession = {
    */
   worktrees: { repo: string; branch: string; path: string }[];
   /**
+   * 워크트리 표 **첫 줄**의 경로 — /do 자동 실행(run.sh)이 세션을 여는 폴더와 같은 기준.
+   * 살아 있는 것과 사라진 것으로 나누면 표 순서가 사라지므로 따로 기억한다. 기록이 없으면 null.
+   */
+  primary: string | null;
+  /**
    * /do 로 진행하는 오더인가. 근거는 status.md `## 지난 세션` 표 — 그 표는 v2 의
    * 세션 기록 헬퍼(dobby_session_log)만 만든다. 참이면 "이어가기 v2"가 새 세션 명령을 권한다.
    */
@@ -93,7 +98,7 @@ export type OrderSession = {
 
 export function readOrderSession(key: string): OrderSession {
   const md = readFileSafe(path.join(orderDir(key), "status.md"));
-  if (!md) return { sessionId: null, sessionName: null, restore: [], worktrees: [], isV2: false };
+  if (!md) return { sessionId: null, sessionName: null, restore: [], worktrees: [], primary: null, isV2: false };
   const sec = md.match(/(?:^|\n)##\s*세션[^\n]*\n([\s\S]*?)(?=\n##\s|$)/)?.[1] ?? md;
   const sessionId =
     sec.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null;
@@ -102,6 +107,7 @@ export function readOrderSession(key: string): OrderSession {
   const st = parseOrderStatus(md, key);
   const restore: OrderSession["restore"] = [];
   const worktrees: OrderSession["worktrees"] = [];
+  let primary: string | null = null;
   for (const w of st.worktrees) {
     // 브랜치 칸 뒤에 붙은 설명 괄호("feature/X (feature/Y 에서 분기)")는 떼어 낸다 — 그대로 두면
     // 복원 명령의 `worktree add` 인자에 설명 글자까지 들어간다.
@@ -111,6 +117,7 @@ export function readOrderSession(key: string): OrderSession {
     const repo =
       w.repo ||
       (abs.split("/").filter(Boolean).pop() ?? "").replace(new RegExp(`-${key}(?:-.*)?$`), "");
+    primary ??= abs;
     if (fs.existsSync(abs)) worktrees.push({ repo, branch, path: abs });
     else restore.push({ repo, branch, worktreePath: abs, srcRepo: path.join(getReposRoot(), repo) });
   }
@@ -118,7 +125,7 @@ export function readOrderSession(key: string): OrderSession {
   const isV2 = /(?:^|\n)##\s*지난 세션/.test(md);
 
   const live = liveSessionByUuid(sessionId);
-  return { sessionId, sessionName: live?.name ?? null, restore, worktrees, isV2 };
+  return { sessionId, sessionName: live?.name ?? null, restore, worktrees, primary, isV2 };
 }
 
 /** `$ORCHESTRATION_META` 아래 오더(이슈/작업) 키들. status.md 또는 orchestration.md가 있는 폴더. */

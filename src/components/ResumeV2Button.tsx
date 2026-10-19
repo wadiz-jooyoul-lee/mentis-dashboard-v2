@@ -13,6 +13,7 @@ type Session = {
   sessionName: string | null;
   restore: Restore[];
   worktrees: { repo: string; branch: string; path: string }[];
+  primary: string | null;
   isV2: boolean;
 };
 
@@ -35,10 +36,11 @@ export default function ResumeV2Button({ epicKey }: { epicKey: string }) {
         sessionName: j.sessionName ?? null,
         restore: Array.isArray(j.restore) ? j.restore : [],
         worktrees: Array.isArray(j.worktrees) ? j.worktrees : [],
+        primary: typeof j.primary === "string" ? j.primary : null,
         isV2: !!j.isV2,
       });
     } catch {
-      setData({ sessionName: null, restore: [], worktrees: [], isV2: false });
+      setData({ sessionName: null, restore: [], worktrees: [], primary: null, isV2: false });
     }
     setLoading(false);
   };
