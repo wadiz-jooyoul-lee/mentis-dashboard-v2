@@ -5,10 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Popconfirm, Tooltip, message } from "antd";
 import { PlayCircleOutlined } from "@ant-design/icons";
 
-type Check = { ok: boolean; reason?: string; running?: boolean };
+type Check = { ok: boolean; reason?: string; running?: boolean; autoEnv?: string };
 
 /**
  * "자동 실행" 버튼 — 설계가 확정된 /do 오더를 run.sh 로 통합까지 단계마다 새 세션으로 진행한다.
+ * 자동 배포 환경이 적힌 오더는 통합 뒤 그 환경 배포와 검증까지 간다.
  * 시작 조건은 서버(v2RunCheck)가 판정하고, 맞지 않으면 버튼을 끄고 이유를 보여 준다.
  */
 export default function V2RunButton({ epicKey }: { epicKey: string }) {
@@ -70,8 +71,12 @@ export default function V2RunButton({ epicKey }: { epicKey: string }) {
   }
   return (
     <Popconfirm
-      title="통합까지 자동으로 진행할까요?"
-      description="단계마다 새 세션을 띄워 구현, 리뷰, 수정, 통합을 진행합니다. 커밋과 푸시도 확인 없이 진행됩니다."
+      title={check?.autoEnv ? `${check.autoEnv} 배포와 검증까지 자동으로 진행할까요?` : "통합까지 자동으로 진행할까요?"}
+      description={
+        check?.autoEnv
+          ? `단계마다 새 세션을 띄워 남은 구현, 리뷰, 통합을 하고 ${check.autoEnv} 에 배포한 뒤 검증합니다. 커밋, 푸시, 머지, 빌드, 배포도 확인 없이 진행됩니다.`
+          : "단계마다 새 세션을 띄워 구현, 리뷰, 수정, 통합을 진행합니다. 커밋과 푸시도 확인 없이 진행됩니다."
+      }
       okText="자동 실행"
       cancelText="취소"
       onConfirm={run}

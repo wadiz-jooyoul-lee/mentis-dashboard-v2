@@ -248,22 +248,37 @@ export function deriveJobId(target: string): string {
   return `task-${slug ? slug + "-" : ""}${h.toString(36)}`;
 }
 
+/** 오더 실행 탭이 받는 자동 배포 환경. 빈 값이면 통합(작업 브랜치 커밋·푸시)에서 멈춘다. */
+export const DO_AUTO_ENVS = ["dev", "rc1", "rc4"] as const;
+
 /**
- * dobby-order 실행. target은 `/dobby-order` 뒤에 그대로 전달된다
- * (이슈 키·URL·문서·요구사항 + base=/agents=/mode= 인자 포함 가능).
+ * 오더 실행: `/do {키} auto [env=]` 설계 세션 → 같은 잡에서 run.sh 자동 실행.
+ * 대시보드 잡은 헤드리스라 설계를 확정해 줄 사람이 없으므로 언제나 auto 로 띄운다.
+ * 설계 세션이 스스로 자동 실행을 띄우면 잡 이름(오더 키)이 겹쳐 대시보드가 거부한다.
+ * 그래서 DOBBY_V2_CHAINED 로 알려 띄우지 않게 하고, 이 잡이 이어서 run.sh 를 실행한다.
+ * 설계가 확정되지 않았으면(사람 판단 필요·사전 확인 실패) run.sh 가 곧바로 그 이유로 멈춘다.
  */
-export function startOrder(target: string): { ok: boolean; reason?: string; jobId?: string } {
+export function startDo(target: string, env: string): { ok: boolean; reason?: string; jobId?: string } {
   const t = target.trim();
   if (!t) return { ok: false, reason: "empty" };
-  // 잡 id는 원본 target으로 계산한다 — 플래그를 붙인 문자열로 세면 같은 이슈가
-  // 다른 잡으로 잡혀 중복 실행 방지(isRunning)가 깨진다.
-  const jobId = deriveJobId(t);
-  if (isRunning(jobId)) return { ok: false, reason: "already_running" };
-  // 대시보드 잡은 헤드리스라 설계(P3.5) 컨펌을 받을 사람이 없다 → design=auto가 기본
-  // (컨펌만 건너뛰고 결정+이유를 design.md에 기록). 사용자가 직접 적은 design=/mode=는 존중.
-  const withFlag = /\b(design=(auto|confirm)|mode=[AB])\b/.test(t) ? t : `${t} design=auto`;
-  spawnClaude(jobId, ["-p", `/dobby-order ${withFlag}`], false);
-  return { ok: true, jobId };
+  const key = deriveJobId(t);
+  if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "이슈 키나 이슈 주소로 시작해 주세요" };
+  const e = env.trim();
+  if (e && !(DO_AUTO_ENVS as readonly string[]).includes(e)) {
+    return { ok: false, reason: `자동 배포 환경은 ${DO_AUTO_ENVS.join("·")} 중 하나입니다` };
+  }
+  if (isRunning(key)) return { ok: false, reason: "already_running" };
+  const script = v2RunScript();
+  if (!script) return { ok: false, reason: "go-dobby 플러그인에서 run.sh 를 찾지 못했습니다" };
+  const workspace = getWorkspaceDir();
+  const prompt = `/do ${t} auto${e ? ` env=${e}` : ""}`;
+  const design = [
+    shq(claudeBin()), "-p", shq(prompt),
+    "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose",
+    "--add-dir", shq(workspace), "--add-dir", shq(getReposRoot()),
+  ].join(" ");
+  spawnBashJob(key, `DOBBY_V2_CHAINED=1 ${design}; ${runShPipeline(script, key)}`);
+  return { ok: true, jobId: key };
 }
 
 /** 구현 내용(explainer.md) 생성: `/dobby-explain {키}`를 백그라운드로 실행. 잡 id는 `explain-{키}`. */
@@ -309,7 +324,7 @@ function v2DesignApproved(dir: string): boolean {
 }
 
 /** v2 자동 실행을 지금 시작할 수 있는가. run.sh 가 멈추지 않고 진행하는 조건과 같게 판정한다. */
-export function v2RunCheck(key: string): { ok: boolean; reason?: string; running?: boolean } {
+export function v2RunCheck(key: string): { ok: boolean; reason?: string; running?: boolean; autoEnv?: string } {
   const k = key.trim();
   if (!ORDER_KEY_RE.test(k)) return { ok: false, reason: "잘못된 오더 키입니다" };
   if (isRunning(k)) return { ok: false, reason: "이 오더의 작업이 이미 실행 중입니다", running: true };
@@ -325,7 +340,8 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
   }
   const phase = md.match(/^- \*\*단계\*\*: *(.*)$/m)?.[1]?.trim() ?? "";
   // `/do {키} auto env=` 오더는 통합 뒤 배포·검증까지 run.sh 가 이어 간다(판단 요청에 답한 뒤 다시 띄울 때도 여기로 온다).
-  const autoDeploy = /^- \*\*자동 배포 환경\*\*: *\S+/m.test(md);
+  const autoEnv = md.match(/^- \*\*자동 배포 환경\*\*: *(\S+)/m)?.[1];
+  const autoDeploy = !!autoEnv;
   if (phase === "분석") {
     if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
   } else if (phase !== "구현" && phase !== "리뷰" && !(autoDeploy && (phase === "통합" || phase === "검증"))) {
@@ -335,25 +351,26 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
     };
   }
   if (!v2RunScript()) return { ok: false, reason: "go-dobby 플러그인에서 run.sh 를 찾지 못했습니다" };
-  return { ok: true };
+  return { ok: true, autoEnv };
 }
 
 /**
- * 설계가 확정된 v2 오더를 run.sh 로 통합까지 자동 진행한다. 잡 id는 오더 키(실시간 콘솔이 그 이름을 읽는다).
- * run.sh 출력 한 줄을 stream-json 텍스트 한 줄로 감싸 run.log 에 쓰고, 끝나면 result 한 줄을 남긴다.
+ * run.sh 를 돌려 출력 한 줄을 stream-json 텍스트 한 줄로 감싸고, 끝나면 result 한 줄을 남기는 셸 조각.
+ * 실시간 콘솔과 완료 판정이 claude 잡과 같은 형식으로 읽는다.
  */
-export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?: string } {
-  const k = key.trim();
-  const check = v2RunCheck(k);
-  if (!check.ok) return { ok: false, reason: check.running ? "already_running" : check.reason };
-  const script = v2RunScript() as string;
+function runShPipeline(script: string, key: string): string {
   const wrap = `jq -nc --arg t "$l" '{type:"assistant",message:{content:[{type:"text",text:$t}]}}'`;
-  const cmd =
+  return (
     `code=1; last=""; while IFS= read -r l; do case "$l" in __EXIT__*) code="\${l#__EXIT__}" ;; ` +
-    `*) [ -n "$l" ] && last="$l"; ${wrap} ;; esac; done < <(bash ${shq(script)} ${shq(k)} --mode bypassPermissions --approve-commit 2>&1; echo "__EXIT__$?"); ` +
-    `jq -nc --arg r "$last" --argjson e "$([ "$code" = 0 ] && echo false || echo true)" '{type:"result",is_error:$e,result:$r}'`;
-  fs.mkdirSync(jobDir(k), { recursive: true });
-  const out = fs.openSync(logPath(k), "w");
+    `*) [ -n "$l" ] && last="$l"; ${wrap} ;; esac; done < <(bash ${shq(script)} ${shq(key)} --mode bypassPermissions --approve-commit 2>&1; echo "__EXIT__$?"); ` +
+    `jq -nc --arg r "$last" --argjson e "$([ "$code" = 0 ] && echo false || echo true)" '{type:"result",is_error:$e,result:$r}'`
+  );
+}
+
+/** 셸 명령을 분리된 프로세스로 띄우는 /do 자동 실행 잡(kind v2run). 로그는 새로 쓴다. */
+function spawnBashJob(key: string, cmd: string): void {
+  fs.mkdirSync(jobDir(key), { recursive: true });
+  const out = fs.openSync(logPath(key), "w");
   const workspace = getWorkspaceDir();
   const child = spawn("bash", ["-c", cmd], {
     cwd: workspace,
@@ -368,8 +385,19 @@ export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?:
       ORCHESTRATION_REPOS_ROOT: getReposRoot(),
     },
   });
-  writeMeta({ key: k, pid: child.pid ?? -1, startedAt: Date.now(), kind: "v2run" });
+  writeMeta({ key, pid: child.pid ?? -1, startedAt: Date.now(), kind: "v2run" });
   child.unref();
+}
+
+/**
+ * 설계가 확정된 v2 오더를 run.sh 로 통합까지 자동 진행한다. 잡 id는 오더 키(실시간 콘솔이 그 이름을 읽는다).
+ * run.sh 출력 한 줄을 stream-json 텍스트 한 줄로 감싸 run.log 에 쓰고, 끝나면 result 한 줄을 남긴다.
+ */
+export function startV2Run(key: string): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  const check = v2RunCheck(k);
+  if (!check.ok) return { ok: false, reason: check.running ? "already_running" : check.reason };
+  spawnBashJob(k, runShPipeline(v2RunScript() as string, k));
   return { ok: true, jobId: k };
 }
 

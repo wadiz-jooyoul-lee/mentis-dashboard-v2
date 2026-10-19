@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  startOrder,
+  startDo,
   startExplain,
   startRetro,
   startQuips,
@@ -150,12 +150,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: jobId }, { status: 202 });
   }
 
-  // 실행: target(자유 입력) 또는 레거시 key
+  // 실행: `/do {target} auto [env=]` 설계 세션 → 같은 잡에서 run.sh 자동 실행
   const target = String(body?.target ?? body?.key ?? "").trim();
   if (!target) {
     return NextResponse.json({ ok: false, error: "empty" }, { status: 400 });
   }
-  const r = startOrder(target);
+  const r = startDo(target, String(body?.env ?? ""));
   if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
   return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
 }
