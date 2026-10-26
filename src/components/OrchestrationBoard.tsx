@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -37,7 +37,9 @@ import { quipList, type QuipsFile, type Quip } from "@/lib/quipTypes";
 import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
-import { agentStateBadge, STATE_ORDER } from "@/lib/parseOrchestration";
+import { agentStateBadge, STATE_ORDER, boardColumn, isDevRole } from "@/lib/parseOrchestration";
+import { parseReport } from "@/lib/parseReport";
+import type { DevProgress } from "@/lib/devProgress";
 import { isJiraIssueKey } from "@/lib/keys";
 import "./markdown.css";
 
@@ -57,7 +59,7 @@ function minutesSince(v: string | null | undefined): number | null {
 }
 
 // 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·완료 제외)
-const ACTIVE_STATES = ["분석", "구현", "리뷰"];
+const ACTIVE_STATES = ["분석", "구현", "검증", "리뷰"];
 const STALE_MIN = 30;
 /** 정체 판정 기준 시각 = 마지막 상태 변경(갱신). 없으면 착수로 폴백. */
 function staleBase(a: AgentRow): string | null {
@@ -142,6 +144,26 @@ function eventItem(e: EventRow) {
   };
 }
 
+type BarPart = { n: number; color: string };
+
+/** 카드 아바타 아래 진행 막대. 칸 비율은 전체 대비, 남은 칸은 비워 둔다. */
+function ProgressBar({ parts, total, label }: { parts: BarPart[]; total: number; label: string }) {
+  return (
+    <div style={{ width: "100%" }}>
+      {total > 0 && (
+        <div style={{ display: "flex", height: 6, borderRadius: 3, overflow: "hidden", background: "#f0f0f0" }}>
+          {parts.map((p, i) => (
+            <div key={i} style={{ width: `${(p.n / total) * 100}%`, background: p.color }} />
+          ))}
+        </div>
+      )}
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {label}
+      </Text>
+    </div>
+  );
+}
+
 function AgentCard({
   a,
   epicKey,
@@ -150,6 +172,7 @@ function AgentCard({
   quips,
   placement,
   console: con,
+  progress,
 }: {
   a: AgentRow;
   epicKey: string;
@@ -163,6 +186,8 @@ function AgentCard({
   placement?: QuipPlacement;
   /** 이 에이전트의 가장 최근 콘솔(id)과 지금 진행 중인지. 콘솔 기록이 없으면 undefined. */
   console?: { id: string; live: boolean };
+  /** 아바타 아래 진행 막대(테스터·개발자). 없으면 그리지 않는다. */
+  progress?: ReactNode;
 }) {
   const router = useRouter();
   const stale = isStale(a);
@@ -213,7 +238,7 @@ function AgentCard({
             slug={a.agent}
             name={a.name || a.agent}
             avatar={avatar}
-            state={a.state}
+            state={a.state === "검증" ? "구현" : a.state}
             size={34}
             quips={quips}
             mode={muted ? "hover" : "auto"}
@@ -225,11 +250,12 @@ function AgentCard({
                 color={roleColor(a.agent)}
                 style={{ margin: 0, fontWeight: 600, fontSize: 13 }}
               >
-                {a.name || a.agent}
+                {a.state === "검증" ? "테스터" : a.name || a.agent}
               </Tag>
             </Tooltip>
           )}
         </Space>
+        {progress}
         {a.issue && a.issue !== "-" && (
           <Link
             href={`/orchestration/${a.issue}`}
@@ -411,7 +437,7 @@ export default function OrchestrationBoard({
   }
 
   const counts: Record<string, number> = {};
-  for (const a of o.agents) counts[a.state] = (counts[a.state] ?? 0) + 1;
+  for (const a of o.agents) counts[boardColumn(a.state)] = (counts[boardColumn(a.state)] ?? 0) + 1;
   // 고정 열(정식 순서) + 정의 밖 상태는 뒤에 추가(사라지지 않게)
   const extras = Object.keys(counts).filter((s) => !STATE_ORDER.includes(s));
   const cols = [...STATE_ORDER, ...extras];
@@ -424,6 +450,42 @@ export default function OrchestrationBoard({
     return "top";
   };
   const total = o.agents.length;
+
+  // 테스터 막대: 최신 회차 result.md 시나리오 표(판정 칸이 찬 행 / 전체 행). 개발자 막대: 서버가 센 devProgress.
+  const latestRun = epic?.runs?.[0];
+  const testCounts = latestRun?.content ? parseReport(latestRun.content).counts : null;
+  const dp: DevProgress | null = epic?.devProgress ?? null;
+  const progressFor = (a: AgentRow): ReactNode => {
+    if (a.state === "검증" && testCounts) {
+      const { total: t, pass, fail, skip, warn } = testCounts;
+      const done = pass + fail + skip + warn;
+      const run = `${epic?.runs.length ?? 0}회차`;
+      return (
+        <ProgressBar
+          parts={[
+            { n: pass + warn, color: "#52c41a" },
+            { n: fail, color: "#ff4d4f" },
+            { n: skip, color: "#bfbfbf" },
+          ]}
+          total={t}
+          label={t > 0 ? `${run} · ${done} / ${t} (${Math.round((done / t) * 100)}%)` : `${run} · 진행 ${done}건`}
+        />
+      );
+    }
+    if (a.state === "구현" && dp?.mode === "impl") {
+      return (
+        <ProgressBar
+          parts={[{ n: dp.done, color: "#1677ff" }]}
+          total={dp.total}
+          label={`구현 ${dp.done} / ${dp.total} 파일 (${Math.round((dp.done / dp.total) * 100)}%)`}
+        />
+      );
+    }
+    if (a.state === "구현" && dp?.mode === "fix") {
+      return <ProgressBar parts={[]} total={0} label={`수정 중 · 지적 ${dp.findings}건`} />;
+    }
+    return undefined;
+  };
   const staleAgents = o.agents.filter(isStale);
 
   return (
@@ -515,7 +577,7 @@ export default function OrchestrationBoard({
       <Row gutter={[12, 12]}>
         {cols.map((col, colIdx) => {
           const b = agentStateBadge(col);
-          const items = o.agents.filter((a) => a.state === col);
+          const items = o.agents.filter((a) => boardColumn(a.state) === col);
           const placement = placementFor(colIdx);
           // 5개 고정 열 → 폭을 균등하게 나눠 전체 너비를 채운다(좁은 화면에선 줄바꿈).
           return (
@@ -546,6 +608,7 @@ export default function OrchestrationBoard({
                     quips={quipList(quips?.board?.[a.agent])}
                     placement={placement}
                     console={consoleFor(a.agent)}
+                    progress={isDevRole(a.name) ? progressFor(a) : undefined}
                   />
                 ))}
               </div>

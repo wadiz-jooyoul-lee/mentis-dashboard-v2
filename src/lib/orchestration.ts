@@ -15,6 +15,7 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { liveSessionByUuid } from "@/lib/sessionRegistry";
 import {
   parseOrchestration,
+  isDevRole,
   type Orchestration,
   type AgentState,
   type AgentRow,
@@ -42,6 +43,7 @@ import {
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 import { shipFromTestRuns } from "@/lib/shipFromTests";
+import { devProgress, type DevProgress } from "@/lib/devProgress";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
 const KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
@@ -304,7 +306,7 @@ export type EpicSummary = {
 };
 
 // "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
-const CARD_ACTIVE_STATES = ["분석", "구현", "리뷰"];
+const CARD_ACTIVE_STATES = ["분석", "구현", "검증", "리뷰"];
 const CARD_STALE_MIN = 30;
 function agentStalled(a: { updatedAt: string; startedAt: string }): boolean {
   // 기준 = 마지막 상태 변경(갱신). 시:분 없으면 착수로 폴백, 그것도 없으면 판정 안 함(오탐 방지).
@@ -769,6 +771,8 @@ export type EpicDetail = {
   ship: ShipRow[];
   /** 정기배포 릴리즈 노트 등록 기록. 보드 관제 카드용. 없으면 빈 배열(미등록). */
   releaseNote: ReleaseNoteRow[];
+  /** 개발자 카드 진척도. 개발자가 `구현` 상태일 때만 계산하고, 아니면 null. */
+  devProgress: DevProgress | null;
   /** 이 오더 저장소의 GitHub 주소(PR·빌드 링크용). 못 알아내면 null. */
   repoUrl: string | null;
   analysisMd: string | null;
@@ -1390,6 +1394,8 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     ? buildAgentWorks(epicKey, orchestration, st)
     : slugStubs(epicKey);
   const commitChanges = opts.withDiffs && st && statusMd ? buildCommitChanges(statusMd, st.worktrees) : undefined;
+  const dev = orchestration.agents.find((a) => isDevRole(a.name) && a.state === "구현");
+  const designMd = readFileSafe(path.join(dir, "design.md"));
   const avatars = epicAvatars(
     epicKey,
     dir,
@@ -1417,6 +1423,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
     ship: shipFromTestRuns(orderDir(epicKey), st?.ship ?? []),
     releaseNote: st?.releaseNote ?? [],
+    devProgress: dev ? devProgress(dir, dev.agent, designMd, st?.worktrees ?? [], reviews) : null,
     repoUrl: shipRepoUrl(epicKey, st?.shipRepo ?? null),
     analysisMd: readFileSafe(path.join(dir, "analysis.md")),
     implementationMd: readFileSafe(path.join(dir, "implementation.md")),
@@ -1433,7 +1440,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
     retroMd: readFileSafe(path.join(dir, "retro.md")),
-    designMd: readFileSafe(path.join(dir, "design.md")),
+    designMd,
     outcomeMd: readFileSafe(path.join(dir, "outcome.md")),
     artifactShares: readArtifactShares(epicKey),
     jiraIssueMd: readFileSafe(path.join(dir, "jira-issue.md")),
@@ -1534,12 +1541,12 @@ export function orchestrationMetrics(): Metric[] {
   const epics = listEpics();
   if (epics.length === 0) return [];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현");
+  const impl = sum("구현") + sum("검증");
   const review = sum("리뷰");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "구현", value: impl, color: "blue" }] : []),
+    ...(impl > 0 ? [{ label: "진행중", value: impl, color: "blue" }] : []),
     ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];

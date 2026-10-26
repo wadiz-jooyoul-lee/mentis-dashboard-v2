@@ -41,7 +41,17 @@ const at = (row: string[], i: number) => (i >= 0 && i < row.length ? row[i] : ""
  * 구현·산출: 대기→구현→완료 / 분석·감사: 대기→분석→완료 / 리뷰: 대기→리뷰→완료 / 인라인: 대기→분석→구현→완료
  * 그 외(정의 밖) 값은 뒤에 붙어 사라지지 않는다.
  */
-export const STATE_ORDER: string[] = ["대기", "분석", "구현", "리뷰", "완료"];
+export const STATE_ORDER: string[] = ["대기", "분석", "진행중", "리뷰", "완료"];
+
+/** 칸반 열. 상태값 `구현`·`검증`(개발자가 테스터로 일하는 중)은 "진행중" 열에 함께 그린다. */
+export function boardColumn(state: AgentState): string {
+  return state === "구현" || state === "검증" ? "진행중" : state;
+}
+
+/** 개발 담당 행인가. 분석과 개발을 나누기 전 오더는 이름이 "분석/개발자"다. */
+export function isDevRole(name: string | undefined): boolean {
+  return name === "개발자" || name === "분석/개발자";
+}
 
 /**
  * 상태 정규화 → 5개(대기·분석·구현·리뷰·완료)로 접는다. 옛 상태값도 여기서 매핑:
@@ -212,6 +222,8 @@ const STATE_COLOR: Record<string, string> = {
   대기: "#bfbfbf",
   분석: "cyan",
   구현: "blue",
+  진행중: "blue",
+  검증: "purple",
   리뷰: "gold",
   완료: "green",
 };
