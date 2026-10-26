@@ -63,4 +63,13 @@ export const sections: Section[] = [
     area: "orchestration",
     enabled: true,
   },
+  {
+    key: "releases",
+    title: "릴리즈",
+    description: "정기배포 stage 검증(dobby-stage) — 배포일별 핵심 TC 결과",
+    path: "/releases",
+    icon: "RocketOutlined",
+    area: "orchestration",
+    enabled: true,
+  },
 ];
