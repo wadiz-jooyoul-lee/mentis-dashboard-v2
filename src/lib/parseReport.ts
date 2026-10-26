@@ -15,6 +15,8 @@ export type Scenario = {
   actual: string;
   evidence: string;
   verdict: Verdict;
+  /** 판정 칸 원문(`SKIP(미비)` 등) — 보류 이유를 가를 때 쓴다 */
+  verdictRaw: string;
 };
 
 export type MetaItem = { label: string; value: string };
@@ -203,6 +205,7 @@ function parseScenarios(lines: string[], table: TableBlock): Scenario[] {
       actual: at(cells, idxActual),
       evidence: at(cells, idxEvidence),
       verdict: normalizeVerdict(at(cells, idxVerdict)),
+      verdictRaw: at(cells, idxVerdict),
     });
   }
   return rows;

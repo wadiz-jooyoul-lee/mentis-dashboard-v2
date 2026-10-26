@@ -153,7 +153,7 @@ export default function SectionGrid({
             </Title>
             <Row gutter={[16, 16]}>
               {items.map((s) => (
-                <Col key={s.key} xs={24} sm={12} md={8}>
+                <Col key={s.key} xs={24} sm={12} md={6}>
                   <SectionCard section={s} stats={stats[s.key]} />
                 </Col>
               ))}

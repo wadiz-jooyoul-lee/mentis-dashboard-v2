@@ -84,7 +84,7 @@ export type TestSummary = {
  * 읽혔다). 아래를 다 받는다 — 값만 멀쩡히 들어 있지 라벨이 다를 뿐이다.
  *   `- **환경**: dev`  `- 환경: dev`  `- 환경: **dev**`  `대상 환경: rc4 어드민`  `| 환경 | dev |`
  */
-function findEnv(md: string): string {
+export function findEnv(md: string): string {
   const bullet = md.match(
     /^\s*[-*]?\s*\*{0,2}(?:대상\s*)?(?:환경|실행 환경|테스트 환경)\*{0,2}\s*[:：]\s*(.+)$/m
   );
