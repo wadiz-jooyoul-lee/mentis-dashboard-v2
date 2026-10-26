@@ -54,6 +54,11 @@ export function normalizeVerdict(raw: string): Verdict {
   return "unknown";
 }
 
+/** 보류 = 준비가 모자라 못 한 것(`SKIP(미비)`, 옛 ⚠️). `SKIP(환경)`·`SKIP(위험)` 은 스킵이다. */
+export function isHold(t: { verdict: Verdict; verdictRaw: string }): boolean {
+  return t.verdict === "warn" || (t.verdict === "skip" && /미비/.test(t.verdictRaw));
+}
+
 function splitRow(line: string): string[] {
   const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
   return t.split("|").map((c) => c.trim());

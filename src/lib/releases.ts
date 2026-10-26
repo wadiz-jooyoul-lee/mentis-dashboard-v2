@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getMetaDir } from "@/lib/issues";
-import { parseReport, type Scenario } from "@/lib/parseReport";
+import { parseReport, isHold, type Scenario } from "@/lib/parseReport";
 import { findEnv } from "@/lib/testSummary";
 import { fieldLine, findTable, columnIndex } from "@/lib/md";
 import { parseOrderStatus } from "@/lib/parseOrderStatus";
@@ -102,11 +102,6 @@ function addCounts(a: ReleaseCounts, b: ReleaseCounts): ReleaseCounts {
     hold: a.hold + b.hold,
     skip: a.skip + b.skip,
   };
-}
-
-/** 보류 = 준비가 모자라 못 한 것(`SKIP(미비)`, 옛 ⚠️). `SKIP(환경)`·`SKIP(위험)` 은 스킵이다. */
-export function isHold(t: { verdict: string; verdictRaw: string }): boolean {
-  return t.verdict === "warn" || (t.verdict === "skip" && /미비/.test(t.verdictRaw));
 }
 
 function countTcs(tcs: ReleaseTc[]): ReleaseCounts {
