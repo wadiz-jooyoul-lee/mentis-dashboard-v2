@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Breadcrumb, Button, Card, Space, Table, Tag, Tooltip, Typography } from "antd";
 import { ExportOutlined } from "@ant-design/icons";
 import ReleaseProgress, { RELEASE_TONE } from "@/components/ReleaseProgress";
-import { isHold, type Release, type ReleaseIssue, type ReleaseTc } from "@/lib/releases";
-import type { Verdict } from "@/lib/parseReport";
+import type { Release, ReleaseIssue, ReleaseTc } from "@/lib/releases";
+import { isHold, type Verdict } from "@/lib/parseReport";
 
 const { Title, Text } = Typography;
 
