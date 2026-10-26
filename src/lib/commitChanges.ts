@@ -41,7 +41,7 @@ export type RepoCommitChanges = {
 /** 한 파일의 diff 본문 상한(lock 파일 같은 거대 변경 방어). 넘으면 파일 목록에만 남긴다. */
 const MAX_FILE_DIFF_BYTES = 256 * 1024;
 
-function git(wt: string, args: string[]): string | null {
+export function git(wt: string, args: string[]): string | null {
   const r = spawnSync("git", ["-C", wt, "-c", "core.quotepath=off", ...args], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,

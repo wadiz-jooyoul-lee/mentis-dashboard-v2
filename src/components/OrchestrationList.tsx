@@ -25,6 +25,7 @@ const STATE_BADGES: Array<{ key: string; color: string }> = [
   { key: "대기", color: "#bfbfbf" },
   { key: "분석", color: "cyan" },
   { key: "구현", color: "blue" },
+  { key: "검증", color: "purple" },
   { key: "리뷰", color: "gold" },
   { key: "완료", color: "green" },
 ];
