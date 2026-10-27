@@ -36,11 +36,11 @@ export function resumeTargets(s: SessionWorktrees): ResumeTarget[] {
  * 사라진 워크트리는 먼저 되살리고(prune → 없을 때만 add), 실패하면
  * `&&` 에서 끊겨 claude 를 띄우지 않는다.
  */
-export function resumeCommand(t: ResumeTarget, epicKey: string, isV2: boolean): string {
+export function resumeCommand(t: ResumeTarget, epicKey: string, isV2: boolean, prompt?: string): string {
   const parts: string[] = [];
   if (t.restoreFrom) parts.push(restoreStep(t, t.restoreFrom));
   parts.push(`cd ${q(t.path)}`);
-  parts.push(isV2 ? `claude ${q(`/do ${epicKey}`)}` : "claude");
+  parts.push(isV2 ? `claude ${q(prompt ?? `/do ${epicKey}`)}` : "claude");
   return parts.join(" && ");
 }
 
