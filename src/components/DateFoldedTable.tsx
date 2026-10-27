@@ -155,7 +155,6 @@ export default function DateFoldedTable<T extends object>({
         dataSource={groups.get(k)}
         pagination={false}
         size="middle"
-        scroll={{ x: "max-content" }}
         rowClassName={rowClassName}
       />
     ),

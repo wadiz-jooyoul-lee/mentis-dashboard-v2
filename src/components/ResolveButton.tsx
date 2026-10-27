@@ -108,7 +108,7 @@ export default function ResolveButton({
     >
       <Button
         size="small"
-        {...(resolved ? { type: "default" as const } : { color: "default" as const, variant: "solid" as const })}
+        {...(resolved ? { type: "default" as const } : { color: "geekblue" as const, variant: "outlined" as const, style: { background: "#f0f5ff", borderColor: "#597ef7", color: "#597ef7" } })}
         icon={resolved ? <UndoOutlined /> : <CheckCircleOutlined />}
         loading={busy}
         onClick={(e) => e.stopPropagation()}

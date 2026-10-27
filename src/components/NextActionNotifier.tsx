@@ -30,8 +30,8 @@ function addAck(id: string): void {
 }
 
 /**
- * MY·알림 카드 — 모든 화면 오른쪽 위에 MY(할 일 있음)와 알림인 오더마다 카드를 띄운다. 닫으면 다시 뜨지 않는다.
- * 상태가 바뀌면 카드는 저절로 닫힌다. 탭 제목 앞 숫자는 MY 오더 수다.
+ * TODO·알림 카드 — 모든 화면 오른쪽 위에 TODO(할 일 있음)와 알림인 오더마다 카드를 띄운다. 닫으면 다시 뜨지 않는다.
+ * 상태가 바뀌면 카드는 저절로 닫힌다. 탭 제목 앞 숫자는 TODO 오더 수다.
  * 탭이 뒤에 있을 때 새로 뜬 카드는 맥 알림 센터에도 알린다.
  */
 export default function NextActionNotifier() {
@@ -81,7 +81,7 @@ export default function NextActionNotifier() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, loaded, canAct, api]);
 
-  // 탭 제목 앞에 MY 수(알림은 세지 않는다). 화면 이동 때 제목이 바뀔 수 있어 주기마다 다시 붙인다.
+  // 탭 제목 앞에 TODO 수(알림은 세지 않는다). 화면 이동 때 제목이 바뀔 수 있어 주기마다 다시 붙인다.
   const count = canAct ? mine.length : 0;
   useEffect(() => {
     const apply = () => {
@@ -100,7 +100,7 @@ export default function NextActionNotifier() {
 function notifyOs(i: NextItem) {
   if (typeof Notification === "undefined" || !window.isSecureContext) return;
   if (Notification.permission !== "granted" || document.hasFocus()) return;
-  const n = new Notification(`${i.key} · ${i.group === "mine" ? "MY" : "알림"}`, { body: [i.text, i.title].filter(Boolean).join("\n"), tag: cardId(i) });
+  const n = new Notification(`${i.key} · ${i.group === "mine" ? "TODO" : "알림"}`, { body: [i.text, i.title].filter(Boolean).join("\n"), tag: cardId(i) });
   n.onclick = () => {
     window.focus();
     n.close();

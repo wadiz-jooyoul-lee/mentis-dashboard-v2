@@ -10,7 +10,6 @@ import ResumeV2Button from "@/components/ResumeV2Button";
 import V2RunButton from "@/components/V2RunButton";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
-import { NextActionBanner } from "@/components/NextAction";
 import { dobbyColor } from "@/lib/dobby";
 import { isJiraIssueKey } from "@/lib/keys";
 
@@ -223,7 +222,6 @@ export default function OrderHeader({
           <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>
-      <NextActionBanner epicKey={epicKey} />
       <Tabs
         type="card"
         activeKey={active}

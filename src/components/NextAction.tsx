@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Alert, Button, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
-import { CopyOutlined } from "@ant-design/icons";
+import { Button, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
+import { BellFilled, ClockCircleOutlined, CopyOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import { copyText } from "@/lib/clipboard";
-import MarkdownDoc from "@/components/MarkdownDoc";
 import type { NextAction, NextGroup, NextItem } from "@/lib/nextAction";
 
 const { Text } = Typography;
@@ -52,11 +51,18 @@ export function useNextActions(): State {
 
 // ── 표시 ──
 export const GROUP_LABEL: Record<NextGroup, { label: string; color: string }> = {
-  mine: { label: "MY", color: "volcano" },
+  mine: { label: "TODO", color: "volcano" },
   notice: { label: "알림", color: "cyan" },
   auto: { label: "자동 진행", color: "blue" },
   wait: { label: "기다림", color: "default" },
   work: { label: "작업 중", color: "purple" },
+};
+
+/** 목록 칸에서 태그 대신 아이콘으로 보이는 묶음 */
+const GROUP_ICON: Partial<Record<NextGroup, React.ReactNode>> = {
+  mine: <ExclamationCircleFilled style={{ color: "#fa541c" }} />,
+  notice: <BellFilled style={{ color: "#13c2c2" }} />,
+  wait: <ClockCircleOutlined style={{ color: "#8c8c8c" }} />,
 };
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -76,6 +82,16 @@ export function formatSince(since: string, now = Date.now()): string {
 export function NextActionTag({ item }: { item?: NextItem }) {
   if (!item) return <Text type="secondary">-</Text>;
   const g = GROUP_LABEL[item.group];
+  const icon = GROUP_ICON[item.group];
+  if (icon)
+    return (
+      <Tooltip title={[g.label, item.since && formatSince(item.since)].filter(Boolean).join(" · ")}>
+        <Space size={6} align="start">
+          {icon}
+          <Text style={{ fontSize: 12 }}>{item.text}</Text>
+        </Space>
+      </Tooltip>
+    );
   return (
     <Tooltip title={item.since ? formatSince(item.since) : undefined}>
       <Space orientation="vertical" size={2}>
@@ -216,49 +232,4 @@ export function NextActionControls({
     );
   }
   return buttons.length ? <Space wrap size={6}>{buttons}</Space> : null;
-}
-
-/** 오더 화면 머리 아래 띠 — 이 오더의 다음 할 일. 판단 요청이면 설계 문서의 질문을 펼쳐 본다. */
-export function NextActionBanner({ epicKey }: { epicKey: string }) {
-  const { items } = useNextActions();
-  const item = items.find((i) => i.key === epicKey);
-  const [open, setOpen] = useState(false);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => tick((n) => n + 1), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  if (!item) return null;
-  const g = GROUP_LABEL[item.group];
-  const type = item.group === "mine" ? "warning" : "info";
-  return (
-    <Alert
-      type={type}
-      showIcon
-      style={{ marginBottom: 16 }}
-      title={
-        <Space wrap size={8}>
-          <Tag color={g.color}>{g.label}</Tag>
-          <Text strong>{item.text}</Text>
-          {item.since && <Text type="secondary" style={{ fontSize: 12 }}>{formatSince(item.since)}</Text>}
-        </Space>
-      }
-      description={
-        (item.note || item.detail || item.action || item.cmd || item.link) && (
-          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-            {item.note && <Text type="secondary">자동 실행이 멈춘 이유: {item.note}</Text>}
-            {item.detail && (
-              <>
-                <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setOpen((v) => !v)}>
-                  {open ? "판단 요청 접기" : "판단 요청 펼치기"}
-                </Button>
-                {open && <MarkdownDoc md={item.detail} bare />}
-              </>
-            )}
-            <NextActionControls item={item} />
-          </Space>
-        )
-      }
-    />
-  );
 }

@@ -201,3 +201,19 @@
 .row-resolved:hover > td {
   background: #e6e6e6;
 }
+
+/* 오더 목록 에픽 키 — 크레파스로 문지른 듯한 자국(모양은 SVG 틀, 색 --mark 가 작업 상태) */
+.epic-mark {
+  position: relative;
+  isolation: isolate;
+  padding: 1px 6px;
+}
+.epic-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--mark);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40' preserveAspectRatio='none'%3E%3Cfilter id='c' x='-10%25' y='-30%25' width='120%25' height='160%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='5' result='d'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.4 2.2' result='g'/%3E%3CfeComposite in='d' in2='g' operator='in'/%3E%3C/filter%3E%3Cg filter='url(%23c)' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 21H112' stroke-width='15'/%3E%3Cpath d='M5 27L19 9L24 33L40 7L45 33L61 7L66 33L82 7L87 33L103 8L108 30L116 15' stroke-width='7'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40' preserveAspectRatio='none'%3E%3Cfilter id='c' x='-10%25' y='-30%25' width='120%25' height='160%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='5' result='d'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.4 2.2' result='g'/%3E%3CfeComposite in='d' in2='g' operator='in'/%3E%3C/filter%3E%3Cg filter='url(%23c)' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 21H112' stroke-width='15'/%3E%3Cpath d='M5 27L19 9L24 33L40 7L45 33L61 7L66 33L82 7L87 33L103 8L108 30L116 15' stroke-width='7'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
