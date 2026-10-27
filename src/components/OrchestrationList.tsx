@@ -86,10 +86,10 @@ export default function OrchestrationList({
   const router = useRouter();
   const { items: nextItems } = useNextActions();
   const next = new Map(nextItems.map((i) => [i.key, i]));
-  const GROUP_RANK = { mine: 0, auto: 1, work: 2, wait: 3 } as const;
+  const GROUP_RANK = { mine: 0, notice: 1, auto: 2, work: 3, wait: 4 } as const;
   const rank = (k: string) => {
     const g = next.get(k)?.group;
-    return g ? GROUP_RANK[g] : 4;
+    return g ? GROUP_RANK[g] : 5;
   };
 
   // 개발/비개발 스코프는 URL ?type= 로 관리한다(공유·북마크 가능; 서버가 page.tsx에서 이 값으로 필터해 epics를 넘긴다).
@@ -263,7 +263,7 @@ export default function OrchestrationList({
         const resolved = workStatus(r).text !== "작업중";
         return (
           <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <ResolveButton epicKey={r.epicKey} resolved={resolved} primary={next.get(r.epicKey)?.kind === "resolve"} />
+            <ResolveButton epicKey={r.epicKey} resolved={resolved} />
             {/* 지울 워크트리가 실제로 있는 오더에만 — 이미 정리됐거나 문서 전용이면 아예 안 그린다. */}
             {resolved && deletable[r.epicKey] && (
               <WorktreeDeleteButton epicKey={r.epicKey} state={deletable[r.epicKey]} />

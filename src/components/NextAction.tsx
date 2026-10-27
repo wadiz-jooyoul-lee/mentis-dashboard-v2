@@ -52,7 +52,8 @@ export function useNextActions(): State {
 
 // ── 표시 ──
 export const GROUP_LABEL: Record<NextGroup, { label: string; color: string }> = {
-  mine: { label: "내 차례", color: "volcano" },
+  mine: { label: "MY", color: "volcano" },
+  notice: { label: "알림", color: "cyan" },
   auto: { label: "자동 진행", color: "blue" },
   wait: { label: "기다림", color: "default" },
   work: { label: "작업 중", color: "purple" },
