@@ -28,6 +28,7 @@ import {
 import {
   saveJiraEnrichDraft,
   prTargets,
+  existingPrs,
   readOrderSession,
   readRunContent,
 } from "@/lib/orchestration";
@@ -249,6 +250,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
     }
     return NextResponse.json({ targets: prTargets(prKey) });
+  }
+
+  // 이미 만들어진 환경별 PR: ?prExisting={오더키} → { prs: { "{repo}|{branch}": [...] } }
+  const prExKey = (sp.get("prExisting") ?? "").trim();
+  if (prExKey) {
+    if (!ORDER_KEY_RE.test(prExKey)) {
+      return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    }
+    return NextResponse.json({ prs: await existingPrs(prExKey) });
   }
 
   // v2 자동 실행 가능 여부: ?v2run={오더키} → { ok, reason, running }

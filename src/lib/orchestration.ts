@@ -8,10 +8,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { buildCommitChanges, type RepoCommitChanges } from "@/lib/commitChanges";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
+import { envBranchesOf, type ExistingPr } from "@/lib/prEnv";
 import { liveSessionByUuid } from "@/lib/sessionRegistry";
 import {
   parseOrchestration,
@@ -1217,6 +1219,50 @@ export function prTargets(key: string): PrTarget[] {
     seen.add(dk);
     out.push({ repo, branch, repoUrl: githubUrlOf(repo) });
   }
+  return out;
+}
+
+/**
+ * 이 오더 브랜치에서 환경 브랜치로 이미 만들어진 PR(열림·머지됨). 키는 `{repo}|{branch}`.
+ * GitHub 검색 `head:` 는 앞부분 일치라 충돌 해결 브랜치({브랜치}_into_{환경})까지 한 번에 찾는다.
+ */
+export async function existingPrs(key: string): Promise<Record<string, ExistingPr[]>> {
+  const run = promisify(execFile);
+  const out: Record<string, ExistingPr[]> = {};
+  await Promise.all(
+    prTargets(key).map(async (t) => {
+      const slug = t.repoUrl?.match(/github\.com\/([^/]+\/[^/]+)/)?.[1];
+      if (!slug) return;
+      const envs = envBranchesOf(t.repo);
+      try {
+        const { stdout } = await run(
+          "gh",
+          ["pr", "list", "--repo", slug, "--state", "all", "--limit", "100",
+            "--search", `head:${t.branch}`, "--json", "number,url,headRefName,baseRefName,state"],
+          { timeout: 15000 },
+        );
+        const rows = JSON.parse(stdout) as {
+          number: number; url: string; headRefName: string; baseRefName: string; state: string;
+        }[];
+        out[`${t.repo}|${t.branch}`] = rows
+          .filter(
+            (r) =>
+              (r.state === "OPEN" || r.state === "MERGED") &&
+              envs.includes(r.baseRefName) &&
+              (r.headRefName === t.branch || r.headRefName === `${t.branch}_into_${r.baseRefName}`),
+          )
+          .map((r) => ({
+            number: r.number,
+            url: r.url,
+            head: r.headRefName,
+            base: r.baseRefName,
+            state: r.state as ExistingPr["state"],
+          }));
+      } catch {
+        /* gh 가 없거나 로그인 전이면 기존 PR 없이 보여 준다 */
+      }
+    }),
+  );
   return out;
 }
 
