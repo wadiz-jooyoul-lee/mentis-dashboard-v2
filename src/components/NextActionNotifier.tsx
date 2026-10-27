@@ -30,9 +30,9 @@ function addAck(id: string): void {
 }
 
 /**
- * 내 차례 알림 — 모든 화면 오른쪽 위에 "내 차례"인 오더마다 카드를 띄운다.
- * 내 차례가 끝나면(상태가 바뀌면) 카드는 저절로 닫힌다. 탭 제목 앞 숫자는 지금 내 차례인 오더 수다.
- * 탭이 뒤에 있을 때 새로 내 차례가 된 오더는 맥 알림 센터에도 알린다.
+ * MY·알림 카드 — 모든 화면 오른쪽 위에 MY(할 일 있음)와 알림인 오더마다 카드를 띄운다. 닫으면 다시 뜨지 않는다.
+ * 상태가 바뀌면 카드는 저절로 닫힌다. 탭 제목 앞 숫자는 MY 오더 수다.
+ * 탭이 뒤에 있을 때 새로 뜬 카드는 맥 알림 센터에도 알린다.
  */
 export default function NextActionNotifier() {
   const canAct = useCanAct();
@@ -41,10 +41,11 @@ export default function NextActionNotifier() {
   const open = useRef(new Map<string, NextItem>());
   const first = useRef(true);
   const mine = items.filter((i) => i.group === "mine");
+  const cards = items.filter((i) => i.group === "mine" || i.group === "notice");
 
   useEffect(() => {
     if (!canAct || !loaded) return;
-    const now = new Map(mine.map((i) => [cardId(i), i]));
+    const now = new Map(cards.map((i) => [cardId(i), i]));
     for (const id of open.current.keys()) {
       if (!now.has(id)) {
         api.destroy(id);
@@ -58,7 +59,7 @@ export default function NextActionNotifier() {
       api.open({
         key: id,
         duration: 0,
-        icon: <BellTwoTone twoToneColor="#fa541c" />,
+        icon: <BellTwoTone twoToneColor={i.group === "mine" ? "#fa541c" : "#13c2c2"} />,
         title: `${i.key} · ${i.text}`,
         description: (
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
@@ -76,11 +77,11 @@ export default function NextActionNotifier() {
       if (!first.current) notifyOs(i);
     }
     first.current = false;
-    // mine 은 items 에서 매번 새로 만든다. items 가 바뀔 때만 돈다.
+    // cards 는 items 에서 매번 새로 만든다. items 가 바뀔 때만 돈다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, loaded, canAct, api]);
 
-  // 탭 제목 앞에 내 차례 수. 화면 이동 때 제목이 바뀔 수 있어 주기마다 다시 붙인다.
+  // 탭 제목 앞에 MY 수(알림은 세지 않는다). 화면 이동 때 제목이 바뀔 수 있어 주기마다 다시 붙인다.
   const count = canAct ? mine.length : 0;
   useEffect(() => {
     const apply = () => {
@@ -99,7 +100,7 @@ export default function NextActionNotifier() {
 function notifyOs(i: NextItem) {
   if (typeof Notification === "undefined" || !window.isSecureContext) return;
   if (Notification.permission !== "granted" || document.hasFocus()) return;
-  const n = new Notification(`${i.key} · 내 차례`, { body: [i.text, i.title].filter(Boolean).join("\n"), tag: cardId(i) });
+  const n = new Notification(`${i.key} · ${i.group === "mine" ? "MY" : "알림"}`, { body: [i.text, i.title].filter(Boolean).join("\n"), tag: cardId(i) });
   n.onclick = () => {
     window.focus();
     n.close();

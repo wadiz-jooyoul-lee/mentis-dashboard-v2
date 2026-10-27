@@ -12,8 +12,8 @@ import { readOrderSession } from "@/lib/orchestration";
 import { resumeCommand, resumeTargets } from "@/lib/resumeCommand";
 import { DO_AUTO_ENVS, goDobbyLib, listFinishedV2Runs, startResolve, startV2Run } from "@/lib/jobs";
 
-/** mine 내 차례 · auto 자동 진행 중 · wait 날짜나 조건 기다림 · work 터미널에서 작업 중 */
-export type NextGroup = "mine" | "auto" | "wait" | "work";
+/** mine 사람이 할 일 있음(MY) · notice 알림만 · auto 자동 진행 중 · wait 날짜나 조건 기다림 · work 터미널에서 작업 중 */
+export type NextGroup = "mine" | "notice" | "auto" | "wait" | "work";
 export type NextAction = "resolve" | "approve" | "autorun" | "deploy" | "drift" | "";
 
 export type NextItem = {

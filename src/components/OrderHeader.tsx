@@ -10,7 +10,7 @@ import ResumeV2Button from "@/components/ResumeV2Button";
 import V2RunButton from "@/components/V2RunButton";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
-import { NextActionBanner, useNextActions } from "@/components/NextAction";
+import { NextActionBanner } from "@/components/NextAction";
 import { dobbyColor } from "@/lib/dobby";
 import { isJiraIssueKey } from "@/lib/keys";
 
@@ -100,7 +100,6 @@ export default function OrderHeader({
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const isSummary = orderKind === "summary";
-  const nextKind = useNextActions().items.find((i) => i.key === epicKey)?.kind;
   // Jira 이슈가 아니면(문서 전용 TASK-) Jira·PR 링크는 성립하지 않는다.
   const hasJiraIssue = isJiraIssueKey(epicKey);
   // summary 오더는 보드 탭이 없으므로, 보드 경로(베이스 URL) 진입도 "작업 내용"으로 활성 표시.
@@ -221,7 +220,7 @@ export default function OrderHeader({
           {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
           <ResumeV2Button epicKey={epicKey} />
           <V2RunButton epicKey={epicKey} />
-          <ResolveButton epicKey={epicKey} resolved={resolved} primary={nextKind === "resolve"} />
+          <ResolveButton epicKey={epicKey} resolved={resolved} />
         </Space>
       </div>
       <NextActionBanner epicKey={epicKey} />
