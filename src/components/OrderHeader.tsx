@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Breadcrumb, Typography, Space, Tag, Button, Tabs, Tooltip } from "antd";
-import { LinkOutlined } from "@ant-design/icons";
+import { Breadcrumb, Typography, Space, Tag, Tabs, Tooltip } from "antd";
 import DobbyIcon from "@/components/DobbyIcon";
 import PrLinkButton from "@/components/PrLinkButton";
-import JiraCopyButton from "@/components/JiraCopyButton";
+import JiraButton from "@/components/JiraButton";
 import ResumeV2Button from "@/components/ResumeV2Button";
 import V2RunButton from "@/components/V2RunButton";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
 import { dobbyColor } from "@/lib/dobby";
-import { jiraUrl } from "@/lib/jira";
 import { isJiraIssueKey } from "@/lib/keys";
 
 const { Title, Text } = Typography;
@@ -101,7 +99,7 @@ export default function OrderHeader({
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const isSummary = orderKind === "summary";
-  // Jira 이슈가 아니면(문서 전용 TASK-) Jira에서 열기·PR 링크는 성립하지 않는다.
+  // Jira 이슈가 아니면(문서 전용 TASK-) Jira·PR 링크는 성립하지 않는다.
   const hasJiraIssue = isJiraIssueKey(epicKey);
   // summary 오더는 보드 탭이 없으므로, 보드 경로(베이스 URL) 진입도 "작업 내용"으로 활성 표시.
   const rawActive = activeTab(pathname);
@@ -217,17 +215,7 @@ export default function OrderHeader({
           )}
         </Space>
         <Space align="center" size={4} wrap>
-          {hasJiraIssue && (
-            <Button
-              type="link"
-              icon={<LinkOutlined />}
-              href={jiraUrl(epicKey)}
-              target="_blank"
-            >
-              Jira에서 열기
-            </Button>
-          )}
-          {hasJiraIssue && <JiraCopyButton epicKey={epicKey} />}
+          {hasJiraIssue && <JiraButton epicKey={epicKey} />}
           {hasJiraIssue && <PrLinkButton epicKey={epicKey} />}
           <ResumeV2Button epicKey={epicKey} />
           <V2RunButton epicKey={epicKey} />
