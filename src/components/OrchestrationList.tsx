@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Tooltip, Input, Select } from "antd";
+import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Input, Select } from "antd";
 import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
@@ -11,6 +11,7 @@ import { jiraUrl } from "@/lib/jira";
 import DobbyIcon from "@/components/DobbyIcon";
 import OrderLauncher from "@/components/OrderLauncher";
 import DateFoldedTable from "@/components/DateFoldedTable";
+import "./markdown.css";
 import WorktreeDeleteButton from "@/components/WorktreeDeleteButton";
 import GroupAvatar from "@/components/GroupAvatar";
 import ResolveButton from "@/components/ResolveButton";
@@ -59,6 +60,8 @@ function workStatus(r: EpicSummary): { text: string; color: string } {
   if (r.phase === "해결") return { text: "해결됨", color: "success" };
   return { text: "작업중", color: "processing" };
 }
+
+const STATUS_MARK: Record<string, string> = { 작업중: "rgba(105, 177, 255, 0.45)", 해결됨: "rgba(149, 222, 100, 0.5)", 종료: "rgba(0, 0, 0, 0.12)" };
 
 /** 작업상태 필터 값. "전체"는 종료를 뺀 모두(작업중·해결됨). */
 type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
@@ -117,7 +120,6 @@ export default function OrchestrationList({
 
   // 배포 표가 있는 오더는 아직 드물다(110여 개 중 두 개). 하나도 없으면 컬럼 자체를 숨긴다 —
   // 안 그러면 빈 칸만 한 줄 늘어선다.
-  const anyShip = epics.some((r) => r.ship.length > 0);
   // 릴리즈 노트도 같은 이유로, 등록 기록이 하나라도 생기기 전에는 컬럼을 숨긴다.
   const anyRelease = epics.some((r) => r.releaseNote.length > 0);
 
@@ -132,7 +134,9 @@ export default function OrchestrationList({
       title: "에픽",
       dataIndex: "epicKey",
       key: "epicKey",
-      onCell: openCell,
+      width: 170,
+      // 작업 상태는 칸 대신 키 뒤 크레파스 자국 색으로 보인다(작업중 파랑·해결됨 초록·종료 회색).
+      onCell: (r: EpicSummary) => ({ ...openCell(r), title: workStatus(r).text }),
       render: (key: string, r: EpicSummary) => (
         <Space size={8}>
           <GroupAvatar slug={key} avatar={r.avatar ?? undefined} size={28} showGroup />
@@ -146,7 +150,14 @@ export default function OrchestrationList({
             onClick={(e) => e.stopPropagation()}
             style={{ color: "inherit" }}
           >
-            <Text strong>{key}</Text>
+            <Text
+              strong
+              ellipsis={{ tooltip: key }}
+              className="epic-mark"
+              style={{ maxWidth: 92, ["--mark" as string]: STATUS_MARK[workStatus(r).text] }}
+            >
+              {key}
+            </Text>
           </Link>
           <a
             href={jiraUrl(key)}
@@ -189,10 +200,17 @@ export default function OrchestrationList({
             -
           </Text>
         );
-        return b ? (
-          <Popover content="자율(B) 모드 · Workflow로 자동·병렬 실행">{body}</Popover>
+        const title = b ? <Popover content="자율(B) 모드 · Workflow로 자동·병렬 실행">{body}</Popover> : body;
+        // 배포 진행은 칸 대신 제목 아랫줄 태그로 보인다.
+        return r.ship.length ? (
+          <>
+            {title}
+            <div style={{ marginTop: 4 }}>
+              <ShipTags rows={r.ship} />
+            </div>
+          </>
         ) : (
-          body
+          title
         );
       },
     },
@@ -202,44 +220,11 @@ export default function OrchestrationList({
       render: (_: unknown, r: EpicSummary) => agentBadges(r),
     },
     {
-      title: "작업 상태",
-      key: "workStatus",
-      render: (_: unknown, r: EpicSummary) => {
-        const s = workStatus(r);
-        if (s.text === "종료") {
-          // 종료(워크트리 정리 완료) = 도비 해방. 얼굴 + 호버 툴팁.
-          return (
-            <Tag color={s.color}>
-              <Tooltip title="도비는 자유에요">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <DobbyIcon size={14} expression="happy" color={dobbyColor("종료")} />
-                  종료
-                </span>
-              </Tooltip>
-            </Tag>
-          );
-        }
-        return <Tag color={s.color}>{s.text}</Tag>;
-      },
-    },
-    {
       title: "다음 할 일",
       key: "next",
       width: 220,
       render: (_: unknown, r: EpicSummary) => <NextActionTag item={next.get(r.epicKey)} />,
     },
-    ...(anyShip
-      ? [
-          {
-            title: "배포",
-            key: "ship",
-            // 한 오더가 dev·rc4·stage 셋을 다 거치면 태그가 셋이라 칸이 240px 까지 벌어져
-            // 오른쪽 "해결" 버튼이 화면 밖으로 밀렸다. 폭을 묶고 태그를 두 줄로 흘린다.
-            width: 168,
-            render: (_: unknown, r: EpicSummary) => <ShipTags rows={r.ship} />,
-          },
-        ]
-      : []),
     ...(anyRelease
       ? [
           {
