@@ -15,9 +15,12 @@ import { CheckCircleOutlined, UndoOutlined } from "@ant-design/icons";
 export default function ResolveButton({
   epicKey,
   resolved,
+  primary = true,
 }: {
   epicKey: string;
   resolved: boolean;
+  /** 미해결일 때 주 버튼으로 그릴지. 목록은 해결 차례인 오더에서만 켠다. */
+  primary?: boolean;
 }) {
   const canAct = useCanAct();
   const router = useRouter();
@@ -108,7 +111,7 @@ export default function ResolveButton({
     >
       <Button
         size="small"
-        type={resolved ? "default" : "primary"}
+        type={resolved || !primary ? "default" : "primary"}
         icon={resolved ? <UndoOutlined /> : <CheckCircleOutlined />}
         loading={busy}
         onClick={(e) => e.stopPropagation()}

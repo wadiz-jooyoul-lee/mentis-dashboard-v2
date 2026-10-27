@@ -58,6 +58,9 @@ function claudeBin(): string {
 
 /** 설치된 go-dobby 플러그인의 dobby-lib.sh 경로(최신 버전). 결정론 헬퍼 직접 실행용. 없으면 null. */
 export function goDobbyLib(): string | null {
+  // 설치 전 플러그인을 시험할 때 그 dobby-lib.sh 를 가리킨다(run.sh 도 그 옆의 것을 쓴다).
+  const dev = process.env.GO_DOBBY_LIB;
+  if (dev && fs.existsSync(dev)) return dev;
   const base = path.join(
     os.homedir(),
     ".claude/plugins/cache/mentis-plugins/go-dobby"
@@ -344,7 +347,7 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
   const autoDeploy = !!autoEnv;
   if (phase === "분석") {
     if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
-  } else if (phase !== "구현" && phase !== "리뷰" && !(autoDeploy && (phase === "통합" || phase === "검증"))) {
+  } else if (phase !== "구현" && phase !== "리뷰" && phase !== "검증" && !(autoDeploy && phase === "통합")) {
     return {
       ok: false,
       reason: !phase || phase === "착수" ? "설계 전입니다" : `지금 단계(${phase})에서는 자동으로 진행할 일이 없습니다`,

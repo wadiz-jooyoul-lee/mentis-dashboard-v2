@@ -22,7 +22,6 @@ import {
   startResolve,
   startV2Run,
   v2RunCheck,
-  listFinishedV2Runs,
   JOB_ID_RE,
 } from "@/lib/jobs";
 import {
@@ -37,7 +36,7 @@ import { denyRemote } from "@/lib/localOnly";
 import { worktreeInfo, removeWorktrees } from "@/lib/worktree";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { resumeCommand, resumeTargets } from "@/lib/resumeCommand";
+import { nextActions, runNextAction, type NextAction } from "@/lib/nextAction";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,6 +86,13 @@ export async function POST(req: NextRequest) {
     const r = startV2Run(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 다음 할 일 버튼: { next: 동작, key, env? } — 셸 헬퍼로 상태를 바꾸고 필요하면 자동 실행을 띄운다.
+  if (body?.next) {
+    const r = await runNextAction(String(body?.key ?? ""), String(body.next) as NextAction, body?.env ? String(body.env) : undefined);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId ?? null }, { status: 202 });
   }
 
   // 워크트리 삭제(dobby-end와 동일 절차): 제거 전 code-changes/ 스냅샷 + 브랜치 보존.
@@ -265,19 +271,8 @@ export async function GET(req: NextRequest) {
   const v2Key = (sp.get("v2run") ?? "").trim();
   if (v2Key) return NextResponse.json(v2RunCheck(v2Key));
 
-  // 끝난 v2 자동 실행(완료 알림): ?v2finished=1 → { runs: [{ ..., commands: [{ repo, branch, command }] }] }
-  if (sp.get("v2finished") === "1") {
-    const runs = listFinishedV2Runs().map((r) => {
-      const s = readOrderSession(r.key);
-      const commands = resumeTargets(s).map((t) => ({
-        repo: t.repo,
-        branch: t.branch,
-        command: resumeCommand(t, r.key, s.isV2),
-      }));
-      return { ...r, commands };
-    });
-    return NextResponse.json({ runs });
-  }
+  // 다음 할 일(알림 카드·목록·오더 띠): ?next=1 → { items, error, at }
+  if (sp.get("next") === "1") return NextResponse.json(await nextActions());
 
   // 이어가기 v2: ?session={오더키} → { sessionId, sessionName, restore, worktrees, isV2 } (status.md)
   const sessionKey = (sp.get("session") ?? "").trim();
