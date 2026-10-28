@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Space, Typography, notification } from "antd";
+import { ConfigProvider, Space, Typography, notification } from "antd";
 import { BellTwoTone } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import { NextActionControls, formatSince, useNextActions, type NextItem } from "@/components/NextAction";
@@ -62,21 +62,24 @@ export default function NextActionNotifier() {
         icon: <BellTwoTone twoToneColor={i.group === "mine" ? "#fa541c" : "#13c2c2"} />,
         title: `${i.key} · ${i.text}`,
         description: (
-          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-            {i.title && <Text strong>{i.title}</Text>}
-            {i.since && <Text type="secondary" style={{ fontSize: 12 }}>{formatSince(i.since)}</Text>}
-            {i.note && <Text type="secondary" style={{ fontSize: 12 }}>멈춘 이유: {i.note}</Text>}
-            <NextActionControls
-              item={i}
-              showOpen
-              onDone={() => {
-                // 실행하면 카드를 닫아 뒤에 쌓인 카드가 보이게 한다.
-                addAck(id);
-                open.current.delete(id);
-                api.destroy(id);
-              }}
-            />
-          </Space>
+          // 카드(2050)보다 안쪽 확인창·목록이 위에 뜨도록 팝업 기본값을 올린다(기본 1000).
+          <ConfigProvider theme={{ token: { zIndexPopupBase: 2100 } }}>
+            <Space orientation="vertical" size={6} style={{ width: "100%" }}>
+              {i.title && <Text strong>{i.title}</Text>}
+              {i.since && <Text type="secondary" style={{ fontSize: 12 }}>{formatSince(i.since)}</Text>}
+              {i.note && <Text type="secondary" style={{ fontSize: 12 }}>멈춘 이유: {i.note}</Text>}
+              <NextActionControls
+                item={i}
+                showOpen
+                onDone={() => {
+                  // 실행하면 카드를 닫아 뒤에 쌓인 카드가 보이게 한다.
+                  addAck(id);
+                  open.current.delete(id);
+                  api.destroy(id);
+                }}
+              />
+            </Space>
+          </ConfigProvider>
         ),
         onClose: () => {
           addAck(id);
