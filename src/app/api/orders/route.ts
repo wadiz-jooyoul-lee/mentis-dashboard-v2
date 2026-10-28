@@ -35,7 +35,8 @@ import { getConsole, consoleLiveness } from "@/lib/transcript";
 import { denyRemote } from "@/lib/localOnly";
 import { worktreeInfo, removeWorktrees } from "@/lib/worktree";
 import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
-import { ORDER_KEY_RE } from "@/lib/keys";
+import { ORDER_KEY_RE, isOrderKey } from "@/lib/keys";
+import { setPin } from "@/lib/pins";
 import { nextActions, runNextAction, type NextAction } from "@/lib/nextAction";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,13 @@ export async function POST(req: NextRequest) {
     const r = startResolve(String(body?.key ?? ""), body?.undo === true);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 목록 핀 고정/해제: { pin: true|false, key }.
+  if (typeof body?.pin === "boolean") {
+    const k = String(body?.key ?? "");
+    if (!isOrderKey(k)) return NextResponse.json({ ok: false, error: "invalid_key" }, { status: 400 });
+    return NextResponse.json({ ok: true, pins: setPin(k, body.pin) });
   }
 
   // v2 자동 실행: 설계가 확정된 /do 오더를 run.sh 로 통합까지 진행.
