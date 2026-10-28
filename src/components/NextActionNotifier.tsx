@@ -66,7 +66,16 @@ export default function NextActionNotifier() {
             {i.title && <Text strong>{i.title}</Text>}
             {i.since && <Text type="secondary" style={{ fontSize: 12 }}>{formatSince(i.since)}</Text>}
             {i.note && <Text type="secondary" style={{ fontSize: 12 }}>멈춘 이유: {i.note}</Text>}
-            <NextActionControls item={i} showOpen />
+            <NextActionControls
+              item={i}
+              showOpen
+              onDone={() => {
+                // 실행하면 카드를 닫아 뒤에 쌓인 카드가 보이게 한다.
+                addAck(id);
+                open.current.delete(id);
+                api.destroy(id);
+              }}
+            />
           </Space>
         ),
         onClose: () => {
