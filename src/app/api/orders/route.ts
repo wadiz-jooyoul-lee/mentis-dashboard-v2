@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, pins: setPin(k, body.pin) });
   }
 
-  // v2 자동 실행: 설계가 확정된 /do 오더를 run.sh 로 통합까지 진행.
+  // v2 자동 실행: 설계가 확정된 /do 오더를 run.sh 로 통합까지 진행. go-dobby dobby_v2_autorun 이 부른다.
   if (body?.v2run) {
     const r = startV2Run(String(body?.key ?? ""));
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
@@ -275,12 +275,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ prs: await existingPrs(prExKey) });
   }
 
-  // v2 자동 실행 가능 여부: ?v2run={오더키} → { ok, reason, running }
+  // v2 자동 실행 가능 여부: ?v2run={오더키} → { ok, reason, running }. go-dobby dobby_v2_autorun 이 부른다.
   const v2Key = (sp.get("v2run") ?? "").trim();
   if (v2Key) return NextResponse.json(v2RunCheck(v2Key));
 
-  // 다음 할 일(알림 카드·목록·오더 띠): ?next=1 → { items, error, at }
-  if (sp.get("next") === "1") return NextResponse.json(await nextActions());
+  // 다음 할 일(알림 카드·목록·오더 띠): ?next=1[&fresh=1] → { items, error, at }. fresh 는 서버 저장분을 건너뛴다.
+  if (sp.get("next") === "1") return NextResponse.json(await nextActions(sp.get("fresh") === "1"));
 
   // 이어가기 v2: ?session={오더키} → { sessionId, sessionName, restore, worktrees, isV2 } (status.md)
   const sessionKey = (sp.get("session") ?? "").trim();

@@ -14,7 +14,7 @@ import { DO_AUTO_ENVS, goDobbyLib, listFinishedV2Runs, startResolve, startV2Run 
 
 /** mine 사람이 할 일 있음(TODO) · notice 알림만 · auto 자동 진행 중 · wait 날짜나 조건 기다림 · work 터미널에서 작업 중 */
 export type NextGroup = "mine" | "notice" | "auto" | "wait" | "work";
-export type NextAction = "resolve" | "approve" | "autorun" | "deploy" | "drift" | "";
+export type NextAction = "resolve" | "approve" | "approve-deploy" | "autorun" | "deploy" | "drift" | "";
 
 export type NextItem = {
   key: string;
@@ -121,9 +121,9 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
   return { items, error: null };
 }
 
-/** 판정 결과. 판정 한 번이 수 초라 20초 동안은 저장해 둔 것을 주고, 동시에 온 요청은 한 번의 판정을 함께 기다린다. */
-export async function nextActions(): Promise<{ items: NextItem[]; error: string | null; at: number }> {
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache;
+/** 판정 결과. 판정 한 번이 수 초라 20초 동안은 저장해 둔 것을 주고, 동시에 온 요청은 한 번의 판정을 함께 기다린다. fresh 면 저장분을 건너뛴다. */
+export async function nextActions(fresh = false): Promise<{ items: NextItem[]; error: string | null; at: number }> {
+  if (!fresh && cache && Date.now() - cache.at < CACHE_MS) return cache;
   inflight ??= load().finally(() => {
     inflight = null;
   });
@@ -141,6 +141,27 @@ export async function runNextAction(
   if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "잘못된 오더 키입니다" };
   const k = shq(key);
   cache = null;
+  const approve = (how: string) =>
+    dobbyBash(
+      `dobby_design_ack ${k} 사용자 >/dev/null && dobby_agent_state ${k} analysis-agent 완료 && ` +
+        `dobby_event ${k} "설계 확정 — 대시보드에서 승인, ${how}" && dobby_v2_checkpoint ${k} >/dev/null`
+    );
+  // 자동 배포가 중간에 사람을 부르지 않도록 사람만 풀 수 있는 준비를 먼저 보고 환경을 적는다(auto-mode.md 의 사전 확인).
+  // 막히면 이유를, 통과하면 빈 문자열을 돌려준다.
+  const prepareDeploy = async (): Promise<string> => {
+    const e = env ?? "";
+    if (!(DO_AUTO_ENVS as readonly string[]).includes(e)) return "배포 환경은 dev, rc1, rc4 중 하나입니다";
+    return (
+      await dobbyBash(
+        `gh auth status >/dev/null 2>&1 || { echo "gh 로그인이 필요합니다: gh auth login"; exit 0; }; ` +
+          `[ -n "\${TEST_LOGIN_PW:-}" ] || { echo "config.env 에 테스트 계정 비밀번호(TEST_LOGIN_PW)가 없습니다"; exit 0; }; ` +
+          `if _v2_worktrees ${k} | cut -f1 | grep -qx com.wadiz.web; then s="$(_ship_argo_server ${shq(e)})"; ` +
+          `argocd account get-user-info --server "$s" --grpc-web 2>/dev/null | grep -q 'Logged In: *true' || ` +
+          `{ echo "argocd 로그인이 필요합니다: argocd login $s --sso --grpc-web"; exit 0; }; fi; ` +
+          `dobby_v2_set_env ${k} ${shq(e)}`
+      )
+    ).trim();
+  };
   try {
     switch (action) {
       case "resolve":
@@ -148,30 +169,21 @@ export async function runNextAction(
       case "autorun":
         return startV2Run(key);
       case "approve":
-        await dobbyBash(
-          `dobby_design_ack ${k} 사용자 >/dev/null && dobby_agent_state ${k} analysis-agent 완료 && ` +
-            `dobby_event ${k} "설계 확정 — 대시보드에서 승인, 자동 실행" && dobby_v2_checkpoint ${k} >/dev/null`
-        );
+        await approve("자동 실행");
         return startV2Run(key);
+      case "approve-deploy": {
+        const why = await prepareDeploy();
+        if (why) return { ok: false, reason: why };
+        await approve(`${env} 배포·검증까지 자동 실행`);
+        return startV2Run(key);
+      }
       case "drift": {
         const r = (await dobbyBash(`dobby_v2_drift_apply ${k}`)).trim();
         if (r === "design") return { ok: false, reason: "설계 문서도 바뀌었습니다. 터미널에서 /do 로 설계를 확인해 주세요" };
         return startV2Run(key);
       }
       case "deploy": {
-        const e = env ?? "";
-        if (!(DO_AUTO_ENVS as readonly string[]).includes(e)) return { ok: false, reason: "배포 환경은 dev, rc1, rc4 중 하나입니다" };
-        // 자동 배포가 중간에 사람을 부르지 않도록 사람만 풀 수 있는 준비를 먼저 본다(auto-mode.md 의 사전 확인).
-        const why = (
-          await dobbyBash(
-            `gh auth status >/dev/null 2>&1 || { echo "gh 로그인이 필요합니다: gh auth login"; exit 0; }; ` +
-              `[ -n "\${TEST_LOGIN_PW:-}" ] || { echo "config.env 에 테스트 계정 비밀번호(TEST_LOGIN_PW)가 없습니다"; exit 0; }; ` +
-              `if _v2_worktrees ${k} | cut -f1 | grep -qx com.wadiz.web; then s="$(_ship_argo_server ${shq(e)})"; ` +
-              `argocd account get-user-info --server "$s" --grpc-web 2>/dev/null | grep -q 'Logged In: *true' || ` +
-              `{ echo "argocd 로그인이 필요합니다: argocd login $s --sso --grpc-web"; exit 0; }; fi; ` +
-              `dobby_v2_set_env ${k} ${shq(e)}`
-          )
-        ).trim();
+        const why = await prepareDeploy();
         if (why) return { ok: false, reason: why };
         return startV2Run(key);
       }
