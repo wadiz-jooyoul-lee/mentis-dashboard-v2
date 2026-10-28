@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Input, Select } from "antd";
-import { LinkOutlined, SearchOutlined } from "@ant-design/icons";
+import { Breadcrumb, Tag, Typography, Space, Badge, Popover, Tabs, Input, Select, message } from "antd";
+import { LinkOutlined, PushpinFilled, PushpinOutlined, SearchOutlined } from "@ant-design/icons";
+import { useCanAct } from "@/components/CanAct";
 import type { EpicSummary } from "@/lib/orchestration";
 import type { JobWithKey } from "@/lib/jobs";
 import { jiraUrl } from "@/lib/jira";
@@ -68,6 +69,10 @@ type StatusFilter = "전체" | "작업중" | "해결됨" | "종료";
 
 /** 개발/비개발(work-type) 스코프. "전체"는 스코프 없음. code=개발·nonsource=비개발. */
 type KindFilter = "전체" | "code" | "nonsource";
+/** 위쪽 목록 정렬 기준. 핀 고정한 오더는 어느 기준이든 맨 위다. */
+type SortBy = "next" | "recent" | "started";
+const SORT_STORE = "orders:sort";
+
 const KIND_TAGS: Array<{ value: KindFilter; label: string }> = [
   { value: "전체", label: "전체" },
   { value: "code", label: "개발" },
@@ -77,11 +82,13 @@ const KIND_TAGS: Array<{ value: KindFilter; label: string }> = [
 export default function OrchestrationList({
   epics,
   deletable,
+  initialPins,
   sourceDir,
   initialJobs = [],
 }: {
   /** 오더별 워크트리 삭제 가능 여부. 키가 없으면 지울 워크트리가 없다는 뜻(버튼 미노출). */
   deletable: Record<string, { removable: boolean; reason: string | null }>;
+  initialPins: string[];
   epics: EpicSummary[];
   sourceDir: string;
   initialJobs?: JobWithKey[];
@@ -94,6 +101,44 @@ export default function OrchestrationList({
     const g = next.get(k)?.group;
     return g ? GROUP_RANK[g] : 5;
   };
+
+  const canAct = useCanAct();
+  const [pins, setPins] = useState<string[]>(initialPins);
+  const pinned = new Set(pins);
+  const togglePin = async (key: string) => {
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin: !pinned.has(key), key }),
+    })
+      .then((r) => r.json())
+      .catch(() => null);
+    if (res?.ok) setPins(res.pins);
+    else message.error("핀 고정을 바꾸지 못했습니다.");
+  };
+
+  // 정렬 기준은 브라우저에 기억한다. 저장값은 클라이언트에서만 읽어 첫 화면 불일치를 피한다.
+  const [sortBy, setSortBy] = useState<SortBy>("next");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(SORT_STORE);
+      if (v === "next" || v === "recent" || v === "started") setSortBy(v);
+    } catch {}
+  }, []);
+  const changeSort = (v: SortBy) => {
+    setSortBy(v);
+    try {
+      localStorage.setItem(SORT_STORE, v);
+    } catch {}
+  };
+  const byTime = (field: "lastActivity" | "firstActivity") => (a: EpicSummary, b: EpicSummary) =>
+    (b[field] ?? "").localeCompare(a[field] ?? "");
+  const compare =
+    sortBy === "recent"
+      ? byTime("lastActivity")
+      : sortBy === "started"
+      ? byTime("firstActivity")
+      : (a: EpicSummary, b: EpicSummary) => rank(a.epicKey) - rank(b.epicKey);
 
   // 개발/비개발 스코프는 URL ?type= 로 관리한다(공유·북마크 가능; 서버가 page.tsx에서 이 값으로 필터해 epics를 넘긴다).
   const searchParams = useSearchParams();
@@ -115,8 +160,8 @@ export default function OrchestrationList({
     const matchQ =
       !q || r.epicKey.toLowerCase().includes(q) || (r.title ?? "").toLowerCase().includes(q);
     const matchS = status === "전체" ? workStatus(r).text !== "종료" : workStatus(r).text === status;
-    return matchQ && matchS;
-  }).sort((a, b) => rank(a.epicKey) - rank(b.epicKey));
+    return matchQ && (matchS || pinned.has(r.epicKey));
+  }).sort((a, b) => Number(pinned.has(b.epicKey)) - Number(pinned.has(a.epicKey)) || compare(a, b));
 
   // 배포 표가 있는 오더는 아직 드물다(110여 개 중 두 개). 하나도 없으면 컬럼 자체를 숨긴다 —
   // 안 그러면 빈 칸만 한 줄 늘어선다.
@@ -130,6 +175,29 @@ export default function OrchestrationList({
   });
 
   const columns = [
+    {
+      title: "",
+      key: "pin",
+      width: 36,
+      render: (_: unknown, r: EpicSummary) => {
+        const on = pinned.has(r.epicKey);
+        const icon = on ? <PushpinFilled style={{ color: "#1677ff" }} /> : <PushpinOutlined style={{ color: "#bfbfbf" }} />;
+        if (!canAct) return on ? icon : null;
+        return (
+          <span
+            role="button"
+            title={on ? "핀 해제" : "맨 위에 고정"}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePin(r.epicKey);
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            {icon}
+          </span>
+        );
+      },
+    },
     {
       title: "에픽",
       dataIndex: "epicKey",
@@ -328,6 +396,16 @@ export default function OrchestrationList({
                         { value: "작업중", label: "작업중" },
                         { value: "해결됨", label: "해결됨" },
                         { value: "종료", label: "종료" },
+                      ]}
+                    />
+                    <Select<SortBy>
+                      value={sortBy}
+                      onChange={changeSort}
+                      style={{ width: 140 }}
+                      options={[
+                        { value: "next", label: "할 일 순" },
+                        { value: "recent", label: "최신 작업 순" },
+                        { value: "started", label: "착수 순" },
                       ]}
                     />
                     {hasFilter && <Text type="secondary">{filtered.length}건</Text>}

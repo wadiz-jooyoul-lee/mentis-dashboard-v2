@@ -3,6 +3,7 @@ import { getMetaDir } from "@/lib/issues";
 import { listJobs } from "@/lib/jobs";
 import OrchestrationList from "@/components/OrchestrationList";
 import { deletabilityOf } from "@/lib/worktree";
+import { readPins } from "@/lib/pins";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function OrchestrationPage({
     <OrchestrationList
       epics={epics}
       deletable={deletable}
+      initialPins={readPins()}
       sourceDir={getMetaDir()}
       initialJobs={listJobs()}
     />
