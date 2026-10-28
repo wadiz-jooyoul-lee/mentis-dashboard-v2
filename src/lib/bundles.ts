@@ -198,7 +198,9 @@ export async function changedFiles(key: string, worktree: string, base: string):
       }
       // 커밋 전 변경도 이 오더 것이다(미커밋 상태로 리뷰받는 흐름이라 빠뜨리면 안 된다).
       for (const f of collect(await git(worktree, ["diff", "--name-only", "HEAD"]))) own.add(f);
-      if (own.size > 0 && own.size < plain.size) return [...own];
+      // 이 오더 것이 하나도 없으면 plain 은 남의 일뿐이다(FE1-2349: 구현 전 10,188개).
+      if (own.size === 0) return [];
+      if (own.size < plain.size) return [...own];
       return [...plain];
     }
   }
