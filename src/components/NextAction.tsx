@@ -13,16 +13,18 @@ const { Text } = Typography;
 export type { NextItem };
 
 // ── 판정 결과 공유 저장소 — 카드·목록·오더 띠가 한 번의 조회를 함께 쓴다 ──
-type State = { items: NextItem[]; error: string | null; loaded: boolean };
-let state: State = { items: [], error: null, loaded: false };
+/** at: 서버가 판정한 시각(ms). 0 이면 아직 모른다. */
+type State = { items: NextItem[]; error: string | null; loaded: boolean; at: number };
+let state: State = { items: [], error: null, loaded: false, at: 0 };
 const subs = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 const POLL_MS = 30_000;
 
-export async function refreshNextActions(): Promise<void> {
+/** fresh 면 서버 저장분(20초)을 건너뛰고 지금 다시 판정한다. */
+export async function refreshNextActions(fresh = false): Promise<void> {
   try {
-    const r = await (await fetch("/api/orders?next=1", { cache: "no-store" })).json();
-    state = { items: r.items ?? [], error: r.error ?? null, loaded: true };
+    const r = await (await fetch(`/api/orders?next=1${fresh ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
+    state = { items: r.items ?? [], error: r.error ?? null, loaded: true, at: r.at ?? Date.now() };
   } catch {
     state = { ...state, loaded: true };
   }
@@ -44,7 +46,7 @@ function subscribe(f: () => void) {
   };
 }
 
-const EMPTY: State = { items: [], error: null, loaded: false };
+const EMPTY: State = { items: [], error: null, loaded: false, at: 0 };
 export function useNextActions(): State {
   return useSyncExternalStore(subscribe, () => state, () => EMPTY);
 }
@@ -170,23 +172,47 @@ export function NextActionControls({
     else message.error("복사하지 못했습니다");
   };
 
+  /** 환경을 골라 배포·검증까지 자동으로 가는 버튼. action 은 deploy 또는 approve-deploy. */
+  const deployControl = (action: NextAction, label: string, title: string, description: string, primary: boolean) => (
+    <Space.Compact key={action} size="small">
+      <Select size="small" value={env} onChange={setEnv} options={["dev", "rc1", "rc4"].map((v) => ({ value: v, label: v }))} />
+      <Popconfirm title={title} description={description} okText={label} cancelText="취소" onConfirm={() => post(action, { env })}>
+        <Button size="small" type={primary ? "primary" : "default"} loading={busy}>
+          {label}
+        </Button>
+      </Popconfirm>
+    </Space.Compact>
+  );
+  // 설계 확인·설계 확정·구현/리뷰 이어 가기에서는 통합까지만 갈지, 배포·검증까지 갈지 고른다.
+  const withDeploy = item.kind === "design-confirm" || item.kind === "run-ready" || item.kind === "resume";
+
   const buttons: React.ReactNode[] = [];
   if (canAct && item.action === "deploy") {
     buttons.push(
-      <Space.Compact key="deploy" size="small">
-        <Select size="small" value={env} onChange={setEnv} options={["dev", "rc1", "rc4"].map((v) => ({ value: v, label: v }))} />
-        <Popconfirm
-          title={`${env} 에 자동 배포할까요?`}
-          description="gh, argocd, 테스트 계정을 먼저 확인한 뒤 PR, 머지, 빌드, 배포, 검증까지 확인 없이 진행합니다."
-          okText="자동 배포"
-          cancelText="취소"
-          onConfirm={() => post("deploy", { env })}
-        >
-          <Button size="small" type="primary" loading={busy}>
-            자동 배포
-          </Button>
-        </Popconfirm>
-      </Space.Compact>
+      deployControl(
+        "deploy",
+        "자동 배포",
+        `${env} 에 자동 배포할까요?`,
+        "gh, argocd, 테스트 계정을 먼저 확인한 뒤 PR, 머지, 빌드, 배포, 검증까지 확인 없이 진행합니다.",
+        true
+      )
+    );
+  } else if (canAct && withDeploy && (item.action === "approve" || item.action === "autorun")) {
+    const c = CONFIRM[item.action]!;
+    const label = `${c.ok} (통합까지)`;
+    buttons.push(
+      <Popconfirm key="act" title={c.title} description={c.description} okText={label} cancelText="취소" onConfirm={() => post(item.action)}>
+        <Button size="small" type="primary" loading={busy}>
+          {label}
+        </Button>
+      </Popconfirm>,
+      deployControl(
+        item.action === "approve" ? "approve-deploy" : "deploy",
+        "배포·검증까지",
+        item.action === "approve" ? `설계를 승인하고 ${env} 배포·검증까지 진행할까요?` : `${env} 배포·검증까지 진행할까요?`,
+        `gh, argocd, 테스트 계정을 먼저 확인한 뒤 ${item.action === "approve" ? "승인을 기록하고 " : ""}구현, 리뷰, 통합, PR, 머지, 빌드, 배포, 검증까지 확인 없이 진행합니다.`,
+        false
+      )
     );
   } else if (canAct && item.action === "resolve") {
     buttons.push(
