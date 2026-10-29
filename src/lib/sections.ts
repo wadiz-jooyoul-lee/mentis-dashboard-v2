@@ -1,7 +1,7 @@
 /**
  * 메인 허브에 노출할 섹션 목록.
  * go-dobby는 모든 작업이 오케스트레이션(오더)이므로, 첫 페이지는 오케스트레이션 카드만
- * 두되 개발 작업(code)/비개발 작업(비소스)으로 나눠 보여준다.
+ * 두되 개발 작업 카드와 데이터 분석·아티팩트·릴리즈 카드를 보여준다.
  */
 export type SectionArea = "orchestration";
 
@@ -47,11 +47,11 @@ export const sections: Section[] = [
     enabled: true,
   },
   {
-    key: "orch-nonsource",
-    title: "비개발 작업",
-    description: "비소스 산출 오케스트레이션(dobby-produce) — 문서·리서치·분석",
-    path: "/orchestration?type=nonsource",
-    icon: "DeploymentUnitOutlined",
+    key: "data",
+    title: "데이터 분석",
+    description: "해결된 작업의 성과(dobby-data) — 와디태그로 본 변화와 판정",
+    path: "/data",
+    icon: "BarChartOutlined",
     area: "orchestration",
     enabled: true,
   },
@@ -70,15 +70,6 @@ export const sections: Section[] = [
     description: "정기배포 stage 검증(dobby-stage) — 배포일별 핵심 TC 결과",
     path: "/releases",
     icon: "RocketOutlined",
-    area: "orchestration",
-    enabled: true,
-  },
-  {
-    key: "data",
-    title: "데이터 분석",
-    description: "해결된 작업의 성과(dobby-data) — 와디태그로 본 변화와 판정",
-    path: "/data",
-    icon: "BarChartOutlined",
     area: "orchestration",
     enabled: true,
   },

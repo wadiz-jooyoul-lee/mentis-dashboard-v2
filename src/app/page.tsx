@@ -14,7 +14,6 @@ export const dynamic = "force-dynamic";
 export default function Home() {
   const stats = {
     "orch-code": orchestrationCardStats("code"),
-    "orch-nonsource": orchestrationCardStats("nonsource"),
     artifacts: artifactCardStats(),
     releases: releaseCardStats(),
     data: dataCardStats(),
