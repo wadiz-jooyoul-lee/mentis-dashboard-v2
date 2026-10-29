@@ -16,6 +16,7 @@ const { Header, Content } = Layout;
 const NAV = [
   { key: "/", label: <Link href="/">홈</Link> },
   { key: "/orchestration", label: <Link href="/orchestration">오케스트레이션</Link> },
+  { key: "/data", label: <Link href="/data">데이터 분석</Link> },
   { key: "/artifacts", label: <Link href="/artifacts">아티팩트</Link> },
   { key: "/releases", label: <Link href="/releases">릴리즈</Link> },
 ];

@@ -109,7 +109,7 @@ export function NextActionTag({ item }: { item?: NextItem }) {
 const CONFIRM: Partial<Record<NextAction, { title: string; description: string; ok: string }>> = {
   approve: {
     title: "설계를 이대로 승인할까요?",
-    description: "승인을 기록하고 구현부터 통합까지 자동 실행을 시작합니다. 통합 단계에서 작업 브랜치에 커밋하고 푸시합니다.",
+    description: "승인을 기록하고 구현부터 통합까지 자동 실행을 시작합니다. 통합 단계에서 작업 브랜치에 커밋하고 푸시합니다. TASK- 작업은 통합에서 PR 을 만들고 끝납니다.",
     ok: "이대로 승인",
   },
   autorun: {
@@ -200,13 +200,15 @@ export function NextActionControls({
   } else if (canAct && withDeploy && (item.action === "approve" || item.action === "autorun")) {
     const c = CONFIRM[item.action]!;
     const label = `${c.ok} (통합까지)`;
+    // TASK- 작업은 배포하지 않고 통합에서 PR 을 만들고 끝난다.
+    const isTask = item.key.startsWith("TASK-");
     buttons.push(
       <Popconfirm key="act" title={c.title} description={c.description} okText={label} cancelText="취소" onConfirm={() => post(item.action)}>
         <Button size="small" type="primary" loading={busy}>
           {label}
         </Button>
       </Popconfirm>,
-      deployControl(
+      !isTask && deployControl(
         item.action === "approve" ? "approve-deploy" : "deploy",
         "배포·검증까지",
         item.action === "approve" ? `설계를 승인하고 ${env} 배포·검증까지 진행할까요?` : `${env} 배포·검증까지 진행할까요?`,
@@ -244,9 +246,10 @@ export function NextActionControls({
     );
   }
   if (item.link) {
+    const external = /^https?:\/\//.test(item.link);
     buttons.push(
-      <Button key="link" size="small" type={buttons.length ? "default" : "primary"} onClick={() => router.push(item.link)}>
-        {item.link.startsWith("/releases") ? "릴리즈 화면 열기" : "열기"}
+      <Button key="link" size="small" type={buttons.length ? "default" : "primary"} onClick={() => (external ? window.open(item.link, "_blank", "noopener,noreferrer") : router.push(item.link))}>
+        {external ? "PR 열기" : item.link.startsWith("/releases") ? "릴리즈 화면 열기" : "열기"}
       </Button>
     );
   }
