@@ -216,7 +216,8 @@ export default function ArtifactTabView({
                 <Paragraph style={{ margin: 0 }}>
                   대화형 Claude Code에서 <Text code>/dobby-share {epicKey}</Text> 를 실행하면 claude.ai
                   공개 아티팩트가 생성되고, 그 링크가 여기에 복사·열기 버튼으로 나타납니다. (백그라운드 잡은
-                  claude.ai 게시 권한이 없어 대화형 실행이 필요합니다.)
+                  claude.ai 게시 권한이 없어 대화형 실행이 필요합니다.) 데이터 분석 해석은{" "}
+                  <Text code>/dobby-share {epicKey} data</Text> 로 게시합니다.
                 </Paragraph>
               }
             />

@@ -30,6 +30,7 @@ export default async function DataPage({ params }: { params: Promise<{ key: stri
       }}
       target={isJiraIssueKey(key) && (epic?.resolved ?? false)}
       data={readDataOrder(key)}
+      share={epic?.artifactShares.find((s) => s.slug === "data") ?? null}
       specJob={job(`data-spec-${key}`)}
       runJob={job(`data-${key}`)}
     />

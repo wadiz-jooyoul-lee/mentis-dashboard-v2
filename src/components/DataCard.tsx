@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Card, Tag, Typography, Progress } from "antd";
+import { Card, Tag, Typography, Progress, Tooltip } from "antd";
 import type { DataBadge, DataCardItem, DataHeadline } from "@/lib/data";
 
 const { Text } = Typography;
@@ -15,13 +15,30 @@ export const BADGE_COLOR: Record<DataBadge, string> = {
   "수집 확인": "blue",
 };
 
+const BADGE_MEANING: Record<string, string> = {
+  "수집 이상": "기록이 0건인 날이 있거나, 두 그룹에 사람이 고르게 나뉘지 않았습니다. 숫자를 믿기 전에 수집을 확인해야 합니다.",
+  "성과 있음": "좋아진 차이가 우연이라고 보기 어렵습니다(우연일 가능성 5% 미만).",
+  나빠짐: "나빠진 차이가 우연이라고 보기 어렵습니다(우연일 가능성 5% 미만).",
+  "판단 이르다": "본 기기가 너무 적어 아직 차이가 우연인지 가릴 수 없습니다.",
+  "차이 없음": "본 기기는 충분한데 차이가 우연과 구별되지 않습니다.",
+  "수집 확인": "비교 없이 새 기록이 잘 쌓이는지만 봅니다.",
+};
+
 export function BadgeTag({ badge }: { badge: DataBadge | null | undefined }) {
   if (!badge) return null;
-  return <Tag color={BADGE_COLOR[badge] ?? "default"}>{badge}</Tag>;
+  return (
+    <Tooltip title={BADGE_MEANING[badge]}>
+      <Tag color={BADGE_COLOR[badge] ?? "default"}>{badge}</Tag>
+    </Tooltip>
+  );
 }
 
 export const pct = (v: number | null | undefined) => (v == null ? "-" : `${(v * 100).toFixed(2)}%`);
-export const pText = (p: number | null | undefined) => (p == null ? "-" : p < 0.0001 ? "< 0.0001" : p.toFixed(4));
+/** p값을 "우연으로도 생길 수 있는 차이일 가능성" 백분율로. 5% 보다 낮아야 우연이 아니라고 본다. */
+export const pText = (p: number | null | undefined) => (p == null ? "-" : p < 0.01 ? "1% 미만" : `${Math.round(p * 100)}%`);
+
+const DEVICE_NAME: Record<string, string> = { MOBILE_WEB: "모바일 웹", PC_WEB: "PC 웹", APP: "앱" };
+export const deviceName = (name: string) => DEVICE_NAME[name] ?? name;
 
 /** 변화율 ▲▼. 좋아진 방향이면 초록, 나빠지면 빨강. */
 export function ChangeRate({ rate, direction }: { rate: number | null | undefined; direction: "up" | "down" }) {
@@ -119,7 +136,7 @@ export default function DataCard({ card }: { card: DataCardItem }) {
             <>
               <ChangeRate rate={h.changeRate} direction={card.direction} />
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {h.metric} · 비교 {h.compare.label} {pct(h.compare.value)} · p {pText(h.p)}
+                {h.metric} · 비교 {h.compare.label} {pct(h.compare.value)} · 우연일 가능성 {pText(h.p)}
               </Text>
             </>
           )}
