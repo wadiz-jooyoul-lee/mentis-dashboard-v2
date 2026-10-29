@@ -9,6 +9,7 @@ import {
   DeploymentUnitOutlined,
   ClusterOutlined,
   ShareAltOutlined,
+  BarChartOutlined,
 } from "@ant-design/icons";
 import type { Section } from "@/lib/sections";
 import { AREA_LABELS, AREA_ORDER } from "@/lib/sections";
@@ -23,6 +24,7 @@ const ICONS = {
   DeploymentUnitOutlined: DeploymentUnitOutlined,
   ClusterOutlined: ClusterOutlined,
   ShareAltOutlined: ShareAltOutlined,
+  BarChartOutlined: BarChartOutlined,
 };
 
 const METRIC_COLOR: Record<string, string> = {

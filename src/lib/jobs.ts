@@ -9,7 +9,7 @@ import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
-import { ORDER_KEY_RE } from "@/lib/keys";
+import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 import { fieldLine } from "@/lib/md";
 
 export { ORDER_KEY_RE };
@@ -305,6 +305,26 @@ export function startRetro(
   if (isRunning(jobId)) return { ok: false, reason: "already_running" };
   spawnClaude(jobId, ["-p", `/dobby-retro ${k}${regen ? " regen" : ""}`], false);
   return { ok: true, jobId };
+}
+
+/** 데이터 탭 작업: 명세 만들기(`data-spec-{키}`)와 수집 한 회차(`data-{키}`). 같은 오더에서 둘 중 하나라도 돌면 거절한다. */
+function startData(key: string, cmd: "spec" | "run"): { ok: boolean; reason?: string; jobId?: string } {
+  const k = key.trim();
+  if (!isJiraIssueKey(k)) return { ok: false, reason: "invalid_key" };
+  if (isRunning(`data-spec-${k}`) || isRunning(`data-${k}`)) return { ok: false, reason: "already_running" };
+  const jobId = cmd === "spec" ? `data-spec-${k}` : `data-${k}`;
+  spawnClaude(jobId, ["-p", `/dobby-data ${cmd} ${k}`], false);
+  return { ok: true, jobId };
+}
+
+/** 데이터 명세(spec.json) 만들기: `/dobby-data spec {키}`. 잡 id는 `data-spec-{키}`. */
+export function startDataSpec(key: string) {
+  return startData(key, "spec");
+}
+
+/** 데이터 수집 한 회차: `/dobby-data run {키}`. 잡 id는 `data-{키}`. */
+export function startDataRun(key: string) {
+  return startData(key, "run");
 }
 
 /** 설치된 go-dobby 의 /do 자동 실행 장치(run.sh) 경로. 없으면 null. */

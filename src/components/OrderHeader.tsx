@@ -40,6 +40,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "console") return `/orchestration/console/${key}`;
   if (tab === "jira") return `/orchestration/${key}/jira`;
   if (tab === "artifact") return `/orchestration/${key}/artifact`;
+  if (tab === "data") return `/orchestration/${key}/data`;
   if (tab === "retro") return `/orchestration/${key}/retro`;
   if (tab === "docs") return `/orchestration/${key}/docs`;
   return `/orchestration/${key}`;
@@ -54,6 +55,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/qa")) return "qa";
   if (pathname.endsWith("/jira")) return "jira";
   if (pathname.endsWith("/artifact")) return "artifact";
+  if (pathname.endsWith("/data")) return "data";
   if (pathname.endsWith("/retro")) return "retro";
   if (pathname.endsWith("/docs")) return "docs";
   return "board";
@@ -114,11 +116,14 @@ export default function OrderHeader({
     : baseTabs0;
   // 문서·아티팩트·회고는 내용이 없어도 항상 노출한다(빈 화면이 안내·생성 버튼을 제공).
   // 문서 탭 = 전용 탭이 없는 루트 .md 모음. 전체 메타 기준 75/109 오더가 이런 문서를 갖고 있다.
+  // 데이터 탭은 해결된 Jira 오더에만(TASK- 작업 제외) — 회고 앞
+  const dataTab = resolved && hasJiraIssue ? [{ key: "data", label: "데이터" }] : [];
   const items = isSummary
     ? [
         ...SUMMARY_TABS,
         { key: "docs", label: "문서" },
         { key: "artifact", label: "아티팩트" },
+        ...dataTab,
         { key: "retro", label: "회고" },
       ]
     : [
@@ -126,6 +131,7 @@ export default function OrderHeader({
         ...(hasJira ? [{ key: "jira", label: "Jira" }] : []),
         { key: "docs", label: "문서" },
         { key: "artifact", label: "아티팩트" },
+        ...dataTab,
         { key: "retro", label: "회고" },
       ];
 
