@@ -21,7 +21,8 @@ export type Section = {
     | "CheckSquareOutlined"
     | "DeploymentUnitOutlined"
     | "ClusterOutlined"
-    | "ShareAltOutlined";
+    | "ShareAltOutlined"
+    | "BarChartOutlined";
   /** 소속 영역 */
   area: SectionArea;
   /** false면 "준비 중"으로 비활성 표시 */
@@ -69,6 +70,15 @@ export const sections: Section[] = [
     description: "정기배포 stage 검증(dobby-stage) — 배포일별 핵심 TC 결과",
     path: "/releases",
     icon: "RocketOutlined",
+    area: "orchestration",
+    enabled: true,
+  },
+  {
+    key: "data",
+    title: "데이터 분석",
+    description: "해결된 작업의 성과(dobby-data) — 와디태그로 본 변화와 판정",
+    path: "/data",
+    icon: "BarChartOutlined",
     area: "orchestration",
     enabled: true,
   },

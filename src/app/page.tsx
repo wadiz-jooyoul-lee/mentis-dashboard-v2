@@ -6,6 +6,7 @@ import { sections } from "@/lib/sections";
 import { orchestrationCardStats, artifactCardStats } from "@/lib/orchestration";
 import { getBackupStatus } from "@/lib/backup";
 import { releaseCardStats } from "@/lib/releases";
+import { dataCardStats } from "@/lib/data";
 import heroImage from "@/assets/home-hero.webp";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default function Home() {
     "orch-nonsource": orchestrationCardStats("nonsource"),
     artifacts: artifactCardStats(),
     releases: releaseCardStats(),
+    data: dataCardStats(),
   };
   const backup = getBackupStatus();
   return (

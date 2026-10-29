@@ -3,6 +3,8 @@ import {
   startDo,
   startExplain,
   startRetro,
+  startDataSpec,
+  startDataRun,
   startQuips,
   resumeOrder,
   stopOrder,
@@ -63,6 +65,14 @@ export async function POST(req: NextRequest) {
   // 회고(retro.md) 생성: /dobby-retro {키} [regen]
   if (body?.retro) {
     const r = startRetro(String(body?.key ?? ""), !!body?.regen);
+    if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
+    return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
+  }
+
+  // 데이터 탭: { data: "spec" | "run", key } — /dobby-data spec|run {키}
+  if (body?.data === "spec" || body?.data === "run") {
+    const k = String(body?.key ?? "");
+    const r = body.data === "spec" ? startDataSpec(k) : startDataRun(k);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
