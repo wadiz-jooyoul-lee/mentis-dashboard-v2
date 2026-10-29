@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Typography, Button, Collapse, Badge, Table, Empty, Alert } from "antd";
+import Link from "next/link";
+import { Typography, Button, Collapse, Badge, Table, Empty, Alert, Space, message } from "antd";
+import { CopyOutlined, ExportOutlined } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import FeedView from "@/components/FeedView";
-import MarkdownDoc from "@/components/MarkdownDoc";
+import DataReport from "@/components/DataReport";
 import OrderHeader from "@/components/OrderHeader";
-import { BadgeTag, ChangeRate, DataLines, headlineValue, pct, pText } from "@/components/DataCard";
+import { BadgeTag, ChangeRate, DataLines, deviceName, headlineValue, pct, pText } from "@/components/DataCard";
 import type { FeedItem, JobState } from "@/lib/jobs";
 import type { DataOrder } from "@/lib/data";
+import type { ArtifactShare } from "@/lib/orchestration";
+import { copyText } from "@/lib/clipboard";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -112,6 +116,42 @@ function JobRecord({ title, job }: { title: string; job: Job }) {
   );
 }
 
+/** 해석을 claude.ai 공개 아티팩트로 — 게시는 대화형 Claude Code 에서만 되므로 명령을 복사하게 한다. */
+function ShareBar({ epicKey, share }: { epicKey: string; share: ArtifactShare | null }) {
+  const cmd = `/dobby-share ${epicKey} data`;
+  const copy = async () => {
+    if (await copyText(cmd)) message.success("명령을 복사했습니다. 대화형 Claude Code 에 붙여넣으세요.");
+    else message.error("복사하지 못했습니다");
+  };
+  return (
+    <Alert
+      style={{ marginTop: 12 }}
+      type={share ? "success" : "info"}
+      showIcon
+      title={share ? `공개 아티팩트로 게시했습니다${share.updatedAt ? ` (갱신 ${share.updatedAt})` : ""}.` : "이 해석을 공개 아티팩트로 게시할 수 있습니다."}
+      description={
+        <Space orientation="vertical" size={8}>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            대화형 Claude Code 에서 <Text code>{cmd}</Text> 를 실행하면 claude.ai 에 게시되고 아티팩트 탭에 링크가 붙습니다.
+            {share ? " 해석이 바뀐 뒤 다시 실행하면 같은 링크가 갱신됩니다." : ""}
+          </Text>
+          <Space wrap>
+            {share && (
+              <Button size="small" type="primary" icon={<ExportOutlined />} onClick={() => window.open(share.url, "_blank", "noopener,noreferrer")}>
+                아티팩트 열기
+              </Button>
+            )}
+            <Button size="small" icon={<CopyOutlined />} onClick={copy}>
+              {share ? "갱신 명령 복사" : "게시 명령 복사"}
+            </Button>
+            <Link href={`/orchestration/${encodeURIComponent(epicKey)}/artifact`}>아티팩트 탭으로 →</Link>
+          </Space>
+        </Space>
+      }
+    />
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginTop: 24 }}>
@@ -128,6 +168,7 @@ export default function DataTabView({
   header,
   target,
   data,
+  share,
   specJob,
   runJob,
 }: {
@@ -144,6 +185,8 @@ export default function DataTabView({
   };
   target: boolean;
   data: DataOrder;
+  /** 이 해석을 게시한 공개 아티팩트(artifact-share.md 의 data 행) */
+  share: ArtifactShare | null;
   specJob: Job | null;
   runJob: Job | null;
 }) {
@@ -245,16 +288,28 @@ export default function DataTabView({
     const t = summary.tables;
     body = (
       <>
-        <div style={{ marginTop: 16, display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+        {reportMd ? (
+          <div style={{ marginTop: 16 }}>
+            <DataReport md={reportMd} />
+            <ShareBar epicKey={epicKey} share={share} />
+          </div>
+        ) : (
+          summary.oneLine && <Paragraph style={{ marginTop: 16 }}>{summary.oneLine}</Paragraph>
+        )}
+
+        <Title level={4} style={{ marginTop: 32, marginBottom: 0 }}>
+          자세한 데이터
+        </Title>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
           <BadgeTag badge={summary.verdict} />
-          <span style={{ fontSize: 30, fontWeight: 700 }}>{headlineValue(summary.kind, h)}</span>
+          <span style={{ fontSize: 26, fontWeight: 700 }}>{headlineValue(summary.kind, h)}</span>
           {h?.compare && (
             <>
               <ChangeRate rate={h.changeRate} direction={direction} />
               <Text type="secondary">
-                {h.metric} · {h.target.label} {h.target.x ?? "-"}/{h.target.n.toLocaleString()} · 비교 {h.compare.label}{" "}
-                {pct(h.compare.value)} ({h.compare.x ?? "-"}/{h.compare.n.toLocaleString()}) · p {pText(h.p)}
-                {h.requiredN ? ` · 필요 표본 ${h.requiredN.toLocaleString()}` : ""}
+                {h.metric} · {h.target.label} {h.target.x ?? "-"}/{h.target.n.toLocaleString()}대 · {h.compare.label}{" "}
+                {pct(h.compare.value)} ({h.compare.x ?? "-"}/{h.compare.n.toLocaleString()}대) · 우연일 가능성 {pText(h.p)}
+                {h.requiredN ? ` · 판단에 필요한 기기 수 ${h.requiredN.toLocaleString()}대` : ""}
               </Text>
             </>
           )}
@@ -262,29 +317,52 @@ export default function DataTabView({
         </div>
         <Text type="secondary" style={{ fontSize: 12 }}>
           집계 {summary.startAt} ~ {summary.coveredUntil} · 분석 {summary.runs}회
-          {summary.health.srmP != null ? ` · 실험군 균형 p ${pText(summary.health.srmP)}` : ""}
-          {summary.health.zeroDays.length > 0
-            ? ` · 0건인 날 ${summary.health.zeroDays.map((z) => `${z.date} ${z.name}`).join(", ")}`
-            : ""}
+          {summary.health.srmP != null ? ` · 두 그룹이 고르게 나뉘었는지 확인: 우연일 가능성 ${pText(summary.health.srmP)}` : ""}
         </Text>
-        {summary.oneLine && <Paragraph style={{ marginTop: 8 }}>{summary.oneLine}</Paragraph>}
+        {summary.health.zeroDays.length > 0 && (
+          <Collapse
+            size="small"
+            ghost
+            items={[
+              {
+                key: "zero",
+                label: `기록이 0건인 날 ${new Set(summary.health.zeroDays.map((z) => z.date)).size}일 (자세히)`,
+                children: (
+                  <Table
+                    size="small"
+                    pagination={false}
+                    rowKey="name"
+                    dataSource={[...new Set(summary.health.zeroDays.map((z) => z.name))].map((name) => ({
+                      name,
+                      dates: summary.health.zeroDays.filter((z) => z.name === name).map((z) => z.date.slice(5)).join(", "),
+                    }))}
+                    columns={[
+                      { title: "기록", dataIndex: "name" },
+                      { title: "0건인 날", dataIndex: "dates" },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
+        )}
 
-        <Section title="일별 추이">
+        <Section title="날짜별 기록 건수">
           <DataLines rows={summary.daily.rows} series={summary.daily.series} height={160} legend />
         </Section>
 
-        <Section title="회차별 핵심 지표 변화">
+        <Section title="분석할 때마다 핵심 숫자가 어떻게 바뀌었나">
           <Table
             size="small"
             pagination={false}
             rowKey="runId"
             dataSource={summary.history}
             columns={[
-              { title: "회차", dataIndex: "runId" },
+              { title: "분석 회차", dataIndex: "runId" },
               { title: "집계 끝 시각", dataIndex: "coveredUntil" },
-              { title: "변화율", dataIndex: "changeRate", render: (v) => <ChangeRate rate={v} direction={direction} /> },
-              { title: "p", dataIndex: "p", render: (v) => pText(v) },
-              { title: "배지", dataIndex: "verdict", render: (v) => <BadgeTag badge={v} /> },
+              { title: "차이", dataIndex: "changeRate", render: (v) => <ChangeRate rate={v} direction={direction} /> },
+              { title: "우연일 가능성", dataIndex: "p", render: (v) => pText(v) },
+              { title: "판정", dataIndex: "verdict", render: (v) => <BadgeTag badge={v} /> },
             ]}
           />
         </Section>
@@ -297,30 +375,30 @@ export default function DataTabView({
               rowKey="name"
               dataSource={summary.segments}
               columns={[
-                { title: "기기 종류", dataIndex: "name" },
-                { title: "대상", render: (_, s) => `${pct(s.target.value)} (${s.target.x ?? "-"}/${s.target.n.toLocaleString()})` },
-                { title: "비교", render: (_, s) => `${pct(s.compare.value)} (${s.compare.x ?? "-"}/${s.compare.n.toLocaleString()})` },
-                { title: "변화율", dataIndex: "changeRate", render: (v) => <ChangeRate rate={v} direction={direction} /> },
-                { title: "p", dataIndex: "p", render: (v) => pText(v) },
-                { title: "필요 표본", dataIndex: "requiredN", render: (v) => (v == null ? "-" : v.toLocaleString()) },
-                { title: "배지", dataIndex: "badge", render: (v) => <BadgeTag badge={v} /> },
+                { title: "기기 종류", dataIndex: "name", render: (v) => deviceName(v) },
+                { title: summary.segments[0].target.label, render: (_, s) => `${pct(s.target.value)} (${s.target.x ?? "-"}/${s.target.n.toLocaleString()}대)` },
+                { title: summary.segments[0].compare.label, render: (_, s) => `${pct(s.compare.value)} (${s.compare.x ?? "-"}/${s.compare.n.toLocaleString()}대)` },
+                { title: "차이", dataIndex: "changeRate", render: (v) => <ChangeRate rate={v} direction={direction} /> },
+                { title: "우연일 가능성", dataIndex: "p", render: (v) => pText(v) },
+                { title: "판단에 필요한 기기 수", dataIndex: "requiredN", render: (v) => (v == null ? "-" : `${v.toLocaleString()}대`) },
+                { title: "판정", dataIndex: "badge", render: (v) => <BadgeTag badge={v} /> },
               ]}
             />
           </Section>
         )}
 
         {t.groups.length > 0 && (
-          <Section title="실험군">
+          <Section title="A안·B안 그룹">
             <Table
               size="small"
               pagination={false}
               rowKey="grp"
               dataSource={t.groups}
               columns={[
-                { title: "실험군", dataIndex: "grp" },
+                { title: "그룹", dataIndex: "grp" },
                 { title: "기기", dataIndex: "devices", render: (v) => v.toLocaleString() },
-                { title: "전환", dataIndex: "converted", render: (v) => v.toLocaleString() },
-                { title: "전환율", dataIndex: "rate", render: (v) => pct(v) },
+                { title: "목표 행동까지 간 기기", dataIndex: "converted", render: (v) => v.toLocaleString() },
+                { title: "비율", dataIndex: "rate", render: (v) => pct(v) },
               ]}
             />
           </Section>
@@ -333,7 +411,7 @@ export default function DataTabView({
               rowKey={(r) => `${r.grp}-${r.step}`}
               dataSource={t.funnel}
               columns={[
-                { title: "실험군", dataIndex: "grp" },
+                { title: "그룹", dataIndex: "grp" },
                 { title: "단계", dataIndex: "step" },
                 { title: "이벤트", dataIndex: "name" },
                 { title: "기기", dataIndex: "devices", render: (v) => v.toLocaleString() },
@@ -349,19 +427,13 @@ export default function DataTabView({
               rowKey={(r) => `${r.grp}-${r.name}`}
               dataSource={t.continuations}
               columns={[
-                { title: "실험군", dataIndex: "grp" },
+                { title: "그룹", dataIndex: "grp" },
                 { title: "이름", dataIndex: "name" },
                 { title: "시작한 기기", dataIndex: "fromDevices", render: (v) => v.toLocaleString() },
                 { title: "이어간 기기", dataIndex: "toDevices", render: (v) => v.toLocaleString() },
                 { title: "비율", dataIndex: "rate", render: (v) => pct(v) },
               ]}
             />
-          </Section>
-        )}
-
-        {reportMd && (
-          <Section title="해석">
-            <MarkdownDoc md={reportMd} />
           </Section>
         )}
 
