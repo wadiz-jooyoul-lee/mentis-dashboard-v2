@@ -703,14 +703,13 @@ function parseSessionId(log: string): string | null {
 function briefInput(input: unknown): string {
   if (!input || typeof input !== "object") return "";
   const o = input as Record<string, unknown>;
-  if (typeof o.command === "string") return o.command.slice(0, 100);
+  if (typeof o.command === "string") return o.command;
   if (typeof o.file_path === "string") return o.file_path;
   if (typeof o.pattern === "string") return String(o.pattern);
-  if (typeof o.query === "string") return o.query.slice(0, 80);
-  if (typeof o.prompt === "string") return o.prompt.slice(0, 80);
+  if (typeof o.query === "string") return o.query;
+  if (typeof o.prompt === "string") return o.prompt;
   try {
-    const s = JSON.stringify(o);
-    return s.length > 100 ? s.slice(0, 100) + "…" : s;
+    return JSON.stringify(o);
   } catch {
     return "";
   }
