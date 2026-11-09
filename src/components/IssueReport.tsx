@@ -326,6 +326,29 @@ function ReportBody({ content }: { content: string }) {
   );
 }
 
+/**
+ * 회차 고르기 목록 — 환경을 알면 환경별로 묶고 이름 뒤에 환경을 붙인다.
+ * 환경은 모아 보기 집계(summary.runs)에서 회차 폴더 이름으로 찾는다.
+ */
+function runOptions(runs: ReportRun[], summary: TestSummary | null) {
+  const one = (r: ReportRun, i: number, env?: string) => ({
+    value: r.id,
+    label: `${r.label}${env !== undefined ? ` · ${env || "환경 미상"}` : ""}${i === 0 ? " · 최신" : ""}`,
+  });
+  if (!summary) return runs.map((r, i) => one(r, i));
+  const envOf = new Map(summary.runs.map((r) => [r.id, r.env]));
+  const groups = summary.envs.map((e) => ({
+    label: e.env || "환경 미상",
+    options: runs
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => envOf.get(r.id) === e.env)
+      .map(({ r, i }) => one(r, i, e.env)),
+  }));
+  // 집계에 없는 회차(폴더 밖 옛 결과 등)도 고를 수 있게 남긴다.
+  const rest = runs.map((r, i) => ({ r, i })).filter(({ r }) => !envOf.has(r.id));
+  return [...groups, ...rest.map(({ r, i }) => one(r, i))];
+}
+
 export default function IssueReport({
   issueKey,
   runs,
@@ -427,11 +450,8 @@ export default function IssueReport({
               onChange={setSelectedId}
               style={{ minWidth: 260 }}
               options={[
-                ...(summary ? [{ value: ALL, label: `전체 ${runs.length}회차 모아 보기` }] : []),
-                ...runs.map((r, i) => ({
-                  value: r.id,
-                  label: `${r.label}${i === 0 ? " · 최신" : ""}`,
-                })),
+                ...(summary ? [{ value: ALL, label: `환경별 모아 보기 (${runs.length}회차)` }] : []),
+                ...runOptions(runs, summary),
               ]}
             />
             {/* 마감할 때 브라우저에 띄웠던 요약 화면. 회차 폴더에 남아 있으면 다시 볼 수 있다. */}

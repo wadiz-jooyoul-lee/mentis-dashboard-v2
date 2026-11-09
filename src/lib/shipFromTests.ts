@@ -1,4 +1,4 @@
-import { summarizeRuns } from "@/lib/testSummary";
+import { envRank, normalizeEnv, summarizeRuns } from "@/lib/testSummary";
 import type { ShipRow } from "@/lib/parseOrderStatus";
 
 /**
@@ -12,33 +12,6 @@ import type { ShipRow } from "@/lib/parseOrderStatus";
  * 보탠다. PR·리뷰·머지·빌드는 dobby-ship 을 돌려야 알 수 있는 값이라 **비운다** —
  * 검증 기록이 말해 주는 사실은 "이 환경에서 검증했다" 하나뿐이다.
  */
-
-/**
- * 같은 곳인데 다르게 적힌 이름을 합친다.
- *
- * `cdev` 는 `dev.wadiz.io` 를 가리키는 다른 이름이다. 회차 본문에 주소를 앞에 쓰면
- * (`dev.wadiz.io (cdev)`) `dev` 로, 이름을 앞에 쓰면 (`cdev = https://dev.wadiz.io`)
- * `cdev` 로 갈려서, 같은 서버가 태그 두 개로 보인다.
- */
-const ENV_ALIAS: Record<string, string> = { cdev: "dev" };
-
-/**
- * 태그를 늘어놓는 차례 — 앞에서 뒤로 나아가는 순서다.
- * 여기 없는 이름(새 환경)은 뒤로 민다.
- */
-const ENV_ORDER = ["local", "dev", "rc", "rc1", "rc2", "rc4", "stage", "live"];
-
-/** ENV_ORDER 차례. 목록에 없으면 뒤로 민다. */
-function envRank(env: string): number {
-  const i = ENV_ORDER.indexOf(env);
-  return i === -1 ? ENV_ORDER.length : i;
-}
-
-/** 회차에 적힌 환경 이름을 태그에 쓸 이름으로 고친다. */
-function normalizeEnv(raw: string): string {
-  const v = raw.trim().toLowerCase(); // 실측 `RC(rc.wadiz.kr)` 한 건만 대문자였다
-  return v ? (ENV_ALIAS[v] ?? v) : "";
-}
 
 export function shipFromTestRuns(orderDir: string, recorded: ShipRow[]): ShipRow[] {
   const summary = summarizeRuns(orderDir);

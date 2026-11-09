@@ -1,8 +1,9 @@
 "use client";
 
-import { Button, Card, Space, Typography, Table, Tag } from "antd";
+import { useState } from "react";
+import { Button, Card, Space, Typography, Table, Tabs, Tag } from "antd";
 import { PictureOutlined } from "@ant-design/icons";
-import type { TestSummary, ItemLine, ConditionLine } from "@/lib/testSummary";
+import type { TestSummary, EnvSummary, ItemLine, ConditionLine } from "@/lib/testSummary";
 import type { Verdict } from "@/lib/parseReport";
 
 const { Title, Text } = Typography;
@@ -64,6 +65,16 @@ function ConditionRow({ cond }: { cond: ConditionLine }) {
   );
 }
 
+/** 환경 이름 — 회차에 환경이 안 적혔으면 「환경 미상」. */
+function envLabel(env: string): string {
+  return env || "환경 미상";
+}
+
+/**
+ * 검증 탭의 기본 화면 — 환경별 현황표와, 환경마다 그 환경 회차만 모은 탭.
+ *
+ * 환경을 섞어 합치면 rc4 실패가 뒤에 돈 dev 통과에 덮인다. 그래서 환경마다 따로 센다.
+ */
 export default function TestSummaryView({
   summary,
   epicKey,
@@ -71,7 +82,80 @@ export default function TestSummaryView({
   summary: TestSummary;
   epicKey: string;
 }) {
-  const { runs, items, pass, fail, skip, closing, conditions } = summary;
+  const { runs, envs, closing } = summary;
+  // 처음에는 가장 최근 회차의 환경을 연다.
+  const [active, setActive] = useState(runs[runs.length - 1]?.env ?? "");
+
+  return (
+    <Space orientation="vertical" size={24} style={{ width: "100%" }}>
+      <div>
+        <Title level={4} style={{ marginTop: 0, marginBottom: 12 }}>
+          환경별 현황
+        </Title>
+        <Table<EnvSummary>
+          rowKey={(e) => e.env || "-"}
+          size="small"
+          pagination={false}
+          dataSource={envs}
+          onRow={(e) => ({ onClick: () => setActive(e.env), style: { cursor: "pointer" } })}
+          columns={[
+            { title: "환경", key: "env", width: 110, render: (_: unknown, e: EnvSummary) => envLabel(e.env) },
+            {
+              title: "회차",
+              key: "runs",
+              render: (_: unknown, e: EnvSummary) => (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {e.runs.map((r) => r.no).join("·")}회차
+                </Text>
+              ),
+            },
+            { title: "통과", dataIndex: "pass", width: 72, render: (n: number) => <Text style={{ color: TONE.pass }}>{n}</Text> },
+            {
+              title: "실패",
+              dataIndex: "fail",
+              width: 72,
+              render: (n: number) => <Text style={{ color: n > 0 ? TONE.fail : undefined }}>{n}</Text>,
+            },
+            { title: "보류", dataIndex: "skip", width: 72 },
+            ...(envs.some((e) => e.conditions.length > 0)
+              ? [
+                  {
+                    title: "닫히는 조건",
+                    key: "cond",
+                    width: 150,
+                    render: (_: unknown, e: EnvSummary) =>
+                      `${e.conditions.length}가지 중 ${e.conditions.filter((c) => c.verdict === "pass").length}가지`,
+                  },
+                ]
+              : []),
+          ]}
+        />
+      </div>
+
+      <Tabs
+        activeKey={active}
+        onChange={setActive}
+        items={envs.map((e) => ({
+          key: e.env,
+          label: `${envLabel(e.env)} ${e.runs.length}회차`,
+          children: <EnvPanel es={e} closing={closing} epicKey={epicKey} />,
+        }))}
+      />
+    </Space>
+  );
+}
+
+/** 한 환경의 회차만 모아 보여 준다 — 판정 카드, 닫히는 조건, 회차, 확인한 항목. */
+function EnvPanel({
+  es,
+  closing,
+  epicKey,
+}: {
+  es: EnvSummary;
+  closing: string | null;
+  epicKey: string;
+}) {
+  const { runs, items, pass, fail, skip, conditions } = es;
   const met = conditions.filter((c) => c.verdict === "pass").length;
   const bar = [
     { n: pass, c: TONE.pass },
