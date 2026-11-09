@@ -18,7 +18,7 @@ export type RunLine = {
   /** 1부터 — 시각 순 */
   no: number;
   label: string;
-  /** dev·rc4 등. 못 찾으면 빈 문자열. */
+  /** 정리한 환경 이름(dev·rc4 등, cdev 는 dev). 못 찾으면 빈 문자열. */
   env: string;
   pass: number;
   fail: number;
@@ -61,11 +61,14 @@ export type ConditionLine = {
   verdict: Verdict;
 };
 
-export type TestSummary = {
+/** 한 환경(dev·rc4…)의 회차만으로 센 결과. */
+export type EnvSummary = {
+  /** 정리한 환경 이름. 회차에 환경이 안 적혔으면 빈 문자열(화면은 「환경 미상」). */
+  env: string;
   runs: RunLine[];
   items: ItemLine[];
   /**
-   * status.md `## 닫히는 조건 항목` 표(C1…)에 테스트 결과를 붙인 것.
+   * status.md `## 닫히는 조건 항목` 표(C1…)에 이 환경의 테스트 결과를 붙인 것.
    * 조건을 쪼개 적지 않은 오더는 빈 배열 — 그때는 화면이 조건 섹션을 아예 안 그린다.
    */
   conditions: ConditionLine[];
@@ -73,9 +76,44 @@ export type TestSummary = {
   pass: number;
   fail: number;
   skip: number;
+};
+
+export type TestSummary = {
+  /** 모든 환경의 회차, 시각 순 */
+  runs: RunLine[];
+  /** 환경별 집계 — 환경 차례(ENV_ORDER)대로, 환경 미상은 맨 뒤 */
+  envs: EnvSummary[];
   /** status.md 의 닫히는 조건(한 줄). 없으면 null. */
   closing: string | null;
 };
+
+/**
+ * 같은 곳인데 다르게 적힌 이름을 합친다.
+ *
+ * `cdev` 는 `dev.wadiz.io` 를 가리키는 다른 이름이다. 회차 본문에 주소를 앞에 쓰면
+ * (`dev.wadiz.io (cdev)`) `dev` 로, 이름을 앞에 쓰면 (`cdev = https://dev.wadiz.io`)
+ * `cdev` 로 갈려서, 같은 서버가 태그 두 개로 보인다.
+ */
+const ENV_ALIAS: Record<string, string> = { cdev: "dev" };
+
+/**
+ * 환경을 늘어놓는 차례 — 앞에서 뒤로 나아가는 순서다.
+ * 여기 없는 이름(새 환경)은 뒤로, 환경 미상(빈 문자열)은 맨 뒤로 민다.
+ */
+const ENV_ORDER = ["local", "dev", "rc", "rc1", "rc2", "rc4", "stage", "live"];
+
+/** ENV_ORDER 차례. 목록에 없으면 뒤로 민다. */
+export function envRank(env: string): number {
+  if (!env) return ENV_ORDER.length + 1;
+  const i = ENV_ORDER.indexOf(env);
+  return i === -1 ? ENV_ORDER.length : i;
+}
+
+/** 회차에 적힌 환경 이름을 태그에 쓸 이름으로 고친다. */
+export function normalizeEnv(raw: string): string {
+  const v = raw.trim().toLowerCase(); // 실측 `RC(rc.wadiz.kr)` 한 건만 대문자였다
+  return v ? (ENV_ALIAS[v] ?? v) : "";
+}
 
 /**
  * 회차를 어느 환경에서 봤나(dev·rc4·stage…).
@@ -174,23 +212,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
   }
 
   const runs: RunLine[] = [];
-  // 시나리오 번호 → 회차별 판정.
-  // ⛔ 이름으로 묶으면 안 된다. 회차마다 같은 것을 다르게 적는다
-  // (1회차 `홈 — 친구 활동 더보기` / 2회차 `/web/main`). 번호가 없을 때만 이름으로 묶는다.
-  const seen = new Map<
-    string,
-    {
-      num: string;
-      name: string;
-      page: string;
-      conds: string[];
-      runs: number[];
-      verdicts: Verdict[];
-      note: string;
-    }
-  >();
-  // 페이지(URL) → 회차별 판정. 번호가 바뀌어 안 묶인 재확인을 이어 붙이는 데 쓴다(아래 "해소" 판정).
-  const byPage = new Map<string, { run: number; verdict: Verdict }[]>();
+  const parsed: { run: RunLine; scenarios: ReturnType<typeof parseReport>["scenarios"] }[] = [];
 
   for (const id of entries) {
     const dir = path.join(runsDir, id);
@@ -211,19 +233,67 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
 
     const { scenarios, counts } = parseReport(md);
     const m = id.match(/(\d{4})-?(\d{2})-?(\d{2})[-_ ]?(\d{2}):?(\d{2})/);
-    const no = runs.length + 1;
-    runs.push({
+    const run: RunLine = {
       id,
-      no,
+      no: runs.length + 1,
       label: m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : id,
-      env: findEnv(md),
+      env: normalizeEnv(findEnv(md)),
       pass: counts.pass,
       fail: counts.fail,
       skip: counts.skip + counts.warn,
       hasSummary: fs.existsSync(path.join(dir, "summary.html")),
       baseline: isBaselineRun(md),
-    });
+    };
+    runs.push(run);
+    parsed.push({ run, scenarios });
+  }
 
+  if (runs.length === 0) return null;
+
+  const { closing, conditions: declared } = readClosing(orderDir);
+  // 환경마다 따로 센다. 섞으면 rc4 실패가 뒤에 돈 dev 통과에 덮인다(실측: 회차 있는 오더 98개 중 46개가 여러 환경).
+  const envNames = [...new Set(runs.map((r) => r.env))].sort((a, b) => envRank(a) - envRank(b));
+  const envs: EnvSummary[] = envNames.map((env) => {
+    const mine = parsed.filter((p) => p.run.env === env);
+    const items = mergeItems(mine);
+    return {
+      env,
+      runs: mine.map((p) => p.run),
+      items,
+      conditions: judgeConditions(declared, items),
+      pass: items.filter((i) => i.verdict === "pass").length,
+      fail: items.filter((i) => i.verdict === "fail").length,
+      skip: items.filter((i) => i.verdict === "skip" || i.verdict === "warn").length,
+    };
+  });
+
+  return { runs, envs, closing };
+}
+
+/** 한 환경의 회차들을 시나리오별로 합친다. */
+function mergeItems(
+  parsed: { run: RunLine; scenarios: ReturnType<typeof parseReport>["scenarios"] }[]
+): ItemLine[] {
+  // 시나리오 번호 → 회차별 판정.
+  // ⛔ 이름으로 묶으면 안 된다. 회차마다 같은 것을 다르게 적는다
+  // (1회차 `홈 — 친구 활동 더보기` / 2회차 `/web/main`). 번호가 없을 때만 이름으로 묶는다.
+  const seen = new Map<
+    string,
+    {
+      num: string;
+      name: string;
+      page: string;
+      conds: string[];
+      runs: number[];
+      verdicts: Verdict[];
+      note: string;
+    }
+  >();
+  // 페이지(URL) → 회차별 판정. 번호가 바뀌어 안 묶인 재확인을 이어 붙이는 데 쓴다(아래 "해소" 판정).
+  const byPage = new Map<string, { run: number; verdict: Verdict }[]>();
+
+  for (const { run, scenarios } of parsed) {
+    const no = run.no;
     for (const s of scenarios) {
       const num = (s.num || "").trim();
       const name = (s.check || s.page || "").trim();
@@ -246,9 +316,7 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
     }
   }
 
-  if (runs.length === 0) return null;
-
-  const items: ItemLine[] = [...seen.values()].map((v) => {
+  return [...seen.values()].map((v) => {
     const last = v.verdicts[v.verdicts.length - 1];
     const varied = new Set(v.verdicts).size > 1;
     const lastRun = v.runs[v.runs.length - 1];
@@ -280,11 +348,12 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
       note: resolved ? resolvedNote : v.note,
     };
   });
+}
 
-  const { closing, conditions: declared } = readClosing(orderDir);
-  // 조건마다 그것을 확인한 시나리오를 모아 판정을 합친다.
+/** 조건마다 그것을 확인한 시나리오를 모아 판정을 합친다. */
+function judgeConditions(declared: { id: string; text: string }[], items: ItemLine[]): ConditionLine[] {
   // 하나라도 실패면 실패, 보류가 섞였으면 보류, 전부 통과여야 통과다 — 통과가 제일 엄하다.
-  const conditions: ConditionLine[] = declared.map((c) => {
+  return declared.map((c) => {
     const mine = items.filter((i) => i.conds.includes(c.id));
     const verdict: Verdict =
       mine.length === 0
@@ -296,14 +365,4 @@ export function summarizeRuns(orderDir: string): TestSummary | null {
             : "pass";
     return { id: c.id, text: c.text, items: mine.map((i) => i.num || i.name), verdict };
   });
-
-  return {
-    runs,
-    items,
-    conditions,
-    pass: items.filter((i) => i.verdict === "pass").length,
-    fail: items.filter((i) => i.verdict === "fail").length,
-    skip: items.filter((i) => i.verdict === "skip" || i.verdict === "warn").length,
-    closing,
-  };
 }
