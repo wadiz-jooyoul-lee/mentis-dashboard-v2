@@ -1,0 +1,94 @@
+/* 검증 탭의 설계된 테스트 케이스(TestPlanView). */
+.tp-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tp-md {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.tp-md > * {
+  margin-top: 6px;
+}
+.tp-md ol,
+.tp-md ul {
+  padding-left: 20px;
+}
+.tp-id {
+  font-weight: 600;
+  min-width: 36px;
+  text-align: center;
+}
+.tp-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tp-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tp-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.tp-row:last-child {
+  border-bottom: none;
+}
+.tp-row dt {
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  padding-top: 2px;
+}
+.tp-row dd {
+  margin: 0;
+  min-width: 0;
+}
+.tp-box {
+  border-radius: 8px;
+  padding: 10px 14px;
+  border: 1px solid;
+}
+.tp-box-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.tp-pass {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+}
+.tp-fail {
+  background: #fff2f0;
+  border-color: #ffccc7;
+}
+.tp-dev {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.55);
+}
+.tp-dev summary {
+  cursor: pointer;
+  user-select: none;
+}
+.tp-dev .tp-md {
+  font-size: 13px;
+}
+.tp-section + .tp-section {
+  margin-top: 20px;
+}
+.tp-section-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+@media (max-width: 640px) {
+  .tp-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

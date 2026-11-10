@@ -907,6 +907,7 @@ const KNOWN_ROOT_DOCS = new Set([
   "decisions.md",
   "side-effects.md",
   "test-guide.md",
+  "test-plan.md", // 검증 탭이 그린다
   "explainer.md",
   "retro.md",
   "design.md",
