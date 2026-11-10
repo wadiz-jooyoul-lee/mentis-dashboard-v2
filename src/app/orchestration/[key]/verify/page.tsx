@@ -3,6 +3,7 @@ import { getEpic } from "@/lib/orchestration";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 import VerifyView from "@/components/VerifyView";
 import { summarizeRuns } from "@/lib/testSummary";
+import { readTestPlan } from "@/lib/testPlan";
 import { getMetaDir } from "@/lib/issues";
 import path from "node:path";
 
@@ -16,6 +17,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ key: st
 
   // 회차를 전부 모아 한 화면에 — 저장하지 않고 볼 때마다 센다(실측 0~5ms).
   const summary = summarizeRuns(path.join(getMetaDir(), key));
+  const testPlan = readTestPlan(path.join(getMetaDir(), key));
 
   return (
     <VerifyView
@@ -31,6 +33,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ key: st
       orderKind={epic.orderKind ?? null}
       runs={epic.runs}
       testGuideMd={epic.testGuideMd}
+      testPlan={testPlan}
     />
   );
 }

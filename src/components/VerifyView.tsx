@@ -5,8 +5,10 @@ import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import IssueReport from "@/components/IssueReport";
 import TestSummaryView from "@/components/TestSummaryView";
+import TestPlanView from "@/components/TestPlanView";
 import type { TestSummary } from "@/lib/testSummary";
 import type { ReportRun } from "@/lib/issues";
+import type { TestPlan } from "@/lib/testPlan";
 
 const { Title, Text } = Typography;
 
@@ -24,6 +26,7 @@ export default function VerifyView({
   runs,
   summary = null,
   testGuideMd,
+  testPlan = null,
 }: {
   epicKey: string;
   title?: string | null;
@@ -38,6 +41,8 @@ export default function VerifyView({
   /** 모든 회차를 모은 요약. 회차가 없으면 null. */
   summary?: TestSummary | null;
   testGuideMd: string | null;
+  /** 설계 때 만든 테스트 계획(test-plan.md). 없으면 null. */
+  testPlan?: TestPlan | null;
 }) {
   return (
     <div>
@@ -54,6 +59,7 @@ export default function VerifyView({
       />
       <div style={{ marginTop: 16 }}>
         <Title level={4}>검증</Title>
+        {testPlan && <TestPlanView plan={testPlan} defaultOpen={runs.length === 0} />}
         {runs.length > 0 ? (
           <IssueReport issueKey={epicKey} runs={runs} summary={summary} embedded />
         ) : (
