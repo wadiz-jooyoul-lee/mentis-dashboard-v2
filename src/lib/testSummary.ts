@@ -287,6 +287,9 @@ function mergeItems(
       runs: number[];
       verdicts: Verdict[];
       note: string;
+      /** 보류(시험 안 함)로 적힌 회차와 그 사유 — 시험 결과가 하나도 없을 때만 판정에 쓴다 */
+      skipRuns: number[];
+      skipNote: string;
     }
   >();
   // 페이지(URL) → 회차별 판정. 번호가 바뀌어 안 묶인 재확인을 이어 붙이는 데 쓴다(아래 "해소" 판정).
@@ -300,16 +303,33 @@ function mergeItems(
       const key = num || name;
       if (!key) continue;
       const page = (s.page || "").trim();
-      if (page) byPage.set(page, [...(byPage.get(page) ?? []), { run: no, verdict: s.verdict }]);
-      const cur = seen.get(key) ?? { num, name, page: "", conds: [], runs: [], verdicts: [], note: "" };
+      if (page && s.verdict !== "skip") byPage.set(page, [...(byPage.get(page) ?? []), { run: no, verdict: s.verdict }]);
+      const cur = seen.get(key) ?? {
+        num,
+        name,
+        page: "",
+        conds: [],
+        runs: [],
+        verdicts: [],
+        note: "",
+        skipRuns: [],
+        skipNote: "",
+      };
       if (page) cur.page = page;
       // 이름·조건은 최근 회차 것으로 갱신한다(뒤 회차가 더 다듬어져 있는 편이다).
       if (name) cur.name = name;
       const conds = parseConds(s.cond || "");
       if (conds.length) cur.conds = conds;
+      // 보류는 "이 회차에선 시험 안 함"이라 앞 회차 결과를 덮지 않는다. 보류는 한 번도 시험 안 한 항목뿐이다.
+      if (s.verdict === "skip") {
+        cur.skipRuns.push(no);
+        cur.skipNote = (s.actual || s.evidence || s.expected || "").trim();
+        seen.set(key, cur);
+        continue;
+      }
       cur.runs.push(no);
       cur.verdicts.push(s.verdict);
-      if (s.verdict === "fail" || s.verdict === "skip" || s.verdict === "warn") {
+      if (s.verdict === "fail" || s.verdict === "warn") {
         cur.note = (s.actual || s.evidence || s.expected || "").trim();
       }
       seen.set(key, cur);
@@ -317,6 +337,17 @@ function mergeItems(
   }
 
   return [...seen.values()].map((v) => {
+    if (v.verdicts.length === 0) {
+      return {
+        num: v.num,
+        conds: v.conds,
+        name: v.name,
+        runs: v.skipRuns,
+        verdict: "skip" as Verdict,
+        changed: null,
+        note: v.skipNote,
+      };
+    }
     const last = v.verdicts[v.verdicts.length - 1];
     const varied = new Set(v.verdicts).size > 1;
     const lastRun = v.runs[v.runs.length - 1];
@@ -338,6 +369,12 @@ function mergeItems(
         (v.note ? ` (당시 기록: ${v.note})` : "")
       : "";
 
+    const untested = v.skipRuns.filter((n) => n > lastRun);
+    const carriedNote =
+      !resolved && last === "pass" && untested.length
+        ? `${untested.join("·")}회차는 시험하지 않아 ${lastRun}회차 통과를 이어 씁니다.`
+        : "";
+
     return {
       num: v.num,
       conds: v.conds,
@@ -345,7 +382,7 @@ function mergeItems(
       runs: resolved ? [...v.runs, ...later.map((x) => x.run)] : v.runs,
       verdict: resolved ? "pass" : last,
       changed: resolved ? [...v.verdicts, "pass" as Verdict] : varied ? v.verdicts : null,
-      note: resolved ? resolvedNote : v.note,
+      note: resolved ? resolvedNote : carriedNote || v.note,
     };
   });
 }
