@@ -143,8 +143,9 @@ export async function runNextAction(
   cache = null;
   const approve = (how: string) =>
     dobbyBash(
-      `dobby_design_ack ${k} 사용자 >/dev/null && dobby_agent_state ${k} analysis-agent 완료 && ` +
-        `dobby_event ${k} "설계 확정 — 대시보드에서 승인, ${how}" && dobby_v2_checkpoint ${k} >/dev/null`
+      `dobby_design_ack ${k} 사용자 >/dev/null || exit 1; ` +
+        `r="$(dobby_v2_end ${k} 확정 2>&1)" || { printf '%s\\n' "$r" | grep -m1 '^거부' >&2; exit 1; }; ` +
+        `dobby_event ${k} "설계 확정 — 대시보드에서 승인, ${how}"`
     );
   // 자동 배포가 중간에 사람을 부르지 않도록 사람만 풀 수 있는 준비를 먼저 보고 환경을 적는다(auto-mode.md 의 사전 확인).
   // 막히면 이유를, 통과하면 빈 문자열을 돌려준다.

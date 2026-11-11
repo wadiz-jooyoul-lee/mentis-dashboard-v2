@@ -37,7 +37,17 @@ import { quipList, type QuipsFile, type Quip } from "@/lib/quipTypes";
 import { type AssignedAvatar, ORCHESTRATOR_SLUG } from "@/lib/avatarAssign";
 import type { EpicDetail, ReviewFile } from "@/lib/orchestration";
 import type { AgentRow, EventRow } from "@/lib/parseOrchestration";
-import { agentStateBadge, STATE_ORDER, boardColumn, isDevRole } from "@/lib/parseOrchestration";
+import {
+  agentStateBadge,
+  STATE_ORDER,
+  boardColumn,
+  isDevRole,
+  FIVE_ROLES,
+  phaseOwner,
+  whoMoves,
+  type Mover,
+} from "@/lib/parseOrchestration";
+import { PHASE_ORDER } from "@/lib/parseOrderStatus";
 import { parseReport } from "@/lib/parseReport";
 import type { DevProgress } from "@/lib/devProgress";
 import { isJiraIssueKey } from "@/lib/keys";
@@ -58,22 +68,44 @@ function minutesSince(v: string | null | undefined): number | null {
   return Math.floor((Date.now() - d.getTime()) / 60000);
 }
 
-// 실제로 "일하는 중"인 상태만 정체 감지 대상(대기·완료 제외)
-const ACTIVE_STATES = ["분석", "구현", "검증", "리뷰"];
+// /do 가 아닌 오더(작업 표시가 없음)만 쓰는 규칙: 작업중으로 마지막 상태 변경 후 30분이 지나면 정체 의심.
 const STALE_MIN = 30;
 /** 정체 판정 기준 시각 = 마지막 상태 변경(갱신). 없으면 착수로 폴백. */
 function staleBase(a: AgentRow): string | null {
   return hasTimeOfDay(a.updatedAt) ? a.updatedAt : a.startedAt;
 }
-/**
- * 정체 의심 = 활성 상태 + "마지막 상태 변경(갱신) 시각"으로부터 STALE_MIN분 이상 경과.
- * 시각이 없거나 날짜만이면(시:분 없음) 경과를 못 재므로 판정하지 않는다(오탐 방지).
- */
 function isStale(a: AgentRow): boolean {
-  if (!ACTIVE_STATES.includes(a.state)) return false;
+  if (a.state !== "작업중") return false;
   const m = minutesSince(staleBase(a));
   return m != null && m >= STALE_MIN;
 }
+
+/** 경과 표시. 작업중·기다림·사람 차례·막힘은 착수부터, 대기·완료는 갱신부터 잰다. */
+function elapsed(a: AgentRow): string | null {
+  const base = /^(작업중|기다림|사람 차례|막힘)$/.test(a.state) && hasTimeOfDay(a.startedAt) ? a.startedAt : a.updatedAt;
+  const m = minutesSince(base);
+  if (m == null) return null;
+  if (m < 60) return `${m}분`;
+  if (m < 60 * 24) return `${Math.floor(m / 60)}시간`;
+  return `${Math.floor(m / 1440)}일`;
+}
+
+/** 세션 점: 초록 살아 있는 세션 · 빨강 작업중인데 세션 없음(끊김) · 회색 세션 없음. */
+type Dot = "live" | "lost" | "none";
+const DOT_COLOR: Record<Dot, string> = { live: "#52c41a", lost: "#ff4d4f", none: "#d9d9d9" };
+const DOT_TITLE: Record<Dot, string> = {
+  live: "이 담당자로 일하는 세션이 살아 있습니다",
+  lost: "작업중인데 살아 있는 세션이 없습니다(세션 끊김)",
+  none: "세션 없음",
+};
+
+const MOVER_TONE: Record<Mover["tone"], "error" | "warning" | "info" | "success"> = {
+  blocked: "error",
+  human: "warning",
+  working: "info",
+  auto: "info",
+  after: "success",
+};
 
 // 역할명 → 고정 색(이름 해시로 팔레트에서 선택)
 const ROLE_PALETTE = [
@@ -164,6 +196,37 @@ function ProgressBar({ parts, total, label }: { parts: BarPart[]; total: number;
   );
 }
 
+/** 단계 띠: 13개 단계값을 여덟 칸에 접어 그린다. 겹친 단계(설계확인·수정·실패분석·보류)는 칸 아래 작은 글씨로. */
+function PhaseBand({ phase, raw }: { phase: string; raw: string }) {
+  const cur = PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]);
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {PHASE_ORDER.map((p, i) => {
+        const active = i === cur;
+        const sub = active && raw && raw !== p ? raw : null;
+        return (
+          <div
+            key={p}
+            style={{
+              flex: "1 1 0",
+              textAlign: "center",
+              padding: "4px 0",
+              borderRadius: 4,
+              fontSize: 12,
+              background: active ? "#1677ff" : i < cur ? "#e6f4ff" : "#f5f5f5",
+              color: active ? "#fff" : i < cur ? "#1677ff" : "rgba(0,0,0,0.45)",
+              fontWeight: active ? 600 : 400,
+            }}
+          >
+            {p}
+            {sub && <div style={{ fontSize: 11, fontWeight: 400 }}>{sub}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AgentCard({
   a,
   epicKey,
@@ -173,6 +236,8 @@ function AgentCard({
   placement,
   console: con,
   progress,
+  dot,
+  empty,
 }: {
   a: AgentRow;
   epicKey: string;
@@ -188,13 +253,19 @@ function AgentCard({
   console?: { id: string; live: boolean };
   /** 아바타 아래 진행 막대(테스터·개발자). 없으면 그리지 않는다. */
   progress?: ReactNode;
+  /** 세션 점(/do 오더만). 없으면 그리지 않는다. */
+  dot?: Dot;
+  /** 상태표에 행이 없는 담당자 — 회색 빈 카드로 그린다. */
+  empty?: boolean;
 }) {
   const router = useRouter();
-  const stale = isStale(a);
+  const stale = !dot && isStale(a);
+  const lost = dot === "lost";
+  const time = elapsed(a);
   // 소감이 스스로 말하는 게 거슬릴 때 끄는 스위치. 꺼도 호버하면 보여 준다.
   const [muted, setMuted] = useState(false);
   // 로그 유무와 무관하게 모든 에이전트 카드를 클릭 가능 → 변경 페이지의 해당 에이전트 섹션으로.
-  const clickable = !!a.agent && a.agent !== "-";
+  const clickable = !empty && !!a.agent && a.agent !== "-";
   const anchor = a.agent.trim().replace(/\s+/g, "-");
   const goToChanges = clickable
     ? () => router.push(`/orchestration/${epicKey}/changes#agent-${anchor}`)
@@ -208,8 +279,10 @@ function AgentCard({
       style={{
         position: "relative", // 오른쪽 위 뮤트 버튼의 기준
         marginBottom: 8,
-        borderColor: stale ? "#ffccc7" : undefined,
+        borderColor: stale || lost ? "#ffccc7" : undefined,
         cursor: clickable ? "pointer" : undefined,
+        opacity: empty ? 0.5 : undefined,
+        background: empty ? "#f5f5f5" : undefined,
       }}
     >
       {(quips?.length ?? 0) >= 2 && (
@@ -238,7 +311,7 @@ function AgentCard({
             slug={a.agent}
             name={a.name || a.agent}
             avatar={avatar}
-            state={a.state === "검증" ? "구현" : a.state}
+            state={a.state}
             size={34}
             quips={quips}
             mode={muted ? "hover" : "auto"}
@@ -250,11 +323,33 @@ function AgentCard({
                 color={roleColor(a.agent)}
                 style={{ margin: 0, fontWeight: 600, fontSize: 13 }}
               >
-                {a.state === "검증" ? "테스터" : a.name || a.agent}
+                {a.name || a.agent}
               </Tag>
             </Tooltip>
           )}
+          {dot && (
+            <Tooltip title={DOT_TITLE[dot]}>
+              <span
+                aria-label={DOT_TITLE[dot]}
+                style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: DOT_COLOR[dot] }}
+              />
+            </Tooltip>
+          )}
         </Space>
+        {empty ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            상태표에 행이 없습니다
+          </Text>
+        ) : (
+          a.desc && <Text style={{ fontSize: 12 }}>{a.desc}</Text>
+        )}
+        {a.todo && (a.state === "사람 차례" || a.state === "막힘") && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Text code copyable={{ text: a.todo.split(" 또는 ")[0] }} style={{ fontSize: 12 }}>
+              {a.todo}
+            </Text>
+          </div>
+        )}
         {progress}
         {a.issue && a.issue !== "-" && (
           <Link
@@ -270,14 +365,22 @@ function AgentCard({
               count={Number(a.round) || a.round}
               color={agentStateBadge(a.state).color}
               overflowCount={999}
-              // 같은 라운드 칸이 리뷰어에겐 리뷰 차수, 개발자에겐 수정 횟수(dobby_fix_count)다.
-              title={/리뷰/.test(a.name ?? "") ? `${a.round}차 리뷰` : `수정 ${a.round}번`}
+              // 라운드 칸: 리뷰어는 리뷰 차수, 테스터는 회차, 개발자는 수정 횟수(dobby_fix_count)다.
+              title={
+                /리뷰/.test(a.name ?? "")
+                  ? `${a.round}차 리뷰`
+                  : a.name === "테스터"
+                    ? `${a.round}회차`
+                    : `수정 ${a.round}번`
+              }
             />
           )}
           {a.updatedAt && (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {a.updatedAt}
-            </Text>
+            <Tooltip title={`갱신 ${a.updatedAt}`}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {time ? `${time} 전` : a.updatedAt}
+              </Text>
+            </Tooltip>
           )}
         </Space>
         {stale && (
@@ -436,6 +539,42 @@ export default function OrchestrationBoard({
     );
   }
 
+  // /do 오더: 담당자 다섯 중 상태표에 없는 행은 회색 빈 카드로 대기 열에 그린다.
+  const isV2 = epic?.isV2 ?? false;
+  const sessions = epic?.sessions ?? {};
+  const autoRunning = !!epic?.autoRun?.running;
+  const phaseRaw = epic?.phaseRaw ?? "";
+  const missing: AgentRow[] = isV2
+    ? FIVE_ROLES.filter((r) =>
+        !o.agents.some((a) => (r.slug ? a.agent === r.slug : isDevRole(a.name)))
+      ).map((r) => ({ agent: r.slug ?? "", name: r.name, issue: "", branch: "", state: "대기", round: "", updatedAt: "", startedAt: "" }))
+    : [];
+  const mover = isV2
+    ? whoMoves({
+        key: epicKey,
+        agents: o.agents,
+        phase: phaseRaw,
+        sessions,
+        autoRunning,
+        releaseDates: (epic?.releaseNote ?? []).map((r) => r.date),
+      })
+    : null;
+  const dotFor = (a: AgentRow): Dot | undefined =>
+    !isV2 ? undefined : sessions[a.agent] ? "live" : a.state === "작업중" && !autoRunning ? "lost" : "none";
+  // 보드가 스스로 잡아내는 모순. /do 는 한 번에 한 담당자만 일하고, 일하는 담당자는 단계의 담당자다.
+  const workingNow = o.agents.filter((a) => a.state === "작업중");
+  const owner = phaseOwner(phaseRaw);
+  const contradictions: string[] = [];
+  if (isV2) {
+    for (const a of workingNow)
+      if (dotFor(a) === "lost") contradictions.push(`${a.name || a.agent}: 작업중인데 살아 있는 세션이 없습니다(세션 끊김)`);
+    if (workingNow.length > 1)
+      contradictions.push(`작업중인 담당자가 ${workingNow.length}명입니다(${workingNow.map((a) => a.name || a.agent).join(", ")})`);
+    const off = workingNow.find((a) => owner && (owner === "개발자" ? !isDevRole(a.name) : a.name !== owner));
+    if (off) contradictions.push(`단계는 ${phaseRaw}(${owner} 차례)인데 ${off.name || off.agent}가 작업중입니다`);
+    if (epic?.autoRun?.lost) contradictions.push("자동 실행이 실행 중으로 적혀 있지만 프로세스가 없습니다(자동 실행 끊김)");
+  }
+
   const counts: Record<string, number> = {};
   for (const a of o.agents) counts[boardColumn(a.state)] = (counts[boardColumn(a.state)] ?? 0) + 1;
   // 고정 열(정식 순서) + 정의 밖 상태는 뒤에 추가(사라지지 않게)
@@ -455,8 +594,11 @@ export default function OrchestrationBoard({
   const latestRun = epic?.runs?.[0];
   const testCounts = latestRun?.content ? parseReport(latestRun.content).counts : null;
   const dp: DevProgress | null = epic?.devProgress ?? null;
+  // 테스터 막대는 테스터 행(옛 오더는 단계 검증의 개발자 행), 개발자 막대는 개발자 행에 붙인다.
   const progressFor = (a: AgentRow): ReactNode => {
-    if (a.state === "검증" && testCounts) {
+    if (a.state !== "작업중") return undefined;
+    const tester = a.name === "테스터" || (isDevRole(a.name) && phaseRaw === "검증");
+    if (tester && testCounts) {
       const { total: t, pass, fail, skip, warn } = testCounts;
       const done = pass + fail + skip + warn;
       const run = `${epic?.runs.length ?? 0}회차`;
@@ -472,7 +614,8 @@ export default function OrchestrationBoard({
         />
       );
     }
-    if (a.state === "구현" && dp?.mode === "impl") {
+    if (tester || !isDevRole(a.name)) return undefined;
+    if (dp?.mode === "impl") {
       return (
         <ProgressBar
           parts={[{ n: dp.done, color: "#1677ff" }]}
@@ -481,12 +624,12 @@ export default function OrchestrationBoard({
         />
       );
     }
-    if (a.state === "구현" && dp?.mode === "fix") {
+    if (dp?.mode === "fix") {
       return <ProgressBar parts={[]} total={0} label={`수정 중 · 지적 ${dp.findings}건`} />;
     }
     return undefined;
   };
-  const staleAgents = o.agents.filter(isStale);
+  const staleAgents = isV2 ? [] : o.agents.filter(isStale);
 
   return (
     <div>
@@ -552,6 +695,52 @@ export default function OrchestrationBoard({
         </Row>
       </Card>
 
+      {isV2 && (
+        <Card style={{ marginBottom: 16 }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+            <PhaseBand phase={epic?.phase ?? "unknown"} raw={phaseRaw} />
+            {mover && (
+              <Alert
+                type={MOVER_TONE[mover.tone]}
+                showIcon
+                title={
+                  <Space size={8} wrap>
+                    <Text strong>지금 움직이는 쪽</Text>
+                    <Text>{mover.text}</Text>
+                    {mover.cmd && (
+                      <Text code copyable={{ text: mover.cmd }}>
+                        {mover.cmd}
+                      </Text>
+                    )}
+                  </Space>
+                }
+              />
+            )}
+            {epic?.autoRun && (
+              <Text type={epic.autoRun.lost ? "danger" : "secondary"} style={{ fontSize: 12 }}>
+                자동 실행: {epic.autoRun.lost ? "끊김 — 프로세스가 없습니다" : epic.autoRun.text}
+              </Text>
+            )}
+          </Space>
+        </Card>
+      )}
+
+      {contradictions.length > 0 && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title={`상태 모순 ${contradictions.length}건`}
+          description={
+            <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+              {contradictions.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
+
       {staleAgents.length > 0 && (
         <Alert
           type="warning"
@@ -578,6 +767,7 @@ export default function OrchestrationBoard({
         {cols.map((col, colIdx) => {
           const b = agentStateBadge(col);
           const items = o.agents.filter((a) => boardColumn(a.state) === col);
+          const ghosts = col === "대기" ? missing : [];
           const placement = placementFor(colIdx);
           // 5개 고정 열 → 폭을 균등하게 나눠 전체 너비를 채운다(좁은 화면에선 줄바꿈).
           return (
@@ -608,8 +798,12 @@ export default function OrchestrationBoard({
                     quips={quipList(quips?.board?.[a.agent])}
                     placement={placement}
                     console={consoleFor(a.agent)}
-                    progress={isDevRole(a.name) ? progressFor(a) : undefined}
+                    progress={progressFor(a)}
+                    dot={dotFor(a)}
                   />
+                ))}
+                {ghosts.map((a) => (
+                  <AgentCard key={`ghost-${a.name}`} a={a} epicKey={epicKey} empty />
                 ))}
               </div>
             </Col>

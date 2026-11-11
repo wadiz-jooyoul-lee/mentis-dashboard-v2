@@ -8,44 +8,37 @@ import { normAgentState, type AgentRow } from "@/lib/parseOrchestration";
 
 const at = (row: string[], i: number) => (i >= 0 && i < row.length ? row[i] : "");
 
-/** 정규화된 현재 단계 버킷. */
+/** 정규화된 현재 단계 버킷(단계 띠 한 칸). */
 export type PhaseKey =
   | "착수"
-  | "분석"
+  | "설계"
   | "구현"
   | "리뷰"
   | "통합"
+  | "배포"
   | "검증"
   | "해결"
   | "종료"
   | "unknown";
 
-/** 표준 단계 순서(타임라인 표시용). */
-export const PHASE_ORDER: PhaseKey[] = [
-  "착수",
-  "분석",
-  "구현",
-  "리뷰",
-  "통합",
-  "검증",
-  "해결",
-  "종료",
-];
+/** 단계 띠 여덟 칸. 종료는 띠에 그리지 않는다. */
+export const PHASE_ORDER: PhaseKey[] = ["착수", "설계", "구현", "리뷰", "통합", "배포", "검증", "해결"];
 
 /**
- * 실제 기록 리터럴을 표준 버킷으로 접는다.
- * 착수 / 분석·분석완료 / 구현중·산출중 / 리뷰중·수정중 / 통합·통합완료 / 검증·검증완료 / 해결 / 종료
+ * 단계값 13개(착수·설계·설계확인·구현·리뷰·수정·통합·배포·검증·실패분석·보류·해결·종료)를 띠 칸으로 접는다.
+ * 설계확인은 설계, 수정은 리뷰, 실패분석·보류는 검증 칸이다. 옛 값 분석은 설계, 산출은 구현으로 읽는다.
  */
 export function phaseKey(raw: string | null): PhaseKey {
   const s = (raw ?? "").replace(/\*/g, "").trim();
   if (!s) return "unknown";
   if (/종료/.test(s)) return "종료";
   if (/해결/.test(s)) return "해결";
-  if (/검증/.test(s)) return "검증";
+  if (/검증|실패|보류/.test(s)) return "검증";
+  if (/배포/.test(s)) return "배포";
   if (/통합/.test(s)) return "통합";
   if (/리뷰|수정/.test(s)) return "리뷰";
   if (/구현|산출/.test(s)) return "구현";
-  if (/분석/.test(s)) return "분석";
+  if (/설계|분석/.test(s)) return "설계";
   if (/착수/.test(s)) return "착수";
   return "unknown";
 }
@@ -69,13 +62,13 @@ export function phaseBadge(key: PhaseKey): BadgeStatus {
     case "종료":
     case "해결":
       return "success";
-    case "검증":
-    case "통합":
-      return "processing";
     case "리뷰":
       return "warning";
+    case "검증":
+    case "배포":
+    case "통합":
     case "구현":
-    case "분석":
+    case "설계":
     case "착수":
       return "processing";
     default:
@@ -236,6 +229,8 @@ export type OrderStatus = {
   shipRepo: string | null;
   /** 정기배포 릴리즈 노트 등록 기록 — (배포일, 저장소)마다 한 행. 없으면 빈 배열(미등록). */
   releaseNote: ReleaseNoteRow[];
+  /** `- **자동 실행**:` 줄 원문(실행 중 · pid … / 끝 — 이유 / 멈춤 — 이유). 없으면 null. */
+  autoRunLine: string | null;
   raw: string;
 };
 
@@ -643,6 +638,7 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     ship: parseShip(md),
     shipRepo: parseShipRepo(md),
     releaseNote: parseReleaseNote(md),
+    autoRunLine: md.match(/^- \*\*자동 실행\*\*:[ \t]*(.+)$/m)?.[1].trim() ?? null,
     raw: md,
   };
 }

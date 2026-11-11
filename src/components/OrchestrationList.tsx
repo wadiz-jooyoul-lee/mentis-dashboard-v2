@@ -26,14 +26,14 @@ const { Title, Text } = Typography;
 // 칸반 상태별 색(에이전트 카운트 배지용). STATE_ORDER와 동일 순서.
 const STATE_BADGES: Array<{ key: string; color: string }> = [
   { key: "대기", color: "#bfbfbf" },
-  { key: "분석", color: "cyan" },
-  { key: "구현", color: "blue" },
-  { key: "검증", color: "purple" },
-  { key: "리뷰", color: "gold" },
+  { key: "작업중", color: "blue" },
+  { key: "기다림", color: "cyan" },
+  { key: "사람 차례", color: "orange" },
+  { key: "막힘", color: "red" },
   { key: "완료", color: "green" },
 ];
 
-/** 에이전트 상태 분포를 상태별 색상 카운트 배지(최대 5개)로. 0인 상태는 생략. */
+/** 에이전트 상태 분포를 상태별 색상 카운트 배지로. 0인 상태는 생략. */
 function agentBadges(r: EpicSummary) {
   const shown = STATE_BADGES.filter(({ key }) => (r.counts[key] ?? 0) > 0);
   if (shown.length === 0) return <Text type="secondary">-</Text>;

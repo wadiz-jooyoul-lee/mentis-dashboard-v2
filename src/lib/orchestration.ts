@@ -46,6 +46,7 @@ import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 import { shipFromTestRuns } from "@/lib/shipFromTests";
 import { devProgress, type DevProgress } from "@/lib/devProgress";
+import { autoRunState, liveSessions, type AutoRun } from "@/lib/presence";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
 const KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
@@ -257,6 +258,11 @@ function orchestrationOf(key: string, statusMd: string | null): Orchestration | 
 
 export type Counts = { total: number } & Record<string, number>;
 
+/** /do 오더인가 — 상태 문서에 `## 지난 세션` 표가 있다. */
+function isV2Status(statusMd: string | null): boolean {
+  return !!statusMd && /(?:^|\n)##\s*지난 세션/.test(statusMd);
+}
+
 function countAgents(o: Orchestration): Counts {
   const c: Counts = { total: 0 };
   for (const a of o.agents) {
@@ -307,8 +313,7 @@ export type EpicSummary = {
   releaseNote: ReleaseNoteRow[];
 };
 
-// "일하는 중"인 상태 + 마지막 상태 변경(갱신) 후 STALE_MIN분 이상 경과면 정체(보드와 동일 기준).
-const CARD_ACTIVE_STATES = ["분석", "구현", "검증", "리뷰"];
+// /do 가 아닌 오더(작업 표시가 없음)는 작업중으로 마지막 상태 변경 후 30분이 지나면 정체로 본다.
 const CARD_STALE_MIN = 30;
 function agentStalled(a: { updatedAt: string; startedAt: string }): boolean {
   // 기준 = 마지막 상태 변경(갱신). 시:분 없으면 착수로 폴백, 그것도 없으면 판정 안 함(오탐 방지).
@@ -325,8 +330,9 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     ? [...o.events.map((e) => e.time), ...o.agents.map((a) => a.updatedAt).filter(Boolean)].sort()
     : [];
   const st = statusMd ? parseOrderStatus(statusMd, key) : null;
+  const live = st && isV2Status(statusMd) ? liveSessions(key) : null;
   const stalled = !!o?.agents.some(
-    (a) => CARD_ACTIVE_STATES.includes(a.state) && agentStalled(a)
+    (a) => a.state === "막힘" || (a.state === "작업중" && (live ? !live[a.agent] : agentStalled(a)))
   );
   // 대표 아바타: 핀된 오케스트레이터 → 최빈 그룹 대표 → (미핀) 균형 배정 대표.
   // 미핀 폴백도 epicAvatars가 실제로 핀할 그룹(pickBalancedGroup)과 같은 규칙을 써야
@@ -769,6 +775,15 @@ export type EpicDetail = {
   resolved: boolean;
   /** status.md 현재 단계 라벨(에이전트 상태표가 아직 없을 때 표시용). */
   phaseLabel: string | null;
+  /** status.md 단계값 원문(설계확인·수정·실패분석 등 13개)과 띠 칸. */
+  phaseRaw: string | null;
+  phase: PhaseKey;
+  /** /do 오더(상태 문서에 `## 지난 세션` 표가 있음). 담당자 다섯을 그린다. */
+  isV2: boolean;
+  /** 자동 실행 표지 줄과 실제 프로세스 생존. 줄이 없으면 null. */
+  autoRun: AutoRun | null;
+  /** 이 오더를 잡고 일하는 살아 있는 세션: 담당자 슬러그 → 세션 아이디. */
+  sessions: Record<string, string>;
   /** dobby-ship 배포 단계 — 환경마다 한 행. 보드 관제 카드용. 없으면 빈 배열. */
   ship: ShipRow[];
   /** 정기배포 릴리즈 노트 등록 기록. 보드 관제 카드용. 없으면 빈 배열(미등록). */
@@ -1441,7 +1456,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     ? buildAgentWorks(epicKey, orchestration, st)
     : slugStubs(epicKey);
   const commitChanges = opts.withDiffs && st && statusMd ? buildCommitChanges(statusMd, st.worktrees) : undefined;
-  const dev = orchestration.agents.find((a) => isDevRole(a.name) && a.state === "구현");
+  const dev = orchestration.agents.find((a) => isDevRole(a.name) && a.state === "작업중");
   const designMd = readFileSafe(path.join(dir, "design.md"));
   const avatars = epicAvatars(
     epicKey,
@@ -1468,6 +1483,11 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
     phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
+    phaseRaw: st?.phaseRaw ?? null,
+    phase: st?.phase ?? "unknown",
+    isV2: isV2Status(statusMd),
+    autoRun: autoRunState(st?.autoRunLine ?? null),
+    sessions: liveSessions(epicKey),
     ship: shipFromTestRuns(orderDir(epicKey), st?.ship ?? []),
     releaseNote: st?.releaseNote ?? [],
     devProgress: dev ? devProgress(dir, dev.agent, designMd, st?.worktrees ?? [], reviews) : null,
@@ -1588,13 +1608,13 @@ export function orchestrationMetrics(): Metric[] {
   const epics = listEpics();
   if (epics.length === 0) return [];
   const sum = (k: string) => epics.reduce((n, e) => n + (e.counts[k] ?? 0), 0);
-  const impl = sum("구현") + sum("검증");
-  const review = sum("리뷰");
+  const working = sum("작업중");
+  const human = sum("사람 차례") + sum("막힘");
   const done = sum("완료");
   return [
     { label: "오더", value: epics.length },
-    ...(impl > 0 ? [{ label: "진행중", value: impl, color: "blue" }] : []),
-    ...(review > 0 ? [{ label: "리뷰", value: review, color: "orange" }] : []),
+    ...(working > 0 ? [{ label: "작업중", value: working, color: "blue" }] : []),
+    ...(human > 0 ? [{ label: "사람 차례", value: human, color: "orange" }] : []),
     ...(done > 0 ? [{ label: "완료", value: done, color: "green" }] : []),
   ];
 }
