@@ -128,6 +128,21 @@ function useHoverQuip(quips: Quip[]) {
   };
 }
 
+/** 담당자 상태 → 아바타 표정 이름(대기·분석·구현·리뷰·완료). 작업중은 역할로, 사람 차례·막힘은 "생각"으로 그린다. */
+function faceOf(state: string | undefined, name: string | undefined): string | undefined {
+  switch (state) {
+    case "작업중":
+      return name === "기획자" ? "분석" : name === "리뷰어" ? "리뷰" : "구현";
+    case "기다림":
+      return "대기";
+    case "사람 차례":
+    case "막힘":
+      return "분석";
+    default:
+      return state;
+  }
+}
+
 /**
  * 오더의 에이전트에 배정된 그룹 아바타를 그린다.
  * bts/fromis = 멤버 오리지널 SVG(상태로 표정 반영), 그 외/미배정 = 도비 아이콘.
@@ -160,21 +175,22 @@ export default function GroupAvatar({
   /** true면 말풍선 헤더를 멤버/역할 대신 **그룹 이름**(방탄소년단·프로미스나인·아이브·도비)으로 표시. */
   showGroup?: boolean;
 }) {
+  const face = faceOf(state, name);
   // 아바타 SVG는 노드가 많다. 말풍선이 열고 닫힐 때마다 다시 그리지 않도록 떼어 둔다.
   const icon = useMemo(
     () =>
       avatar?.group === "bts" && avatar.member ? (
-        <BtsAvatar member={avatar.member} size={size} state={state} />
+        <BtsAvatar member={avatar.member} size={size} state={face} />
       ) : avatar?.group === "fromis" && avatar.member ? (
-        <Fromis9Avatar member={avatar.member} size={size} state={state} />
+        <Fromis9Avatar member={avatar.member} size={size} state={face} />
       ) : avatar?.group === "ive" && avatar.member ? (
-        <IveAvatar member={avatar.member} size={size} state={state} />
+        <IveAvatar member={avatar.member} size={size} state={face} />
       ) : avatar?.group === "rescene" && avatar.member ? (
-        <ResceneAvatar member={avatar.member} size={size} state={state} />
+        <ResceneAvatar member={avatar.member} size={size} state={face} />
       ) : (
-        <DobbyIcon size={size} expression={dobbyExpression(state ?? "")} color={dobbyColor(slug)} />
+        <DobbyIcon size={size} expression={dobbyExpression(face ?? "")} color={dobbyColor(slug)} />
       ),
-    [avatar, state, size, slug]
+    [avatar, face, size, slug]
   );
 
   // 소감이 하나뿐이면 스스로 말하지 않는다 — 바꿔 가며 보여줄 것이 없는데 계속 띄우면

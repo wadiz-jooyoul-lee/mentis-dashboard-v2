@@ -365,9 +365,14 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
   // `/do {키} auto env=` 오더는 통합 뒤 배포·검증까지 run.sh 가 이어 간다(판단 요청에 답한 뒤 다시 띄울 때도 여기로 온다).
   const autoEnv = md.match(/^- \*\*자동 배포 환경\*\*: *(\S+)/m)?.[1];
   const autoDeploy = !!autoEnv;
-  if (phase === "분석") {
+  // 단계값은 "지금 누구 차례인가"다. 배포는 자동 배포 오더만 셸이 잇고, 보류는 사람의 판단 답이 먼저다.
+  if (phase === "설계" || phase === "설계확인" || phase === "분석") {
     if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
-  } else if (phase !== "구현" && phase !== "리뷰" && phase !== "검증" && !(autoDeploy && phase === "통합")) {
+  } else if (phase === "배포" && !autoDeploy) {
+    return { ok: false, reason: `배포 차례입니다. 터미널에서 /dobby-ship ${k} {환경} 으로 배포해 주세요` };
+  } else if (phase === "보류") {
+    return { ok: false, reason: `판단 요청에 답해야 합니다. 터미널에서 /do ${k} 로 답해 주세요` };
+  } else if (!["구현", "리뷰", "수정", "통합", "배포", "검증", "실패분석"].includes(phase)) {
     return {
       ok: false,
       reason: !phase || phase === "착수" ? "설계 전입니다" : `지금 단계(${phase})에서는 자동으로 진행할 일이 없습니다`,

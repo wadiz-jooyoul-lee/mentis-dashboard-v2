@@ -16,8 +16,10 @@ export type AgentRow = {
   state: AgentState;
   round: string;
   updatedAt: string;
-  /** 작업 시작 시각(활성 상태 진입). 정체 감지는 이 값 기준. 없거나 날짜만이면 감지 안 함. */
+  /** 이 상태가 된 시각. 작업중·기다림의 경과는 이 값부터 잰다. */
   startedAt: string;
+  /** 사람 할 일(사람 차례·막힘일 때만). 명령이나 하는 곳. */
+  todo?: string;
 };
 
 export type ScopeRow = { area: string; owner: string; reason: string };
@@ -37,15 +39,36 @@ export type Orchestration = {
 const at = (row: string[], i: number) => (i >= 0 && i < row.length ? row[i] : "");
 
 /**
- * 정식 상태 흐름 순서(칸반 고정 열). 각 에이전트는 자기 상태 집합 안에서만 움직인다.
- * 구현·산출: 대기→구현→완료 / 분석·감사: 대기→분석→완료 / 리뷰: 대기→리뷰→완료 / 인라인: 대기→분석→구현→완료
- * 그 외(정의 밖) 값은 뒤에 붙어 사라지지 않는다.
+ * 칸반 고정 열. 상태는 "다음에 누가 움직이나"로 갈린다(대기·작업중·기다림·사람 차례·막힘·완료).
+ * 정의 밖 값은 뒤에 붙어 사라지지 않는다.
  */
-export const STATE_ORDER: string[] = ["대기", "분석", "진행중", "리뷰", "완료"];
+export const HUMAN_COL = "사람 차례 · 막힘";
+export const STATE_ORDER: string[] = ["대기", "작업중", "기다림", HUMAN_COL, "완료"];
 
-/** 칸반 열. 상태값 `구현`·`검증`(개발자가 테스터로 일하는 중)은 "진행중" 열에 함께 그린다. */
+/** 칸반 열. 사람 차례와 막힘은 둘 다 사람이 움직여야 해서 한 열에 그린다. */
 export function boardColumn(state: AgentState): string {
-  return state === "구현" || state === "검증" ? "진행중" : state;
+  return state === "사람 차례" || state === "막힘" ? HUMAN_COL : state;
+}
+
+/** /do 오더의 담당자 다섯. 개발자 슬러그는 오더마다 달라 이름으로 찾는다. */
+export const FIVE_ROLES: { slug: string | null; name: string }[] = [
+  { slug: "analysis-agent", name: "기획자" },
+  { slug: null, name: "개발자" },
+  { slug: "review-agent", name: "리뷰어" },
+  { slug: "deploy-agent", name: "배포담당" },
+  { slug: "test-agent", name: "테스터" },
+];
+
+/** 단계값 → 그 단계를 맡는 담당자 이름(단계값은 "지금 누구 차례인가"다). */
+export function phaseOwner(phase: string): string | null {
+  switch (phase) {
+    case "설계": case "설계확인": case "실패분석": case "보류": case "분석": return "기획자";
+    case "구현": case "수정": case "통합": return "개발자";
+    case "리뷰": return "리뷰어";
+    case "배포": return "배포담당";
+    case "검증": return "테스터";
+    default: return null;
+  }
 }
 
 /** 개발 담당 행인가. 분석과 개발을 나누기 전 오더는 이름이 "분석/개발자"다. */
@@ -54,19 +77,17 @@ export function isDevRole(name: string | undefined): boolean {
 }
 
 /**
- * 상태 정규화 → 5개(대기·분석·구현·리뷰·완료)로 접는다. 옛 상태값도 여기서 매핑:
- * 분석중·진행중→분석 / 구현중·산출중·수정중→구현 / 리뷰중→리뷰 / 재통합대기·(분석)완료→완료.
+ * 상태 정규화 → 6개(대기·작업중·기다림·사람 차례·막힘·완료). go-dobby dobby_norm_state 와 같은 규칙이다.
+ * 옛 값(분석·구현·리뷰·검증·진행·수정·반영·산출)은 작업중, 재통합은 완료로 접는다.
  */
 export function normAgentState(v: string): AgentState {
   const s = v.replace(/\*/g, "").trim();
   const base = s.split(/[(（]/)[0].trim(); // "구현(round-3)" → "구현"
-  if (s.includes("완료")) return "완료"; // 완료·분석완료·구현완료
-  if (s.includes("재통합")) return "완료"; // 재통합대기 → 완료(리뷰 통과·통합 단계)
-  if (s.includes("수정") || s.includes("반영")) return "구현"; // 수정 → 구현
-  if (s.includes("리뷰")) return "리뷰"; // 리뷰·리뷰중 (리뷰 진행중도 여기서 먼저 잡힘)
-  if (s.includes("산출") || s.includes("구현")) return "구현"; // 산출·구현·구현 진행중 → 구현
-  // "진행중"은 특정 단계 단어가 없는 활성 상태 → 분석/조사로 본다(리뷰로 오분류 금지). 분석 진행중도 여기.
-  if (s.includes("분석") || s.includes("진행")) return "분석";
+  if (s.includes("완료") || s.includes("재통합")) return "완료";
+  if (s.includes("막힘") || s.includes("막혔")) return "막힘";
+  if (s.includes("사람")) return "사람 차례";
+  if (s.includes("기다림")) return "기다림";
+  if (/작업중|수정|반영|리뷰|산출|구현|분석|진행|검증/.test(s)) return "작업중";
   if (s.includes("대기")) return "대기";
   return base || "미상"; // 모르는 값도 라벨 그대로(사라지지 않게)
 }
@@ -145,6 +166,7 @@ export function parseOrchestration(md: string): Orchestration {
     const iRound = columnIndex(aT.headers, "라운드");
     const iUpd = columnIndex(aT.headers, "갱신");
     const iStart = columnIndex(aT.headers, "착수", "시작");
+    const iTodo = columnIndex(aT.headers, "사람 할 일");
     for (const r of aT.rows) {
       agents.push({
         agent: at(r, iAgent),
@@ -156,6 +178,7 @@ export function parseOrchestration(md: string): Orchestration {
         round: at(r, iRound),
         updatedAt: at(r, iUpd),
         startedAt: at(r, iStart),
+        todo: at(r, iTodo) || undefined,
       });
     }
   }
@@ -220,11 +243,11 @@ export function parseOrchestration(md: string): Orchestration {
 
 const STATE_COLOR: Record<string, string> = {
   대기: "#bfbfbf",
-  분석: "cyan",
-  구현: "blue",
-  진행중: "blue",
-  검증: "purple",
-  리뷰: "gold",
+  작업중: "blue",
+  기다림: "cyan",
+  "사람 차례": "orange",
+  막힘: "red",
+  [HUMAN_COL]: "orange",
   완료: "green",
 };
 
@@ -234,4 +257,67 @@ export function agentStateBadge(state: AgentState): {
   text: string;
 } {
   return { color: STATE_COLOR[state] ?? "#d9d9d9", text: state || "-" };
+}
+
+/** 오더 머리 한 줄 "지금 움직이는 쪽". tone 은 색, cmd 는 사람이 칠 명령(복사 단추). */
+export type Mover = {
+  tone: "blocked" | "human" | "working" | "auto" | "after";
+  text: string;
+  cmd?: string;
+  /** 이 줄 때문에 사람 차례로 바꿔 보이는 카드(세션 끊김·자동 실행 없음). */
+  slug?: string;
+};
+
+const HEARTBEAT_MIN = 5;
+
+/**
+ * 담당자 상태표·세션 생존·자동 실행·릴리즈 노트를 맞춰 지금 누가 움직이는지 고른다. 처음 맞는 규칙 하나다.
+ * 1 막힘 · 2 사람 차례 · 3 작업중+세션 · 4 작업중인데 세션 없음(끊김) · 5 기다림(심박 5분)
+ * 6·7 단계 담당자가 대기면 자동 실행 유무로 · 8~10 검증 통과 뒤 릴리즈 노트.
+ */
+export function whoMoves(p: {
+  key: string;
+  agents: AgentRow[];
+  phase: string;
+  sessions: Record<string, string>;
+  autoRunning: boolean;
+  releaseDates: string[];
+  now?: Date;
+}): Mover | null {
+  const now = p.now ?? new Date();
+  const label = (a: AgentRow) => a.name || a.agent;
+  const doCmd = `/do ${p.key}`;
+  const by = (st: string) => p.agents.find((a) => a.state === st);
+  const blocked = by("막힘");
+  if (blocked) return { tone: "blocked", text: `${label(blocked)} 막힘 — ${blocked.desc ?? ""}`, cmd: blocked.todo };
+  const human = by("사람 차례");
+  if (human) return { tone: "human", text: `${label(human)} — ${human.desc ?? ""}`, cmd: human.todo };
+  const working = p.agents.filter((a) => a.state === "작업중");
+  const live = working.find((a) => p.sessions[a.agent]);
+  if (live) return { tone: "working", text: `${label(live)} 작업 중 — ${live.desc ?? ""}` };
+  if (working[0] && !p.autoRunning)
+    return { tone: "human", text: `${label(working[0])} 세션 끊김 — 이어서 진행하기`, cmd: doCmd, slug: working[0].agent };
+  if (working[0]) return { tone: "auto", text: `자동 실행 — ${label(working[0])} 세션 시작 중` };
+  const waiting = by("기다림");
+  if (waiting) {
+    const t = new Date((waiting.updatedAt || "").replace(" ", "T")).getTime();
+    const fresh = !isNaN(t) && now.getTime() - t < HEARTBEAT_MIN * 60000;
+    return fresh || p.autoRunning
+      ? { tone: "auto", text: `자동 진행 — ${waiting.desc ?? "기다림"}` }
+      : { tone: "human", text: `${label(waiting)} 기다림 — 자동 실행이 지켜보지 않음`, cmd: doCmd, slug: waiting.agent };
+  }
+  const owner = phaseOwner(p.phase);
+  const next = owner ? p.agents.find((a) => (owner === "개발자" ? isDevRole(a.name) : a.name === owner)) : undefined;
+  if (next?.state === "대기")
+    return p.autoRunning
+      ? { tone: "auto", text: `자동 진행 — 곧 ${owner} 차례` }
+      : { tone: "human", text: `${owner} 차례 — 자동 실행이 꺼져 있습니다`, cmd: doCmd, slug: next.agent };
+  const tester = p.agents.find((a) => a.name === "테스터");
+  if (/^(해결|종료)$/.test(p.phase) || (p.phase === "검증" && tester?.state === "완료")) {
+    if (p.releaseDates.length === 0) return { tone: "after", text: "릴리즈 노트 등록", cmd: `/dobby-release ${p.key}` };
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const ahead = p.releaseDates.filter((d) => d >= today).sort()[0];
+    return { tone: "after", text: ahead ? `라이브 배포 대기 — ${ahead} 정기 배포` : "라이브 반영됨" };
+  }
+  return null;
 }
