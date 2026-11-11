@@ -92,7 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
         <span style={{ display: "inline-flex", alignItems: "center", gap: 20 }}>
           <LanToggle />
-          <AutoRefresh intervalMs={30000} />
+          <AutoRefresh intervalMs={10000} />
         </span>
       </Header>
       <Content

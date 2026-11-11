@@ -18,9 +18,9 @@ type State = { items: NextItem[]; error: string | null; loaded: boolean; at: num
 let state: State = { items: [], error: null, loaded: false, at: 0 };
 const subs = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
-const POLL_MS = 30_000;
+const POLL_MS = 10_000;
 
-/** fresh 면 서버 저장분(20초)을 건너뛰고 지금 다시 판정한다. */
+/** fresh 면 서버 저장분(10초)을 건너뛰고 지금 다시 판정한다. */
 export async function refreshNextActions(fresh = false): Promise<void> {
   try {
     const r = await (await fetch(`/api/orders?next=1${fresh ? "&fresh=1" : ""}`, { cache: "no-store" })).json();

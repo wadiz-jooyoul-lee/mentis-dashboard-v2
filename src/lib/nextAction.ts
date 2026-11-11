@@ -39,7 +39,7 @@ export type NextItem = {
 };
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-const CACHE_MS = 20_000;
+const CACHE_MS = 10_000;
 let cache: { at: number; items: NextItem[]; error: string | null } | null = null;
 let inflight: Promise<{ items: NextItem[]; error: string | null }> | null = null;
 
@@ -121,7 +121,7 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
   return { items, error: null };
 }
 
-/** 판정 결과. 판정 한 번이 수 초라 20초 동안은 저장해 둔 것을 주고, 동시에 온 요청은 한 번의 판정을 함께 기다린다. fresh 면 저장분을 건너뛴다. */
+/** 판정 결과. 판정 한 번이 수 초라 10초 동안은 저장해 둔 것을 주고, 동시에 온 요청은 한 번의 판정을 함께 기다린다. fresh 면 저장분을 건너뛴다. */
 export async function nextActions(fresh = false): Promise<{ items: NextItem[]; error: string | null; at: number }> {
   if (!fresh && cache && Date.now() - cache.at < CACHE_MS) return cache;
   inflight ??= load().finally(() => {
