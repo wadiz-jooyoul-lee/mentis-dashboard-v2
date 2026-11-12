@@ -14,7 +14,18 @@ import { DO_AUTO_ENVS, goDobbyLib, listFinishedV2Runs, startResolve, startV2Run 
 
 /** mine 사람이 할 일 있음(TODO) · notice 알림만 · auto 자동 진행 중 · wait 날짜나 조건 기다림 · work 터미널에서 작업 중 */
 export type NextGroup = "mine" | "notice" | "auto" | "wait" | "work";
-export type NextAction = "resolve" | "approve" | "approve-deploy" | "autorun" | "deploy" | "drift" | "";
+export type NextAction = "resolve" | "approve" | "approve-deploy" | "autorun" | "deploy" | "drift" | "ask" | "";
+
+/** 자동 실행이 남긴 부탁(오더 폴더 ask.json). action 은 확인 명령이 통과하면 저절로 이어 간다 */
+export type AskInfo = {
+  kind: "action" | "choice" | "input";
+  title: string;
+  why: string;
+  todo: string;
+  choices: string[];
+  /** 했다고 답했는데 확인이 안 됐을 때 남는 메모 */
+  note: string;
+};
 
 export type NextItem = {
   key: string;
@@ -36,6 +47,8 @@ export type NextItem = {
   note: string;
   /** 판단 요청이면 설계 문서 '확인이 필요했던 것' 절 */
   detail: string;
+  /** 부탁 카드(kind ask)일 때만 */
+  ask?: AskInfo;
 };
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -60,6 +73,22 @@ function dobbyBash(body: string, timeoutMs = 60_000): Promise<string> {
       else resolve(stdout);
     });
   });
+}
+
+function readAsk(key: string): AskInfo | undefined {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(getMetaDir(), key, "ask.json"), "utf8"));
+    return {
+      kind: j.kind,
+      title: String(j.title ?? ""),
+      why: String(j.why ?? ""),
+      todo: String(j.todo ?? ""),
+      choices: Array.isArray(j.choices) ? j.choices.map(String) : [],
+      note: String(j.note ?? ""),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function decisionDetail(key: string): string {
@@ -116,6 +145,7 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       action: (raw.action as NextAction) ?? "",
       note: raw.group === "mine" ? stopped.get(key) ?? "" : "",
       detail: raw.kind === "decision" ? decisionDetail(key) : "",
+      ...(raw.kind === "ask" ? { ask: readAsk(key) } : {}),
     });
   }
   return { items, error: null };
@@ -136,7 +166,8 @@ export async function nextActions(fresh = false): Promise<{ items: NextItem[]; e
 export async function runNextAction(
   key: string,
   action: NextAction,
-  env?: string
+  env?: string,
+  value?: string
 ): Promise<{ ok: boolean; reason?: string; jobId?: string }> {
   if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "잘못된 오더 키입니다" };
   const k = shq(key);
@@ -187,6 +218,12 @@ export async function runNextAction(
         const why = await prepareDeploy();
         if (why) return { ok: false, reason: why };
         return startV2Run(key);
+      }
+      case "ask": {
+        // 답만 적는다. 기다리던 run.sh 가 1분 안에 읽고 이어 간다(멈추기면 끝낸다).
+        if (!value?.trim()) return { ok: false, reason: "답이 비었습니다" };
+        await dobbyBash(`dobby_v2_ask_answer ${k} ${shq(value.trim())}`);
+        return { ok: true };
       }
       default:
         return { ok: false, reason: "모르는 동작입니다" };
