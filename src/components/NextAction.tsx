@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Input, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
 import { BellFilled, ClockCircleOutlined, CopyOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import { copyText } from "@/lib/clipboard";
@@ -158,7 +158,13 @@ export function NextActionControls({
     }
     setBusy(false);
     if (res.ok) {
-      message.success(action === "resolve" ? "해결 처리를 시작했습니다." : "시작했습니다. 진행은 오더 콘솔에서 볼 수 있습니다.");
+      message.success(
+        action === "resolve"
+          ? "해결 처리를 시작했습니다."
+          : action === "ask"
+            ? "답을 보냈습니다. 자동 실행이 1분 안에 읽고 이어 갑니다."
+            : "시작했습니다. 진행은 오더 콘솔에서 볼 수 있습니다."
+      );
       onDone?.();
       refreshNextActions();
       router.refresh();
@@ -187,7 +193,55 @@ export function NextActionControls({
   const withDeploy = item.kind === "design-confirm" || item.kind === "run-ready" || item.kind === "resume";
 
   const buttons: React.ReactNode[] = [];
-  if (canAct && item.action === "deploy") {
+  if (canAct && item.action === "ask" && item.ask) {
+    const a = item.ask;
+    const stopBtn = (
+      <Popconfirm key="stop" title="자동 실행을 멈출까요?" okText="멈추기" cancelText="취소" onConfirm={() => post("ask", { value: "멈추기" })}>
+        <Button size="small" danger loading={busy}>
+          멈추기
+        </Button>
+      </Popconfirm>
+    );
+    buttons.push(
+      <Space key="ask" orientation="vertical" size={4} style={{ width: "100%" }}>
+        {a.why && <Text style={{ fontSize: 12 }}>{a.why}</Text>}
+        {a.todo && (
+          <Text style={{ fontSize: 12 }} code copyable={{ text: a.todo.replace(/^[^:]*:\s*/, "") }}>
+            {a.todo}
+          </Text>
+        )}
+        {a.note && <Text type="warning" style={{ fontSize: 12 }}>{a.note}</Text>}
+        <Space wrap size={6}>
+          {a.kind === "action" && (
+            <Tooltip title="1분마다 저절로 확인합니다. 누르면 지금 다시 확인합니다.">
+              <Button size="small" type="primary" loading={busy} onClick={() => post("ask", { value: "했어요" })}>
+                했어요
+              </Button>
+            </Tooltip>
+          )}
+          {a.kind === "choice" &&
+            a.choices
+              .filter((c) => c !== "멈추기")
+              .map((c, i) => (
+                <Button key={c} size="small" type={i === 0 ? "primary" : "default"} loading={busy} onClick={() => post("ask", { value: c })}>
+                  {c}
+                </Button>
+              ))}
+          {a.kind === "input" && (
+            <Input.Search
+              size="small"
+              placeholder="값을 적어 주세요"
+              enterButton="보내기"
+              loading={busy}
+              style={{ width: 260 }}
+              onSearch={(v) => v.trim() && post("ask", { value: v.trim() })}
+            />
+          )}
+          {stopBtn}
+        </Space>
+      </Space>
+    );
+  } else if (canAct && item.action === "deploy") {
     buttons.push(
       deployControl(
         "deploy",

@@ -106,9 +106,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
 
-  // 다음 할 일 버튼: { next: 동작, key, env? } — 셸 헬퍼로 상태를 바꾸고 필요하면 자동 실행을 띄운다.
+  // 다음 할 일 버튼: { next: 동작, key, env?, value? } — value 는 부탁 카드의 답 — 셸 헬퍼로 상태를 바꾸고 필요하면 자동 실행을 띄운다.
   if (body?.next) {
-    const r = await runNextAction(String(body?.key ?? ""), String(body.next) as NextAction, body?.env ? String(body.env) : undefined);
+    const r = await runNextAction(
+      String(body?.key ?? ""),
+      String(body.next) as NextAction,
+      body?.env ? String(body.env) : undefined,
+      body?.value != null ? String(body.value) : undefined
+    );
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId ?? null }, { status: 202 });
   }
