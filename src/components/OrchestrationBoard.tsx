@@ -557,6 +557,7 @@ export default function OrchestrationBoard({
         sessions,
         autoRunning,
         releaseDates: (epic?.releaseNote ?? []).map((r) => r.date),
+        qa: epic?.qaRun ?? null,
       })
     : null;
   const dotFor = (a: AgentRow): Dot | undefined =>
@@ -568,10 +569,12 @@ export default function OrchestrationBoard({
   if (isV2) {
     for (const a of workingNow)
       if (dotFor(a) === "lost") contradictions.push(`${a.name || a.agent}: 작업중인데 살아 있는 세션이 없습니다(세션 끊김)`);
-    if (workingNow.length > 1)
+    // QA 중에는 감시(기획자)와 작업 세션 담당자가 함께 일하고, 단계는 그대로 둔다
+    const qaOn = epic?.qaRun === "active";
+    if (workingNow.length > 1 && !qaOn)
       contradictions.push(`작업중인 담당자가 ${workingNow.length}명입니다(${workingNow.map((a) => a.name || a.agent).join(", ")})`);
     const off = workingNow.find((a) => owner && (owner === "개발자" ? !isDevRole(a.name) : a.name !== owner));
-    if (off) contradictions.push(`단계는 ${phaseRaw}(${owner} 차례)인데 ${off.name || off.agent}가 작업중입니다`);
+    if (off && !qaOn) contradictions.push(`단계는 ${phaseRaw}(${owner} 차례)인데 ${off.name || off.agent}가 작업중입니다`);
     if (epic?.autoRun?.lost) contradictions.push("자동 실행이 실행 중으로 적혀 있지만 프로세스가 없습니다(자동 실행 끊김)");
   }
 
@@ -595,8 +598,17 @@ export default function OrchestrationBoard({
   const testCounts = latestRun?.content ? parseReport(latestRun.content).counts : null;
   const dp: DevProgress | null = epic?.devProgress ?? null;
   // 테스터 막대는 테스터 행(옛 오더는 단계 검증의 개발자 행), 개발자 막대는 개발자 행에 붙인다.
+  const qp = epic?.qaProgress ?? null;
   const progressFor = (a: AgentRow): ReactNode => {
     if (a.state !== "작업중") return undefined;
+    if (qp && (qp.stage === "QA 리뷰" ? a.name === "리뷰어" : isDevRole(a.name)))
+      return (
+        <ProgressBar
+          parts={[{ n: qp.done, color: qp.stage === "QA 리뷰" ? "#ff4d4f" : "#1677ff" }]}
+          total={qp.total}
+          label={`${qp.stage} ${qp.done} / ${qp.total} 버그 (${Math.round((qp.done / qp.total) * 100)}%)`}
+        />
+      );
     const tester = a.name === "테스터" || (isDevRole(a.name) && phaseRaw === "검증");
     if (tester && testCounts) {
       const { total: t, pass, fail, skip, warn } = testCounts;

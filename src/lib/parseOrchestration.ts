@@ -272,7 +272,7 @@ const HEARTBEAT_MIN = 5;
 
 /**
  * 담당자 상태표·세션 생존·자동 실행·릴리즈 노트를 맞춰 지금 누가 움직이는지 고른다. 처음 맞는 규칙 하나다.
- * 1 막힘 · 2 사람 차례 · 3 작업중+세션 · 4 작업중인데 세션 없음(끊김) · 5 기다림(심박 5분)
+ * 1 막힘 · 2 사람 차례 · QA 감시(끊김·진행 중) · 3 작업중+세션 · 4 작업중인데 세션 없음(끊김) · 5 기다림(심박 5분)
  * 6·7 단계 담당자가 대기면 자동 실행 유무로 · 8~10 검증 통과 뒤 릴리즈 노트.
  */
 export function whoMoves(p: {
@@ -282,6 +282,8 @@ export function whoMoves(p: {
   sessions: Record<string, string>;
   autoRunning: boolean;
   releaseDates: string[];
+  /** QA 감시 진행. 진행 중이면 단계와 상관없이 QA 로 안내한다. */
+  qa?: "active" | "lost" | null;
   now?: Date;
 }): Mover | null {
   const now = p.now ?? new Date();
@@ -292,7 +294,10 @@ export function whoMoves(p: {
   if (blocked) return { tone: "blocked", text: `${label(blocked)} 막힘 — ${blocked.desc ?? ""}`, cmd: blocked.todo };
   const human = by("사람 차례");
   if (human) return { tone: "human", text: `${label(human)} — ${human.desc ?? ""}`, cmd: human.todo };
+  if (p.qa === "lost") return { tone: "human", text: "QA 감시 끊김 — 다시 시작하거나 멈추기", cmd: `/dobby-qa ${p.key}` };
   const working = p.agents.filter((a) => a.state === "작업중");
+  if (p.qa === "active")
+    return { tone: "working", text: working.length ? `QA 진행 중 — ${working.map((a) => `${label(a)} ${a.desc ?? ""}`.trim()).join(" · ")}` : "QA 감시 중 — 다음 감시를 기다립니다" };
   const live = working.find((a) => p.sessions[a.agent]);
   if (live) return { tone: "working", text: `${label(live)} 작업 중 — ${live.desc ?? ""}` };
   if (working[0] && !p.autoRunning)
