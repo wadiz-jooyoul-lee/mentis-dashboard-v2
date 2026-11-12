@@ -102,7 +102,7 @@ export default function ArtifactListView({ items }: { items: ArtifactEntry[] }) 
     );
   }
 
-  const orders = new Set(items.map((i) => i.epicKey)).size;
+  const orders = new Set(items.filter((i) => i.epicKey).map((i) => i.epicKey)).size;
 
   return (
     <div>
@@ -141,9 +141,11 @@ export default function ArtifactListView({ items }: { items: ArtifactEntry[] }) 
                 <ShareAltOutlined style={{ color: "#1677ff" }} />
                 {/* 옛 불릿 형식은 슬러그가 없어 파서가 legacy를 붙인다 — 사용자에겐 의미 없어 숨긴다. */}
                 {a.slug !== "legacy" && <Tag style={{ margin: 0 }}>{a.slug}</Tag>}
-                <Tag color={a.workType === "code" ? "blue" : "purple"} style={{ margin: 0 }}>
-                  {a.workType === "code" ? "개발" : "비개발"}
-                </Tag>
+                {a.epicKey && (
+                  <Tag color={a.workType === "code" ? "blue" : "purple"} style={{ margin: 0 }}>
+                    {a.workType === "code" ? "개발" : "비개발"}
+                  </Tag>
+                )}
               </Space>
 
               {/* 제목 자체가 아티팩트로 가는 링크다 — 카드마다 큰 버튼을 두는 것보다 조용하다. */}
@@ -158,9 +160,15 @@ export default function ArtifactListView({ items }: { items: ArtifactEntry[] }) 
               </a>
 
               <div style={{ marginTop: 6 }}>
-                <Link href={`/orchestration/${a.epicKey}`} style={{ fontSize: 13 }}>
-                  {a.epicKey}
-                </Link>
+                {a.epicKey ? (
+                  <Link href={`/orchestration/${a.epicKey}`} style={{ fontSize: 13 }}>
+                    {a.epicKey}
+                  </Link>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 13 }}>
+                    연결된 오더 없음
+                  </Text>
+                )}
                 {a.orderTitle && (
                   <Text type="secondary" style={{ fontSize: 13 }} ellipsis>
                     {" · "}

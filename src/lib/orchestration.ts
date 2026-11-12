@@ -376,6 +376,7 @@ export function listEpics(): EpicSummary[] {
 
 /** 아티팩트 한 건 + 그것을 낸 오더 정보(아티팩트 모아보기 화면용). */
 export type ArtifactEntry = ArtifactShare & {
+  /** 빈 문자열이면 오더에 연결되지 않은 아티팩트(모음 파일). */
   epicKey: string;
   /** 오더 제목(status.md). 없으면 null. */
   orderTitle: string | null;
@@ -420,7 +421,9 @@ function parenNote(v: string | null): string | null {
  */
 export function listArtifacts(): ArtifactEntry[] {
   const out: ArtifactEntry[] = [];
-  for (const e of listEpics()) {
+  // 키가 빈 항목은 메타 폴더 바로 아래 모음 파일 — 오더에 연결되지 않은 아티팩트다
+  const sources = [...listEpics(), { epicKey: "", title: null, workType: null }];
+  for (const e of sources) {
     const shares = readArtifactShares(e.epicKey);
     if (shares.length === 0) continue;
     const fileMtime = mtimeText(path.join(orderDir(e.epicKey), "artifact-share.md"));
