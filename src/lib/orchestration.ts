@@ -46,7 +46,7 @@ import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 import { shipFromTestRuns } from "@/lib/shipFromTests";
 import { devProgress, type DevProgress } from "@/lib/devProgress";
-import { autoRunState, liveSessions, type AutoRun } from "@/lib/presence";
+import { autoRunState, liveSessions, qaProgress, qaRun, type AutoRun, type QaProgress, type QaRun } from "@/lib/presence";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
 const KEY_RE = /^([A-Za-z][A-Za-z0-9]*-\d+|TASK-[A-Za-z0-9-]+)$/;
@@ -784,6 +784,10 @@ export type EpicDetail = {
   autoRun: AutoRun | null;
   /** 이 오더를 잡고 일하는 살아 있는 세션: 담당자 슬러그 → 세션 아이디. */
   sessions: Record<string, string>;
+  /** QA 감시 진행(active 진행 중 · lost 감시 끊김). 감시 중이 아니면 null. */
+  qaRun: QaRun | null;
+  /** QA 작업 세션의 수정·리뷰 진행. QA 진행 중이 아니면 null. */
+  qaProgress: QaProgress | null;
   /** dobby-ship 배포 단계 — 환경마다 한 행. 보드 관제 카드용. 없으면 빈 배열. */
   ship: ShipRow[];
   /** 정기배포 릴리즈 노트 등록 기록. 보드 관제 카드용. 없으면 빈 배열(미등록). */
@@ -1488,6 +1492,8 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     isV2: isV2Status(statusMd),
     autoRun: autoRunState(st?.autoRunLine ?? null),
     sessions: liveSessions(epicKey),
+    qaRun: qaRun(epicKey),
+    qaProgress: qaRun(epicKey) === "active" ? qaProgress(epicKey) : null,
     ship: shipFromTestRuns(orderDir(epicKey), st?.ship ?? []),
     releaseNote: st?.releaseNote ?? [],
     devProgress: dev ? devProgress(dir, dev.agent, designMd, st?.worktrees ?? [], reviews) : null,
