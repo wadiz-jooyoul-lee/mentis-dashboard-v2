@@ -46,6 +46,7 @@ import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
 import { shipFromTestRuns } from "@/lib/shipFromTests";
 import { devProgress, type DevProgress } from "@/lib/devProgress";
+import { parseRetroJson, retroBlockReason, type RetroData } from "@/lib/retro";
 import { autoRunState, liveSessions, qaProgress, qaRun, type AutoRun, type QaProgress, type QaRun } from "@/lib/presence";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
@@ -821,6 +822,12 @@ export type EpicDetail = {
   /** 비전공자용 쉬운 설명(explainer.md). 없으면 null. */
   explainerMd: string | null;
   retroMd: string | null;
+  /** /do 오더 회고 결과(retro.json). 없거나 형식이 틀리면 null. */
+  retroJson: RetroData | null;
+  /** 회고 파일(retro.json·retro.md)이 있는지 — 단계 띠의 회고 칸 표시용. 본문을 읽지 않는다. */
+  hasRetroDoc: boolean;
+  /** 지금 회고를 못 하는 이유(진행 중인 일). 멈춘 오더면 null. */
+  retroBlock: string | null;
   /** 설계 문서(design.md)와 구현 결과(outcome.md). 없으면 null. */
   designMd: string | null;
   outcomeMd: string | null;
@@ -1516,6 +1523,16 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),
     retroMd: readFileSafe(path.join(dir, "retro.md")),
+    retroJson: parseRetroJson(readFileSafe(path.join(dir, "retro.json"))),
+    hasRetroDoc: fs.existsSync(path.join(dir, "retro.json")) || fs.existsSync(path.join(dir, "retro.md")),
+    retroBlock: retroBlockReason({
+      autoRunning: autoRunState(st?.autoRunLine ?? null)?.running ?? false,
+      busyAgents: orchestration.agents
+        .filter((a) => a.state === "작업중" || a.state === "기다림")
+        .map((a) => a.name ?? a.agent),
+      liveSessions: Object.keys(liveSessions(epicKey)).length,
+      qaActive: qaRun(epicKey) === "active",
+    }),
     designMd,
     outcomeMd: readFileSafe(path.join(dir, "outcome.md")),
     artifactShares: readArtifactShares(epicKey),

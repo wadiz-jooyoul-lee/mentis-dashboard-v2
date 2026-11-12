@@ -1,0 +1,77 @@
+/** /do 오더 회고 결과(retro.json). 숫자(basis·measure)는 go-dobby 측정 헬퍼가, 나머지는 회고 세션이 쓴다. */
+
+export type RetroSegment = {
+  when: string;
+  stage: string;
+  group: string;
+  mode: "새로" | "이어 씀";
+  calls: number;
+  ctxStart: number | null;
+  ctxEnd: number | null;
+  cost: number;
+  active: number;
+  gap?: number;
+  ttl?: number;
+  altCost?: number;
+  altTime?: number;
+  diffPct?: number;
+  judge: string;
+  best?: string;
+};
+
+export type RetroTotal = { cost: number; time: number };
+
+export type RetroData = {
+  basis: { phase: string; lastSession: string; changes: number; testRounds: number; madeAt: string };
+  measure: {
+    fastPct: number;
+    reuseRule: { maxCtx: number; maxGap: number };
+    sessions: number;
+    missing: number;
+    medians: { start: number | null; first: number | null; startup: number | null };
+    totals: { actual: RetroTotal; allNew: RetroTotal; rule: RetroTotal; best: RetroTotal };
+    byStage: { group: string; sessions: number; calls: number; cost: number; active: number }[];
+    segments: RetroSegment[];
+  };
+  summary?: string;
+  sessionFindings?: { title: string; segments?: string[]; why?: string; impact?: number; evidence?: string[] }[];
+  ruleProposals?: { title: string; target: string; value: string; why?: string; evidence?: string[] }[];
+  defects?: {
+    title: string;
+    change?: number;
+    foundAt: string;
+    couldAt?: string;
+    judgment?: string;
+    causes?: string[];
+    evidence?: string[];
+  }[];
+  proposals?: { type?: string; title: string; target?: string; section?: string; text?: string; evidence?: string[] }[];
+  evidence?: string[];
+};
+
+export function parseRetroJson(raw: string | null): RetroData | null {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as RetroData;
+    return o?.basis && o?.measure?.totals ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 회고를 막는 이유. 없으면 null. go-dobby `dobby_retro_gate` 와 같은 조건이다 —
+ * 회고는 멈춘 오더에서만 한다. 진행 중에 만든 회고는 곧 낡고, 아직 쌓이는 세션을 잘못 센다.
+ */
+export function retroBlockReason(o: {
+  autoRunning: boolean;
+  busyAgents: string[];
+  liveSessions: number;
+  qaActive: boolean;
+}): string | null {
+  if (o.autoRunning) return "자동 실행이 돌고 있습니다. 끝나고 멈춘 뒤에 회고할 수 있습니다.";
+  if (o.busyAgents.length) return `${o.busyAgents.join(", ")} 담당자가 아직 일하는 중입니다.`;
+  if (o.liveSessions > 0) return "이 오더를 잡고 일하는 세션이 있습니다. 세션이 끝난 뒤에 회고할 수 있습니다.";
+  if (o.qaActive) return "QA 감시가 돌고 있습니다. 감시를 멈춘 뒤에 회고할 수 있습니다.";
+  return null;
+}
