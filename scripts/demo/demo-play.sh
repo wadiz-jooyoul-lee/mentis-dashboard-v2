@@ -358,9 +358,9 @@ step_10() { # 측정 명세
   ],
   "daily": ["openplan_notify_click", "openplan_notify_done"],
   "metric": { "name": "알림 신청 완료율", "direction": "up" }
-  presence
 }
 EOF
+  presence
 }
 
 # summary.json 생성 공용부. $1=커버일수(3|7)
