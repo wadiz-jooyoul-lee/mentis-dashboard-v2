@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button, Popconfirm, Space, Tag, message } from "antd";
 import { CaretRightOutlined, DeleteOutlined, ReloadOutlined, StepForwardOutlined } from "@ant-design/icons";
 
@@ -13,20 +13,37 @@ type DemoState = { step: number; total: number; label: string };
  */
 export default function DemoControls() {
   const router = useRouter();
+  const pathname = usePathname();
   const [state, setState] = useState<DemoState | null>(null);
   const [busy, setBusy] = useState(false);
+  // 바를 띄울 높이. 오더 상세의 스티키 헤더(브레드크럼·해결 버튼·탭, data-order-header)가
+  // 있으면 그 아래, 없으면 상단 헤더 바로 아래. 고정 픽셀로 두면 페이지마다 버튼을 가린다.
+  const [top, setTop] = useState(72);
+
+  const measure = useCallback(() => {
+    const bar = document.querySelector("[data-order-header]");
+    setTop(bar ? Math.round(bar.getBoundingClientRect().bottom) + 8 : 72);
+  }, []);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/demo", { cache: "no-store" }).catch(() => null);
     const j = await r?.json().catch(() => null);
     if (j?.demo) setState(j.state as DemoState);
-  }, []);
+    measure();
+  }, [measure]);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [load]);
+
+  // 페이지를 옮기면(오더 상세 ↔ 목록) 스티키 헤더 유무가 바뀌므로 바로 다시 잰다
+  useEffect(() => {
+    measure();
+    const t = setTimeout(measure, 300); // 렌더 직후 한 번 더(탭 바가 늦게 그려지는 경우)
+    return () => clearTimeout(t);
+  }, [pathname, measure]);
 
   const act = useCallback(
     async (action: "start" | "next" | "reset" | "clean") => {
@@ -49,14 +66,13 @@ export default function DemoControls() {
   const started = (state?.step ?? -1) >= 0;
   const stepText = started ? `${state!.step}/${state!.total} · ${state!.label}` : "시작 전";
 
-  // 헤더에 넣으면 메뉴·새로고침 버튼을 가려서, 헤더 바로 아래(새로고침 버튼 밑)에 띄운다.
   return (
     <div
       style={{
         position: "fixed",
-        top: 72, // antd Header 높이 64 + 여백
+        top, // 오더 상세: 스티키 헤더(해결 버튼·탭) 아래 / 그 외: 상단 헤더 아래
         right: 16,
-        zIndex: 99, // 헤더(100)보다 아래, 본문 위
+        zIndex: 89, // 상단 헤더(100)·오더 스티키 헤더(90)보다 아래
         background: "rgba(255, 255, 255, 0.95)",
         border: "1px solid #d3adf7",
         borderRadius: 8,
