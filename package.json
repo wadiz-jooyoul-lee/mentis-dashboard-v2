@@ -14,8 +14,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "demo:seed": "node scripts/seed-demo.mjs",
-    "demo:clean": "rm -rf .demo-meta",
-    "demo": "node scripts/seed-demo.mjs && DOBBY_META_PATH=\"$PWD/.demo-meta\" next dev -p 7253",
+    "demo:clean": "bash scripts/demo/demo-play.sh clean",
+    "demo:play": "bash scripts/demo/demo-play.sh",
+    "demo": "bash scripts/demo/demo-play.sh reset && ORCHESTRATION_META_PATH=\"$PWD/.demo-meta\" next dev -p 7253",
     "check:api": "node scripts/check-api-guard.mjs"
   },
   "dependencies": {

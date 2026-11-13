@@ -41,6 +41,7 @@ import { readQuips, orderSignature, staleSlugs } from "@/lib/quips";
 import { ORDER_KEY_RE, isOrderKey } from "@/lib/keys";
 import { setPin } from "@/lib/pins";
 import { nextActions, runNextAction, type NextAction } from "@/lib/nextAction";
+import { isDemoMode } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,6 +54,11 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const denied = denyRemote(req); // 실행·변경은 이 맥 전용(분기 13개를 입구에서 한 번에)
   if (denied) return denied;
+  // 데모 모드: 메타가 시나리오 플레이어의 fixture라, 헤드리스 claude를 띄우면
+  // 진짜 분석·실행이 돌아 데모 파일을 덮어쓴다. 입구에서 전부 막는다(진행은 /api/demo 로만).
+  if (isDemoMode()) {
+    return NextResponse.json({ ok: false, error: "데모 모드 — 실행 대신 헤더의 데모 컨트롤을 쓰세요" }, { status: 409 });
+  }
   const body = await req.json().catch(() => ({}));
   const jobId = String(body?.key ?? "").trim();
 

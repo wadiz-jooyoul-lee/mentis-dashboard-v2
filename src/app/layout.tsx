@@ -3,6 +3,7 @@ import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { ConfigProvider } from "antd";
 import koKR from "antd/locale/ko_KR";
 import AppShell from "@/components/AppShell";
+import { isDemoMode } from "@/lib/demo";
 
 export const metadata: Metadata = {
   title: "Mentis Dashboard",
@@ -19,7 +20,7 @@ export default function RootLayout({
       <body style={{ margin: 0 }}>
         <AntdRegistry>
           <ConfigProvider locale={koKR}>
-            <AppShell>{children}</AppShell>
+            <AppShell demo={isDemoMode()}>{children}</AppShell>
           </ConfigProvider>
         </AntdRegistry>
       </body>

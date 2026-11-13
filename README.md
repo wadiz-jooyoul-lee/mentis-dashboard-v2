@@ -37,7 +37,7 @@ $ORCHESTRATION_META/{키}/                # 키 = FE1-1187 (이슈) 또는 TASK-
 | `/api/orders` | 잡 실행/정지/재개/예약/보관·상태 조회 API (헤드리스 claude spawn) |
 
 - **단독/오케스트레이션 통합**: K=1(단일)과 K≥2(다중)는 같은 오더이며, 팬아웃 K는 속성입니다. K=1은 status.md 에이전트 표로 보드를 합성합니다.
-- 모든 페이지는 **30초마다 자동 갱신**(서버 데이터만 재로딩)됩니다. `[key]`는 키 형식을 검증해 존재하지 않으면 404(경로 탈출 방지).
+- 모든 페이지는 **5초마다 자동 갱신**(서버 데이터만 재로딩)됩니다. `[key]`는 키 형식을 검증해 존재하지 않으면 404(경로 탈출 방지).
 - **잡 실행**: `/orchestration` 상단 실행 패널(텍스트에어리어)에 **이슈 키·이슈/문서 URL·이슈 없는 요구사항/문서**(+ `base=`/`agents=`/`mode=` 인자)를 넣으면 그 내용을 `/dobby-order` 뒤에 그대로 붙여 백그라운드 `claude`로 띄우고 stream-json 로그를 실시간 표시합니다. 잡 폴더 id는 이슈 키/URL이면 그 키, 문서 전용이면 `task-{slug}-{hash}`(→ dobby-order가 만드는 최종 `TASK-` 오더 키와는 별개). 실행 중 프로세스는 시그널 확인 + 명령어(`ps`) 대조로 PID 재사용 오인을 막고, 정지/실패/완료를 구분합니다. 로그는 `$ORCHESTRATION_META/.mentis-jobs/{잡id}/`.
   - ⚠️ 헤드리스 claude를 `--permission-mode bypassPermissions`로 실행합니다. 로컬 신뢰 환경에서만 쓰세요(대시보드에 인증 계층 없음).
 
@@ -69,17 +69,21 @@ pnpm start           # http://localhost:7253
 pnpm serve           # 빌드 후 곧바로 실행(한 번에)
 ```
 
-## 데모 (목업 데이터)
+## 데모 (목업 데이터 + 시나리오 플레이어)
 
 실제 `$ORCHESTRATION_META`를 건드리지 않고, 격리된 `./.demo-meta`에 예시 오더를 심어 실행합니다.
 
 ```bash
-pnpm demo            # .demo-meta에 fixture 생성 후 ORCHESTRATION_META_PATH로 가리켜 dev 실행
-pnpm demo:seed       # fixture만 생성
+pnpm demo            # .demo-meta 리셋 후 ORCHESTRATION_META_PATH로 가리켜 dev 실행 (데모 모드)
+pnpm demo:seed       # 배경 fixture만 생성
+pnpm demo:play next  # 시나리오 한 단계 진행 (start|next|reset|status|auto [초]|clean)
 pnpm demo:clean      # .demo-meta 삭제
 ```
 
-- 데모 데이터: K=1 code(종료)·K≥2(리뷰중, 변경 diff)·비소스(TASK)·최소(착수) 오더 + 잡 로그 예시. 모든 화면을 둘러볼 수 있습니다.
+- 배경 데이터: K=1 code(종료)·K≥2(리뷰중, 변경 diff)·비소스(TASK)·최소(착수) 오더 + 잡 로그 예시.
+- **시나리오 플레이어** (`scripts/demo/demo-play.sh`): /do 오더 `FE1-4242`가 설계→설계확인(사람 차례)→구현→리뷰(지적)→수정→통합→배포→검증→해결, 이어서 데이터 분석(측정 명세→1회차 "판단 이르다"→2회차 "성과 있음"+리포트)까지 12단계로 진행합니다. 메타는 손으로 짓지 않고 go-dobby `dobby-lib.sh` 헬퍼(실제 /do가 쓰는 것)로 써서 실데이터와 형식이 같습니다.
+- **데모 모드**(메타 루트가 `.demo-meta`)에서는 헤더 오른쪽에 데모 컨트롤(시작·다음·리셋·삭제)이 뜨고, 반대로 잡 실행 API(`/api/orders` POST)는 전부 막힙니다 — 헤드리스 claude가 데모 파일을 덮어쓰지 않게.
+- **에이전트 오피스와 함께**: agent-office를 `pnpm demo`(= `DOBBY_META`를 이 저장소의 `.demo-meta`로)로 띄우면 도비 사무실 우하단에 같은 컨트롤 바가 뜨고, 한쪽에서 단계를 넘기면 두 화면(칸반·테이블)이 같이 움직입니다.
 - `pnpm dev`는 **실제** `$ORCHESTRATION_META`를 읽으므로 데모 데이터가 섞이지 않습니다. (`.demo-meta`는 git 무시)
 
 ## 요구 사항

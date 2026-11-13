@@ -8,6 +8,7 @@ import InProgressBackupTrigger from "@/components/InProgressBackupTrigger";
 import NextActionNotifier from "@/components/NextActionNotifier";
 import { CanActProvider } from "@/components/CanAct";
 import LanToggle from "@/components/LanToggle";
+import DemoControls from "@/components/DemoControls";
 import MantisIcon from "@/components/MantisIcon";
 
 const { Header, Content } = Layout;
@@ -36,7 +37,7 @@ function currentNavKey(pathname: string): string[] {
   return NAV.some((n) => n.key === pathname) ? [pathname] : [];
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children, demo = false }: { children: React.ReactNode; demo?: boolean }) {
   const pathname = usePathname();
   return (
     <CanActProvider>
@@ -92,8 +93,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           }}
         />
         <span style={{ display: "inline-flex", alignItems: "center", gap: 20 }}>
+          {demo && <DemoControls />}
           <LanToggle />
-          <AutoRefresh intervalMs={10000} />
+          <AutoRefresh intervalMs={5000} />
         </span>
       </Header>
       <Content
