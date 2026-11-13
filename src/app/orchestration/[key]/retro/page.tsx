@@ -16,6 +16,9 @@ export default async function RetroPage({ params }: { params: Promise<{ key: str
       epicKey={key}
       title={epic?.title ?? null}
       md={epic?.retroMd ?? null}
+      data={epic?.retroJson ?? null}
+      block={epic?.retroBlock ?? null}
+      isV2={epic?.isV2 ?? false}
       job={job.state === "none" ? null : { state: job.state, feed: job.feed }}
       mode={epic?.orchestration?.mode ?? null}
       worktreeRemoved={epic?.worktreeRemoved ?? false}

@@ -32,6 +32,7 @@ import {
   existingPrs,
   readOrderSession,
   readRunContent,
+  getEpic,
 } from "@/lib/orchestration";
 import { getConsole, consoleLiveness } from "@/lib/transcript";
 import { denyRemote } from "@/lib/localOnly";
@@ -62,8 +63,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
 
-  // 회고(retro.md) 생성: /dobby-retro {키} [regen]
+  // 회고 생성: /dobby-retro {키} [regen]. 진행 중인 오더는 스킬도 거절하지만, 잡을 띄우기 전에 여기서 먼저 막는다.
   if (body?.retro) {
+    const block = getEpic(String(body?.key ?? ""))?.retroBlock;
+    if (block) return NextResponse.json({ ok: false, error: block }, { status: 409 });
     const r = startRetro(String(body?.key ?? ""), !!body?.regen);
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });

@@ -197,7 +197,7 @@ function ProgressBar({ parts, total, label }: { parts: BarPart[]; total: number;
 }
 
 /** 단계 띠: 13개 단계값을 여덟 칸에 접어 그린다. 겹친 단계(설계확인·수정·실패분석·보류)는 칸 아래 작은 글씨로. */
-function PhaseBand({ phase, raw }: { phase: string; raw: string }) {
+function PhaseBand({ phase, raw, retroHref, retroDone }: { phase: string; raw: string; retroHref: string; retroDone: boolean }) {
   const cur = PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]);
   return (
     <div style={{ display: "flex", gap: 4 }}>
@@ -223,6 +223,23 @@ function PhaseBand({ phase, raw }: { phase: string; raw: string }) {
           </div>
         );
       })}
+      {/* 회고는 진행 흐름 밖의 일이라 떨어뜨리고 점선으로 그린다. 단계 값은 바꾸지 않는다. */}
+      <Link
+        href={retroHref}
+        style={{
+          flex: "0 0 auto",
+          marginLeft: 12,
+          padding: "3px 14px",
+          borderRadius: 4,
+          fontSize: 12,
+          border: `1px dashed ${retroDone ? "#722ed1" : "rgba(0,0,0,0.25)"}`,
+          color: retroDone ? "#722ed1" : "rgba(0,0,0,0.45)",
+          background: retroDone ? "#f9f0ff" : "transparent",
+          textAlign: "center",
+        }}
+      >
+        회고
+      </Link>
     </div>
   );
 }
@@ -710,7 +727,12 @@ export default function OrchestrationBoard({
       {isV2 && (
         <Card style={{ marginBottom: 16 }}>
           <Space orientation="vertical" size={10} style={{ width: "100%" }}>
-            <PhaseBand phase={epic?.phase ?? "unknown"} raw={phaseRaw} />
+            <PhaseBand
+              phase={epic?.phase ?? "unknown"}
+              raw={phaseRaw}
+              retroHref={`/orchestration/${epicKey}/retro`}
+              retroDone={epic?.hasRetroDoc ?? false}
+            />
             {mover && (
               <Alert
                 type={MOVER_TONE[mover.tone]}
