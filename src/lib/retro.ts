@@ -19,6 +19,8 @@ export type RetroSegment = {
   best?: string;
 };
 
+export type RetroFix = { where: "스킬" | "서버" | "사람"; target?: string; change: string };
+
 export type RetroTotal = { cost: number; time: number };
 
 export type RetroData = {
@@ -42,7 +44,11 @@ export type RetroData = {
     foundAt: string;
     couldAt?: string;
     judgment?: string;
+    what?: string;
+    why?: string;
+    prevent?: string;
     causes?: string[];
+    fixes?: RetroFix[];
     evidence?: string[];
   }[];
   proposals?: { type?: string; title: string; target?: string; section?: string; text?: string; evidence?: string[] }[];
@@ -58,6 +64,9 @@ export function parseRetroJson(raw: string | null): RetroData | null {
     return null;
   }
 }
+
+/** 잘못한 판단을 그리는 단계 띠. go-dobby 회고 절차(do-order.md)의 foundAt·couldAt 이름과 같다. */
+export const RETRO_STAGES = ["설계", "구현", "리뷰", "통합", "배포", "검증", "사람 확인"] as const;
 
 /**
  * 회고를 막는 이유. 없으면 null. go-dobby `dobby_retro_gate` 와 같은 조건이다 —
