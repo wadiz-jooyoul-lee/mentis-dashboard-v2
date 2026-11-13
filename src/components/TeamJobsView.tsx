@@ -167,7 +167,7 @@ function DailyTab({ d, byKey }: { d: JobsData; byKey: Record<string, JobsIssue> 
       <div>
         <Title level={5}>내 오더와 겹치는 변경 {hot.length}건</Title>
         <Text type="secondary">이번에 바뀐 이슈 중 내 오더와 같은 파일, 같은 상위 이슈, 같은 폴더를 건드린 것입니다.</Text>
-        <OverlapTable rows={hot} byKey={byKey} me={d.me} showOrder />
+        <OverlapTable rows={hot} byKey={byKey} showOrder />
       </div>
       <div>
         <Title level={5}>바뀐 이슈 {picked.length}건</Title>
@@ -191,14 +191,14 @@ function DailyTab({ d, byKey }: { d: JobsData; byKey: Record<string, JobsIssue> 
   );
 }
 
-function OverlapTable({ rows, byKey, me, showOrder }: { rows: JobsOverlap[]; byKey: Record<string, JobsIssue>; me: string | null; showOrder?: boolean }) {
+function OverlapTable({ rows, byKey, showOrder }: { rows: JobsOverlap[]; byKey: Record<string, JobsIssue>; showOrder?: boolean }) {
   if (!rows.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="겹치는 작업이 없습니다" />;
   return (
     <div style={{ overflowX: "auto", marginTop: 8 }}><Table size="small" pagination={false} rowKey={(o) => o.order + o.issue}
       dataSource={[...rows].sort((a, b) => Number(a.level !== "충돌 주의") - Number(b.level !== "충돌 주의"))}
       columns={[
         { title: "겹침", key: "l", render: (_: unknown, o: JobsOverlap) => <LevelTag l={o.level} /> },
-        { title: "상대 이슈", key: "i", render: (_: unknown, o: JobsOverlap) => <IssueCell i={byKey[o.issue]} extra={byKey[o.issue].assignee === me ? <Tag color="blue">내 다른 이슈</Tag> : null} /> },
+        { title: "상대 이슈", key: "i", render: (_: unknown, o: JobsOverlap) => <IssueCell i={byKey[o.issue]} /> },
         { title: "담당", key: "a", render: (_: unknown, o: JobsOverlap) => byKey[o.issue].assignee },
         { title: "진행도", key: "g", render: (_: unknown, o: JobsOverlap) => <Stage i={byKey[o.issue]} /> },
         ...(showOrder ? [{ title: "내 오더", key: "o", render: (_: unknown, o: JobsOverlap) => <Link href={`/orchestration/${o.order}`}>{o.order}</Link> }] : []),
@@ -257,7 +257,7 @@ function OverlapTab({ d, byKey }: { d: JobsData; byKey: Record<string, JobsIssue
       <Text type="secondary">끝나지 않은 내 오더 {d.orders.length}개와, 진행 중이거나 이번에 바뀐 팀 이슈를 비교했습니다.</Text>
       {withO.map((o) => (
         <Card key={o.key} size="small" title={<div><Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}><Link href={`/orchestration/${o.key}`}>{o.key}</Link> · 오더 단계 {o.stage} · 내 커밋이 고친 파일 {o.fileCount}개</Text><div>{o.title}</div></div>}>
-          <OverlapTable rows={d.overlaps.filter((x) => x.order === o.key)} byKey={byKey} me={d.me} />
+          <OverlapTable rows={d.overlaps.filter((x) => x.order === o.key)} byKey={byKey} />
         </Card>
       ))}
       {without.length > 0 && (
