@@ -7,6 +7,7 @@ import { orchestrationCardStats, artifactCardStats } from "@/lib/orchestration";
 import { getBackupStatus } from "@/lib/backup";
 import { releaseCardStats } from "@/lib/releases";
 import { dataCardStats } from "@/lib/data";
+import { teamJobsCardStats } from "@/lib/dobbyJobs";
 import heroImage from "@/assets/home-hero.webp";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default function Home() {
     artifacts: artifactCardStats(),
     releases: releaseCardStats(),
     data: dataCardStats(),
+    "team-jobs": teamJobsCardStats(),
   };
   const backup = getBackupStatus();
   return (

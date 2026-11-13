@@ -59,6 +59,11 @@ export function getReposRoot(): string {
   return resolveConfig("ORCHESTRATION_REPOS_ROOT", path.join(os.homedir(), "work"));
 }
 
+/** 도서관(참고 문서) 루트($ORCHESTRATION_DOCS_ROOT). */
+export function getDocsRoot(): string {
+  return resolveConfig("ORCHESTRATION_DOCS_ROOT", path.join(getReposRoot(), "docs"));
+}
+
 /**
  * 기본 베이스 브랜치($ORCHESTRATION_DEFAULT_BASE). 오더 브랜치의 diff 기준점을 잡을 때 쓴다.
  * (스킬의 리뷰 규약과 동일한 기준: `merge-base origin/{base} HEAD`)

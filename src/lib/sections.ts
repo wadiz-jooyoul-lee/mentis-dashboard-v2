@@ -73,4 +73,13 @@ export const sections: Section[] = [
     area: "orchestration",
     enabled: true,
   },
+  {
+    key: "team-jobs",
+    title: "팀 이슈 현황",
+    description: "FE1·FE2·클라이언트팀 이슈 조사(dobby-jobs) — 바뀐 이슈, 담당자별 진행, 내 오더와 겹침",
+    path: "/team-jobs",
+    icon: "DeploymentUnitOutlined",
+    area: "orchestration",
+    enabled: true,
+  },
 ];
