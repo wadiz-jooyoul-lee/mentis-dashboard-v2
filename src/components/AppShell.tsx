@@ -93,11 +93,11 @@ export default function AppShell({ children, demo = false }: { children: React.R
           }}
         />
         <span style={{ display: "inline-flex", alignItems: "center", gap: 20 }}>
-          {demo && <DemoControls />}
           <LanToggle />
           <AutoRefresh intervalMs={5000} />
         </span>
       </Header>
+      {demo && <DemoControls />}
       <Content
         style={{ padding: 24, maxWidth: 1440, margin: "0 auto", width: "100%" }}
       >

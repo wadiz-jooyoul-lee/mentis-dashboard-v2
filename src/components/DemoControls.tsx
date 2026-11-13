@@ -49,7 +49,21 @@ export default function DemoControls() {
   const started = (state?.step ?? -1) >= 0;
   const stepText = started ? `${state!.step}/${state!.total} · ${state!.label}` : "시작 전";
 
+  // 헤더에 넣으면 메뉴·새로고침 버튼을 가려서, 헤더 바로 아래(새로고침 버튼 밑)에 띄운다.
   return (
+    <div
+      style={{
+        position: "fixed",
+        top: 72, // antd Header 높이 64 + 여백
+        right: 16,
+        zIndex: 99, // 헤더(100)보다 아래, 본문 위
+        background: "rgba(255, 255, 255, 0.95)",
+        border: "1px solid #d3adf7",
+        borderRadius: 8,
+        padding: "6px 10px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+      }}
+    >
     <Space size={6}>
       <Tag color="purple" style={{ marginRight: 0 }}>
         데모 {stepText}
@@ -68,5 +82,6 @@ export default function DemoControls() {
         <Button size="small" danger icon={<DeleteOutlined />} disabled={busy} title="데모 데이터 삭제" />
       </Popconfirm>
     </Space>
+    </div>
   );
 }
