@@ -66,7 +66,7 @@ pnpm dev             # http://localhost:7253
 ```bash
 pnpm build
 pnpm start           # http://localhost:7253
-pnpm build:start     # 빌드 후 곧바로 실행(한 번에)
+pnpm serve           # 빌드 후 곧바로 실행(한 번에)
 ```
 
 ## 데모 (목업 데이터)
