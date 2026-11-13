@@ -175,19 +175,22 @@ function V2Guide() {
       <Paragraph strong style={{ marginBottom: 4 }}>
         아직 회고가 없습니다.
       </Paragraph>
+      <Paragraph style={{ marginBottom: 4 }}>회고는 두 가지를 이 순서로 봅니다.</Paragraph>
+      <ol style={{ paddingLeft: 20, marginBottom: 8 }}>
+        <li>
+          <Text strong>잘못한 판단</Text> — 이슈를 분석하고 진행하면서 잘못 판단한 곳을 찾습니다. 왜 그랬는지, 다시 안 그러려면
+          어떻게 할지, 스킬·서버·사람 중 어디를 고칠지 적습니다.
+        </li>
+        <li>
+          <Text strong>토큰 사용</Text> — 단계마다 세션을 새로 연 것과 이어 쓴 것 중 어느 쪽이 쌌는지 실제 기록으로 잽니다.
+        </li>
+      </ol>
       <Paragraph style={{ marginBottom: 4 }}>
-        <Text strong>주 목적은 세션 전환 손익입니다.</Text> 이 오더는 단계마다 세션을 새로 열거나 앞 세션을 이어 썼습니다.
-        회고는 세션 기록을 실제로 재서, 전환마다 반대로 골랐다면 토큰과 시간이 얼마였을지 계산합니다. 비용 차이가 10% 미만이면
-        더 빠른 쪽을 나은 선택으로 봅니다. 그 결과로 이어 쓰기 기준을 바꿀지 제안합니다.
+        추가 설계처럼 요구가 바뀐 것은 실수로 보지 않습니다.
       </Paragraph>
       <Paragraph style={{ marginBottom: 4 }}>
-        <Text strong>보조 목적은 구현 중 판단 실수입니다.</Text> 새 버그, 검증에서 잡힌 코드 결함, 리뷰의 [blocker]와 [major]를
-        봅니다. 결함마다 처음 잡힌 단계와 잡을 수 있었던 가장 이른 단계를 적습니다. 추가 설계나 범위를 넓힌 수정 지시 같은
-        요구 변경은 대상이 아닙니다.
-      </Paragraph>
-      <Paragraph style={{ marginBottom: 4 }}>
-        <Text strong>멈춘 오더에서만 할 수 있습니다.</Text> 자동 실행, 작업 중이거나 기다리는 담당자, 일하는 세션, QA 감시가
-        하나라도 있으면 버튼이 잠깁니다. 진행 중에 만든 회고는 곧 낡고, 아직 쌓이는 세션을 잘못 세기 때문입니다.
+        <Text strong>멈춘 오더에서만 할 수 있습니다.</Text> 자동 실행이나 일하는 담당자가 있으면 버튼이 잠깁니다. 진행 중에 만든
+        회고는 금방 낡기 때문입니다.
       </Paragraph>
       <Paragraph type="secondary" style={{ marginBottom: 0 }}>
         회고는 이 오더 폴더의 회고 파일 하나만 만들고, 코드나 다른 문서는 고치지 않습니다.
