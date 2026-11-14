@@ -17,6 +17,6 @@ export function readDemoState(): DemoState {
   try {
     return JSON.parse(fs.readFileSync(path.join(getMetaDir(), ".demo-state.json"), "utf8")) as DemoState;
   } catch {
-    return { step: -1, total: 12, label: "없음" };
+    return { step: -1, total: 14, label: "없음" };
   }
 }

@@ -21,7 +21,7 @@ MARKER="$ROOT/.demo"
 KEY="FE1-4242"
 TITLE="오픈예정 알림 신청 버튼이 간헐적으로 먹통이 되는 문제"
 DEV_SLUG="noti-dev"
-TOTAL=12
+TOTAL=14
 
 # ── 안전 가드: 데모 폴더가 확실할 때만 지운다 ──────────────────────────
 guard() {
@@ -100,6 +100,7 @@ presence() { # [slug]
 # ── 리셋: 배경 fixture + 데모 오더 0단계 ───────────────────────────────
 do_reset() {
   guard
+  retro_office_end
   presence_kill 2>/dev/null || true # 하트비트 먼저 걷고 폴더를 지운다
   DEMO_META="$ROOT" node "$HERE/scripts/seed-demo.mjs" >/dev/null
   touch "$MARKER"
@@ -471,7 +472,85 @@ step_12() { # 수집 2회차 — 성과 있음 + 리포트
 EOF
 }
 
-LABELS=("시작 전" "설계" "설계확인 (사람 차례)" "구현" "리뷰 (1차)" "수정 (1차)" "리뷰 통과 → 통합" "배포 (빌드 대기)" "배포 확인 → 검증" "검증 통과 → 해결" "데이터 — 측정 명세" "데이터 — 1회차 (판단 이르다)" "데이터 — 2회차 (성과 있음)")
+# ── 3막: 회고 (데이터까지 본 뒤, 멈춘 오더를 다섯 담당자가 돌아본다) ──────────
+# 오피스에 떠 있을 수 있는 회고 탁자를 걷는다. lib 없이도 되게 수신 API 를 직접 부른다(리셋·삭제 전에, 오더 폴더가 아직 있을 때)
+retro_office_end() {
+  curl -s -m 1 -X POST -H 'content-type: application/json' \
+    -d "{\"kind\":\"retro\",\"op\":\"end\",\"key\":\"$KEY\"}" \
+    "${ORCHESTRATION_OFFICE_INBOX:-http://127.0.0.1:6898/dobby}" >/dev/null 2>&1 || true
+}
+
+step_13() { # 회고 시작 — 오피스에서 다섯 담당자가 회고 탁자에 둘러앉는다
+  dobby_event "$KEY" "회고 시작 — 잘못한 판단과 토큰 사용을 돌아봅니다"
+  dobby_retro_office "$KEY" start
+}
+
+step_14() { # 회고록 완성 — 대시보드 회고 탭과 오피스 회고 책장에 꽂힌다
+  cat > "$ROOT/$KEY/retro.json" <<EOF
+{
+  "basis": { "phase": "해결", "lastSession": "demo", "changes": 0, "testRounds": 1, "madeAt": "$(now)" },
+  "measure": {
+    "fastPct": 20,
+    "reuseRule": { "maxCtx": 300000, "maxGap": 3600 },
+    "sessions": 6,
+    "missing": 0,
+    "medians": { "start": 42000, "first": 61000, "startup": 38 },
+    "totals": {
+      "actual": { "cost": 1840000, "time": 5400 },
+      "allNew": { "cost": 2110000, "time": 6100 },
+      "rule": { "cost": 1760000, "time": 5200 },
+      "best": { "cost": 1690000, "time": 5000 }
+    },
+    "byStage": [
+      { "group": "설계", "sessions": 1, "calls": 38, "cost": 420000, "active": 1100 },
+      { "group": "구현", "sessions": 2, "calls": 74, "cost": 690000, "active": 2000 },
+      { "group": "리뷰", "sessions": 2, "calls": 41, "cost": 380000, "active": 1200 },
+      { "group": "배포·검증", "sessions": 1, "calls": 33, "cost": 350000, "active": 1100 }
+    ],
+    "segments": [
+      { "when": "$(day -8) 10:02", "stage": "설계", "group": "설계", "mode": "새로", "calls": 38, "ctxStart": 0, "ctxEnd": 96000, "cost": 420000, "active": 1100, "judge": "첫 세션" },
+      { "when": "$(day -8) 10:40", "stage": "구현", "group": "구현", "mode": "새로", "calls": 52, "ctxStart": 41000, "ctxEnd": 148000, "cost": 470000, "active": 1400, "gap": 600, "altCost": 520000, "altTime": 1500, "diffPct": 11, "judge": "맞음" },
+      { "when": "$(day -8) 11:15", "stage": "리뷰 (1차)", "group": "리뷰", "mode": "새로", "calls": 22, "ctxStart": 39000, "ctxEnd": 88000, "cost": 210000, "active": 700, "gap": 120, "judge": "리뷰는 새로(독립)" },
+      { "when": "$(day -8) 11:32", "stage": "수정 (1차)", "group": "구현", "mode": "새로", "calls": 22, "ctxStart": 44000, "ctxEnd": 92000, "cost": 220000, "active": 600, "gap": 90, "altCost": 140000, "altTime": 420, "diffPct": -36, "judge": "틀림", "best": "이어 씀" },
+      { "when": "$(day -8) 11:50", "stage": "리뷰 (2차)", "group": "리뷰", "mode": "새로", "calls": 19, "ctxStart": 39000, "ctxEnd": 71000, "cost": 170000, "active": 500, "gap": 60, "judge": "리뷰는 새로(독립)" },
+      { "when": "$(day -8) 12:10", "stage": "배포·검증", "group": "배포·검증", "mode": "새로", "calls": 33, "ctxStart": 43000, "ctxEnd": 104000, "cost": 350000, "active": 1100, "gap": 300, "altCost": 365000, "altTime": 1150, "diffPct": 4, "judge": "맞음" }
+    ]
+  },
+  "summary": "설계에서 응답이 늦게 오는 경우를 빼먹어 리뷰에서 한 번 되돌아왔습니다. 나머지는 한 번에 통과했고, 고친 뒤 알림 신청 완료율이 올랐습니다.",
+  "defects": [
+    {
+      "title": "늦게 온 응답이 화면을 덮어쓰는 경우를 설계에서 빼먹음",
+      "change": 0,
+      "foundAt": "리뷰",
+      "couldAt": "설계",
+      "judgment": "요청 중에 버튼만 잠그면 충분하다고 봤습니다",
+      "what": "버튼을 잠가도, 먼저 보낸 요청의 응답이 늦게 도착하면 화면이 '신청 전'으로 되돌아갔습니다. 리뷰 1차에서 지적받아 고쳤습니다.",
+      "why": "문제를 '두 번 누름'으로만 보고, 응답이 도착하는 순서는 따져 보지 않았습니다.",
+      "prevent": "요청이 겹칠 수 있는 화면은 설계에서 '응답이 뒤바뀌어 도착하면 어떻게 되나'를 반드시 적습니다.",
+      "causes": ["설계 확인 목록에 응답 순서 항목이 없음"],
+      "fixes": [
+        { "where": "스킬", "target": "설계 확인 목록", "change": "요청이 겹치는 화면이면 응답 순서가 뒤바뀌는 경우를 적는 칸을 넣습니다." },
+        { "where": "사람", "change": "이슈에 '연타하면 먹통'처럼 증상만 있으면, 재현 조건(느린 통신 등)을 함께 적어 줍니다." }
+      ]
+    }
+  ],
+  "sessionFindings": [
+    { "title": "리뷰 지적을 고칠 때 새 세션을 열어 토큰을 더 썼습니다", "why": "구현 세션이 90초 전에 끝났고 대화도 작아서, 이어 썼다면 36% 쌌습니다.", "impact": 80000 },
+    { "title": "리뷰를 매번 새 세션으로 연 것은 맞았습니다", "why": "구현한 대화를 들고 리뷰하면 자기 코드를 너그럽게 봅니다." }
+  ],
+  "ruleProposals": [
+    { "title": "리뷰 지적 수정은 구현 세션을 이어 씁니다", "target": "이어 쓰기 기준", "value": "앞 세션이 5분 안에 끝났고 대화가 15만 이하면 이어 쓰기", "why": "이번 오더에서 8만을 아낄 수 있었습니다." }
+  ],
+  "proposals": [
+    { "type": "스킬", "title": "설계 확인 목록에 응답 순서 항목 추가", "target": "do 설계 단계", "text": "요청이 겹칠 수 있는 화면은 응답이 뒤바뀌어 도착하는 경우를 적는다." }
+  ]
+}
+EOF
+  dobby_event "$KEY" "회고 완료 — 잘못한 판단 1건, 고칠 곳 2곳"
+  dobby_retro_office "$KEY" end "잘못한 판단 1건"
+}
+
+LABELS=("시작 전" "설계" "설계확인 (사람 차례)" "구현" "리뷰 (1차)" "수정 (1차)" "리뷰 통과 → 통합" "배포 (빌드 대기)" "배포 확인 → 검증" "검증 통과 → 해결" "데이터 — 측정 명세" "데이터 — 1회차 (판단 이르다)" "데이터 — 2회차 (성과 있음)" "회고 — 다섯 담당자가 돌아보는 중" "회고 — 회고록 완성")
 
 do_next() {
   guard
@@ -520,6 +599,7 @@ case "${1:-status}" in
   clean)
     play_lock
     guard
+    retro_office_end
     presence_kill 2>/dev/null || true
     rm -rf "$ROOT"
     echo "삭제 완료: $ROOT"
