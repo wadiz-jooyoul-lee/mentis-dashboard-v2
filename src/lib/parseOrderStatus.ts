@@ -24,15 +24,71 @@ export type PhaseKey =
 /** 단계 띠 여덟 칸. 종료는 띠에 그리지 않는다. */
 export const PHASE_ORDER: PhaseKey[] = ["착수", "설계", "구현", "리뷰", "통합", "배포", "검증", "해결"];
 
+/** /do 오더에 켤 수 있는 담당자 여섯(표시 이름, 정해진 순서). go-dobby 의 DOBBY_V2_ROLES 와 같다. */
+export const ROLE_NAMES = ["기획자", "개발자", "산출자", "리뷰어", "배포담당", "테스터"] as const;
+
 /**
- * 단계값 13개(착수·설계·설계확인·구현·리뷰·수정·통합·배포·검증·실패분석·보류·해결·종료)를 띠 칸으로 접는다.
- * 설계확인은 설계, 수정은 리뷰, 실패분석·보류는 검증 칸이다. 옛 값 분석은 설계, 산출은 구현으로 읽는다.
+ * 상태 문서 `## 현재 단계` 의 `- **담당자**: 기획자, 산출자, 리뷰어` 줄 — 이 오더에 켜진 담당자.
+ * 줄이 없으면 null 이다(이 줄이 생기기 전의 오더와 dobby-order 오더). 그런 오더는 지금까지와 똑같이 그린다.
  */
-export function phaseKey(raw: string | null): PhaseKey {
+export function parseRoles(md: string | null): string[] | null {
+  const line = md?.match(/^[ \t]*-[ \t]*\*\*담당자\*\*:[ \t]*(.*)$/m)?.[1];
+  if (line == null) return null;
+  const on = line.split(",").map((r) => r.trim());
+  return ROLE_NAMES.filter((r) => on.includes(r));
+}
+
+/** 개발자 없이 산출물만 만드는 /do 오더인가(문서, 조사). 담당자 줄이 없는 오더는 해당하지 않는다. */
+export function isProductOrder(roles: string[] | null | undefined): boolean {
+  return !!roles && !roles.includes("개발자");
+}
+
+/** 산출자가 켜진 /do 오더인가. 산출 기록과 산출물을 "산출물" 탭에서 보여 준다. */
+export function hasProducer(roles: string[] | null | undefined): boolean {
+  return !!roles && roles.includes("산출자");
+}
+
+/** 단계 띠 한 칸. key 는 접힌 단계, label 은 칸에 적는 이름. */
+export type BandCell = { key: PhaseKey; label: string };
+
+/**
+ * 단계 띠의 칸. 담당자 줄이 없으면 여덟 칸 그대로다.
+ * 줄이 있으면 켜진 담당자에 맞춘다: 리뷰어가 없으면 리뷰 칸, 배포담당이 없으면 통합 칸, 개발자가 없으면 배포 칸,
+ * 테스터가 없으면 검증 칸을 그리지 않는다. 개발자가 없으면 구현 칸의 이름이 "산출"이다.
+ */
+export function phaseBand(roles: string[] | null | undefined): BandCell[] {
+  if (!roles) return PHASE_ORDER.map((p) => ({ key: p, label: p }));
+  const has = (r: string) => roles.includes(r);
+  const cells: BandCell[] = [
+    { key: "착수", label: "착수" },
+    { key: "설계", label: "설계" },
+    { key: "구현", label: has("개발자") ? "구현" : "산출" },
+  ];
+  if (has("리뷰어")) cells.push({ key: "리뷰", label: "리뷰" });
+  if (has("배포담당")) cells.push({ key: "통합", label: "통합" });
+  if (has("개발자") && has("배포담당")) cells.push({ key: "배포", label: "배포" });
+  if (has("테스터")) cells.push({ key: "검증", label: "검증" });
+  cells.push({ key: "해결", label: "해결" });
+  return cells;
+}
+
+/** 화면에 보이는 단계 이름. 담당자 줄이 있는 오더의 `실패분석` 은 "설계 다시 보기"다(기획자가 설계를 다시 보는 차례). */
+export function phaseName(raw: string | null, roles?: string[] | null): string {
+  const r = (raw ?? "").replace(/\*/g, "").trim();
+  return roles && r === "실패분석" ? "설계 다시 보기" : r;
+}
+
+/**
+ * 단계값(착수·설계·설계확인·구현·산출·리뷰·수정·통합·배포·검증·실패분석·보류·해결·종료)을 띠 칸으로 접는다.
+ * 설계확인은 설계, 수정은 리뷰, 보류는 검증 칸이다. 옛 값 분석은 설계, 산출은 구현 칸으로 읽는다.
+ * 실패분석은 담당자 줄이 있는 오더면 설계 칸(기획자가 설계를 다시 본다), 없는 오더면 지금까지처럼 검증 칸이다.
+ */
+export function phaseKey(raw: string | null, roles?: string[] | null): PhaseKey {
   const s = (raw ?? "").replace(/\*/g, "").trim();
   if (!s) return "unknown";
   if (/종료/.test(s)) return "종료";
   if (/해결/.test(s)) return "해결";
+  if (roles && /실패/.test(s)) return "설계";
   if (/검증|실패|보류/.test(s)) return "검증";
   if (/배포/.test(s)) return "배포";
   if (/통합/.test(s)) return "통합";
@@ -47,8 +103,8 @@ export function phaseKey(raw: string | null): PhaseKey {
  * 배지에 넣을 짧은 단계 라벨.
  * 짧은 enum(구현중·해결·리뷰중…)은 그대로, 긴 자유 문장이면 정규화 버킷(리뷰 등)으로.
  */
-export function phaseText(phaseRaw: string | null, phase: PhaseKey): string {
-  const r = (phaseRaw ?? "").trim();
+export function phaseText(phaseRaw: string | null, phase: PhaseKey, roles?: string[] | null): string {
+  const r = phaseName(phaseRaw, roles);
   if (r && r.length <= 10) return r;
   if (phase !== "unknown") return phase;
   return r ? (r.length > 24 ? r.slice(0, 24) + "…" : r) : "-";
@@ -215,6 +271,12 @@ export type OrderStatus = {
    * 없으면 null(구형 오더 — 파일 추론에 맡긴다).
    */
   orderKind: "development" | "deliverable" | "summary" | null;
+  /** 켜진 담당자(`- **담당자**:` 줄). 줄이 없으면 null — 지금까지와 똑같이 다섯으로 그린다. */
+  roles: string[] | null;
+  /** 지금 리뷰·수정·통합이 다루는 것이 산출물인가(`- **리뷰 대상**: 산출물`). 수정 차례의 담당이 산출자다. */
+  reviewingProduct: boolean;
+  /** 기획자에게 넘어온 이유(`- **다시 설계**:` 줄). 없으면 null. */
+  redesignWhy: string | null;
   agents: AgentRow[];
   progress: PhaseProgressRow[];
   testHistory: TestHistoryRow[];
@@ -617,10 +679,12 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     ? "code"
     : null;
 
+  const roles = parseRoles(md);
+
   return {
     meta: parseIssueMeta(md, key, kv),
     phaseRaw,
-    phase: phaseKey(phaseRaw),
+    phase: phaseKey(phaseRaw, roles),
     skill: field(md, "담당 스킬") ?? kvGet(kv, "담당 스킬", "스킬") ?? null,
     updatedAt:
       field(md, "갱신") ??
@@ -630,6 +694,9 @@ export function parseOrderStatus(md: string, key: string): OrderStatus {
     k: kText ? Number(kText) : null,
     workTypeHint,
     orderKind,
+    roles,
+    reviewingProduct: /^- \*\*리뷰 대상\*\*:[ \t]*산출물[ \t]*$/m.test(md),
+    redesignWhy: md.match(/^- \*\*다시 설계\*\*:[ \t]*(.+)$/m)?.[1].trim() ?? null,
     agents: parseAgents(md),
     progress: parseProgress(md),
     testHistory: parseTestHistory(md),

@@ -6,16 +6,16 @@ import { Button, Input, Popconfirm, Select, Space, Tag, Tooltip, Typography, mes
 import { BellFilled, ClockCircleOutlined, CopyOutlined, ExclamationCircleFilled, QuestionCircleOutlined } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import { copyText } from "@/lib/clipboard";
-import type { NextAction, NextGroup, NextItem } from "@/lib/nextAction";
+import type { AutoDecisionNote, NextAction, NextGroup, NextItem } from "@/lib/nextAction";
 
 const { Text } = Typography;
 
-export type { NextItem };
+export type { AutoDecisionNote, NextItem };
 
 // ── 판정 결과 공유 저장소 — 카드·목록·오더 띠가 한 번의 조회를 함께 쓴다 ──
-/** at: 서버가 판정한 시각(ms). 0 이면 아직 모른다. */
-type State = { items: NextItem[]; error: string | null; loaded: boolean; at: number };
-let state: State = { items: [], error: null, loaded: false, at: 0 };
+/** at: 서버가 판정한 시각(ms). 0 이면 아직 모른다. notes: 스스로 정한 결정 알림(오더마다 한 건). */
+type State = { items: NextItem[]; notes: AutoDecisionNote[]; error: string | null; loaded: boolean; at: number };
+let state: State = { items: [], notes: [], error: null, loaded: false, at: 0 };
 const subs = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 const POLL_MS = 10_000;
@@ -24,7 +24,7 @@ const POLL_MS = 10_000;
 export async function refreshNextActions(fresh = false): Promise<void> {
   try {
     const r = await (await fetch(`/api/orders?next=1${fresh ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
-    state = { items: r.items ?? [], error: r.error ?? null, loaded: true, at: r.at ?? Date.now() };
+    state = { items: r.items ?? [], notes: r.notes ?? [], error: r.error ?? null, loaded: true, at: r.at ?? Date.now() };
   } catch {
     state = { ...state, loaded: true };
   }
@@ -46,7 +46,7 @@ function subscribe(f: () => void) {
   };
 }
 
-const EMPTY: State = { items: [], error: null, loaded: false, at: 0 };
+const EMPTY: State = { items: [], notes: [], error: null, loaded: false, at: 0 };
 export function useNextActions(): State {
   return useSyncExternalStore(subscribe, () => state, () => EMPTY);
 }
@@ -175,6 +175,22 @@ const CONFIRM: Partial<Record<NextAction, { title: string; description: string; 
   },
 };
 
+/** 개발자 없이 산출물(문서, 조사)만 만드는 오더의 확인 문구. 커밋·배포·검증 대신 산출과 문서 올리기를 말한다. */
+const PRODUCT_CONFIRM: Record<"approve" | "autorun", { title: string; description: string; ok: string }> = {
+  approve: {
+    title: "설계를 이대로 승인할까요?",
+    description:
+      "승인을 기록하고 산출물 만들기부터 자동 실행을 시작합니다. 리뷰어가 켜져 있으면 리뷰를 받고, 저장소에 넣을 문서나 올릴 곳이 있으면 통합에서 커밋하고 올립니다. 배포와 검증은 하지 않습니다.",
+    ok: "이대로 승인",
+  },
+  autorun: {
+    title: "자동 실행을 시작할까요?",
+    description:
+      "단계마다 새 세션을 띄워 산출물을 끝까지 만듭니다. 저장소에 넣을 문서가 있으면 커밋과 푸시도 확인 없이 진행합니다. 배포와 검증은 하지 않습니다.",
+    ok: "자동 실행",
+  },
+};
+
 /** 버튼 묶음 — 동작 버튼, 명령 복사, 화면 링크, 오더 열기 */
 export function NextActionControls({
   item,
@@ -282,8 +298,9 @@ export function NextActionControls({
       )
     );
   } else if (canAct && withDeploy && (item.action === "approve" || item.action === "autorun")) {
-    const c = CONFIRM[item.action]!;
-    const label = `${c.ok} (통합까지)`;
+    // 개발자 없이 산출물만 만드는 오더는 배포도 검증도 없다. 끝까지 가는 버튼 하나만 두고 문구를 산출물에 맞춘다.
+    const c = item.product ? PRODUCT_CONFIRM[item.action as "approve" | "autorun"] : CONFIRM[item.action]!;
+    const label = item.product ? c.ok : `${c.ok} (통합까지)`;
     // TASK- 작업은 배포하지 않고 통합에서 PR 을 만들고 끝난다.
     const isTask = item.key.startsWith("TASK-");
     buttons.push(
@@ -292,7 +309,7 @@ export function NextActionControls({
           {label}
         </Button>
       </Popconfirm>,
-      !isTask && deployControl(
+      !isTask && !item.product && deployControl(
         item.action === "approve" ? "approve-deploy" : "deploy",
         "배포·검증까지",
         item.action === "approve" ? `설계를 승인하고 ${env} 배포·검증까지 진행할까요?` : `${env} 배포·검증까지 진행할까요?`,

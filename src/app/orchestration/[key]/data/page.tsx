@@ -1,5 +1,6 @@
 import { getEpic } from "@/lib/orchestration";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
+import { isProductOrder } from "@/lib/parseOrderStatus";
 import { getJobStatus } from "@/lib/jobs";
 import { readDataOrder } from "@/lib/data";
 import { notFound } from "next/navigation";
@@ -28,7 +29,7 @@ export default async function DataPage({ params }: { params: Promise<{ key: stri
         hasQa: !!epic?.qa,
         orderKind: epic?.orderKind ?? null,
       }}
-      target={isJiraIssueKey(key) && (epic?.resolved ?? false)}
+      target={isJiraIssueKey(key) && (epic?.resolved ?? false) && !isProductOrder(epic?.roles)}
       data={readDataOrder(key)}
       share={epic?.artifactShares.find((s) => s.slug === "data") ?? null}
       specJob={job(`data-spec-${key}`)}

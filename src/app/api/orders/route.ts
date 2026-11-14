@@ -300,7 +300,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ targets: prTargets(prKey) });
   }
 
-  // 이미 만들어진 환경별 PR: ?prExisting={오더키} → { prs: { "{repo}|{branch}": [...] } }
+  // 이미 만들어진 환경별 PR: ?prExisting={오더키} → { prs: { "{repo}|{branch}": { "{환경 브랜치}": { current: [...], previous: [...] } } } }
+  //   current 는 지금 PR(열린 PR, 없으면 가장 최근에 머지된 PR), previous 는 접어 둘 이전 PR(닫힌 PR 에는 닫힌 이유 reason).
   const prExKey = (sp.get("prExisting") ?? "").trim();
   if (prExKey) {
     if (!ORDER_KEY_RE.test(prExKey)) {

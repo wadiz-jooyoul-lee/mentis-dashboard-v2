@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 import { buildCommitChanges, type RepoCommitChanges } from "@/lib/commitChanges";
 import { expandHome, getDefaultBase, getMetaDir, getReposRoot, getWorkspaceDir } from "@/lib/issues";
 import { ORDER_KEY_RE } from "@/lib/keys";
-import { envBranchesOf, type ExistingPr } from "@/lib/prEnv";
+import { envBranchesOf, splitEnvPrs, type EnvPrs, type ExistingPr } from "@/lib/prEnv";
 import { liveSessionByUuid } from "@/lib/sessionRegistry";
 import {
   parseOrchestration,
@@ -24,6 +24,9 @@ import {
 } from "@/lib/parseOrchestration";
 import {
   parseOrderStatus,
+  parseRoles,
+  hasProducer,
+  sectionBody,
   phaseText,
   type PhaseKey,
   type ShipRow,
@@ -41,6 +44,7 @@ import {
   AVATAR_GROUPS,
   avatarHash,
   groupFirstMember,
+  groupSize,
 } from "@/lib/avatarAssign";
 import type { Metric, CardStats } from "@/lib/lifecycle";
 import type { ReportRun } from "@/lib/issues";
@@ -48,6 +52,8 @@ import { shipFromTestRuns } from "@/lib/shipFromTests";
 import { devProgress, type DevProgress } from "@/lib/devProgress";
 import { parseRetroJson, retroBlockReason, type RetroData } from "@/lib/retro";
 import { openAskTitle } from "@/lib/ask";
+import { autoDecisions, prRedesignCount, type AutoDecision } from "@/lib/autoDecisions";
+import { takeTable } from "@/components/doc/parse";
 import { autoRunState, liveSessions, qaProgress, qaRun, type AutoRun, type QaProgress, type QaRun } from "@/lib/presence";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
@@ -158,6 +164,9 @@ function epicKeys(): string[] {
 /** work-type: produce.md → 비소스, implementation.md → code, status 힌트, 그 외 기본 개발(code). */
 function workTypeOf(key: string, statusMd: string | null): WorkType {
   const dir = orderDir(key);
+  // 담당자 줄이 있는 /do 오더는 개발자가 켜졌는지로 가른다. 개발자와 산출자가 함께 켜진 오더는 산출 기록이 있어도 개발이다.
+  const roles = parseRoles(statusMd);
+  if (roles) return roles.includes("개발자") ? "code" : "nonsource";
   // produce.md는 최상위(repo에 들어가는 산출물) 또는 deliverables/(repo 밖 리포트)에 있을 수 있다 — 둘 다 비소스 신호.
   if (
     fs.existsSync(path.join(dir, "produce.md")) ||
@@ -255,6 +264,8 @@ function orchestrationOf(key: string, statusMd: string | null): Orchestration | 
   }
   // 상태표가 아예 없으면 보드를 만들지 않는다(로그만으로 행을 지어내지 않는다 — logOnlySlugs 주석).
   if (!o) return null;
+  // /do 오더의 상태표는 시작·끝 헬퍼가 맞춘다. 산출물 파일이 있다고 완료로 바꾸면 산출자가 지적을 고치는 중에도 완료로 보인다.
+  if (isV2Status(statusMd)) return o;
   return applyDeliverableCompletion(key, o);
 }
 
@@ -303,6 +314,8 @@ export type EpicSummary = {
   workType: WorkType;
   /** 오더 종류(status.md `종류`) — 상세 탭 구성 분기용. summary=작업 내용 정리. */
   orderKind: "development" | "deliverable" | "summary" | null;
+  /** 켜진 담당자(상태 문서의 담당자 줄). 줄이 없는 오더는 null. */
+  roles: string[] | null;
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). status.md 워크트리 표 경로 존재로 판단. */
   worktreeRemoved: boolean;
@@ -343,7 +356,7 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
   const domG = dominantGroup(pinned);
   const avatar =
     pinned[ORCHESTRATOR_SLUG] ??
-    (domG ? groupFirstMember(domG) : groupFirstMember(pickBalancedGroup(key)));
+    (domG ? groupFirstMember(domG) : groupFirstMember(pickBalancedGroup(key, st?.roles?.length ?? 0)));
   return {
     epicKey: key,
     mode: o?.mode ?? null,
@@ -357,10 +370,11 @@ function summarize(key: string, o: Orchestration | null, statusMd: string | null
     stalled,
     workType: workTypeOf(key, statusMd),
     orderKind: st?.orderKind ?? null,
+    roles: st?.roles ?? null,
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     phase: st?.phase ?? "unknown",
-    phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : "-",
+    phaseLabel: st ? phaseText(st.phaseRaw, st.phase, st.roles) : "-",
     ship: shipFromTestRuns(orderDir(key), st?.ship ?? []),
     releaseNote: st?.releaseNote ?? [],
   };
@@ -757,6 +771,13 @@ function slugStubs(epicKey: string): AgentWork[] {
 
 export type Deliverable = { name: string; content: string; kind: "md" | "html" | "other" };
 
+/** 산출 기록 한 건(produce.md, 산출물이 여럿이면 produce-{이름}.md). */
+export type ProduceDoc = { name: string; content: string };
+/** 산출물을 올린 곳 — 산출 기록 `## 올린 곳` 절의 `- {종류}: {주소}` 한 줄. */
+export type ProduceUpload = { kind: string; url: string; from: string };
+/** 산출자 카드 진척도. make: 이번에 만들 산출물 가운데 산출 기록이 생긴 수 · fix: 리뷰 지적을 고치는 중. */
+export type ProduceProgress = { mode: "make"; done: number; total: number } | { mode: "fix"; findings: number };
+
 export type EpicDetail = {
   epicKey: string;
   orchestration: Orchestration | null;
@@ -773,6 +794,20 @@ export type EpicDetail = {
   workType: WorkType;
   /** 오더 종류(status.md `종류`) — 상세 탭 구성 분기용. summary=작업 내용 정리. */
   orderKind: "development" | "deliverable" | "summary" | null;
+  /** 켜진 담당자(상태 문서의 담당자 줄). 줄이 없는 오더는 null — 지금까지처럼 다섯으로 그린다. */
+  roles: string[] | null;
+  /** 지금 리뷰·수정·통합이 다루는 것이 산출물인가. 수정 차례의 담당을 가른다. */
+  reviewingProduct: boolean;
+  /** 스스로 정한 결정(설계 문서 `## 결정과 근거` 의 `자동 결정 —` 줄). 없으면 빈 배열. */
+  autoDecisions: AutoDecision[];
+  /** PR 변경요청으로 설계를 바꾼 횟수. */
+  prRedesigns: number;
+  /** 산출자 카드 진척도. 산출자가 일하는 중일 때만 계산하고, 아니면 null. */
+  produceProgress: ProduceProgress | null;
+  /** 산출 기록들(산출물 탭). 산출자가 켜진 오더에서만 채운다. */
+  produceDocs: ProduceDoc[];
+  /** 산출물을 올린 곳(산출물 탭). */
+  uploads: ProduceUpload[];
   title: string | null;
   /** 기록된 워크트리가 모두 삭제됨(dobby-end 정리). */
   worktreeRemoved: boolean;
@@ -1034,7 +1069,7 @@ export type OrderDoc = { name: string; bytes: number; content: string };
  * 문서가 많은 오더에서 응답이 통째로 커진다(실측 FE-8218 1.16MB → 1.94MB). 본문은
  * `/orchestration/{키}/docs` 탭에서만 읽는다.
  */
-function readOtherDocs(key: string, withContent: boolean): OrderDoc[] {
+function readOtherDocs(key: string, withContent: boolean, skipProduce = false): OrderDoc[] {
   const dir = orderDir(key);
   const out: OrderDoc[] = [];
   try {
@@ -1044,6 +1079,8 @@ function readOtherDocs(key: string, withContent: boolean): OrderDoc[] {
       if (!lower.endsWith(".md")) continue;
       if (lower.endsWith(".bak.md") || lower.endsWith(".md.bak")) continue;
       if (KNOWN_ROOT_DOCS.has(lower)) continue;
+      // 산출자가 켜진 오더의 산출 기록(produce-{이름}.md)은 산출물 탭이 보여 준다.
+      if (skipProduce && /^produce-.+\.md$/.test(lower)) continue;
       const full = path.join(dir, f);
       let bytes = 0;
       try {
@@ -1059,23 +1096,121 @@ function readOtherDocs(key: string, withContent: boolean): OrderDoc[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** deliverables/ 산출물(produce.md 제외). md/html/기타 구분. */
-function readDeliverables(key: string): Deliverable[] {
-  const dir = path.join(orderDir(key), "deliverables");
-  if (!fs.existsSync(dir)) return [];
+/** 산출물 폴더에서 읽는 깊이와 파일 수의 상한(하위 폴더까지 읽을 때). */
+const DELIVERABLE_MAX_DEPTH = 4;
+const DELIVERABLE_MAX_FILES = 200;
+
+/**
+ * deliverables/ 산출물(produce.md 제외). md/html/기타 구분.
+ * deep 이면 하위 폴더까지 읽고 이름을 폴더부터의 경로로 돌려준다(산출자가 켜진 /do 오더).
+ * 아니면 지금까지처럼 맨 위 항목만 본다.
+ */
+function readDeliverables(key: string, deep = false): Deliverable[] {
+  const root = path.join(orderDir(key), "deliverables");
+  if (!fs.existsSync(root)) return [];
   const out: Deliverable[] = [];
-  try {
-    for (const f of fs.readdirSync(dir)) {
-      if (f === "produce.md") continue;
-      const lower = f.toLowerCase();
+  const walk = (dir: string, rel: string, depth: number) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+      if (deep) entries.sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (out.length >= DELIVERABLE_MAX_FILES) return;
+      const name = rel ? `${rel}/${e.name}` : e.name;
+      if (!rel && e.name === "produce.md") continue;
+      if (deep && e.name.startsWith(".")) continue;
+      if (deep && e.isDirectory()) {
+        if (depth < DELIVERABLE_MAX_DEPTH) walk(path.join(dir, e.name), name, depth + 1);
+        continue;
+      }
+      const lower = e.name.toLowerCase();
       const kind = lower.endsWith(".md") ? "md" : lower.endsWith(".html") || lower.endsWith(".htm") ? "html" : "other";
-      const content = kind === "other" ? "" : readFileSafe(path.join(dir, f)) ?? "";
-      out.push({ name: f, content, kind });
+      const content = kind === "other" ? "" : readFileSafe(path.join(dir, e.name)) ?? "";
+      out.push({ name, content, kind });
+    }
+  };
+  walk(root, "", 1);
+  return out;
+}
+
+/** 산출 기록들 — produce.md(옛 자리 deliverables/produce.md 포함)와 produce-{이름}.md. */
+function readProduceDocs(key: string): ProduceDoc[] {
+  const dir = orderDir(key);
+  const out: ProduceDoc[] = [];
+  const one = readFileSafe(path.join(dir, "produce.md")) ?? readFileSafe(path.join(dir, "deliverables", "produce.md"));
+  if (one != null) out.push({ name: "produce.md", content: one });
+  try {
+    for (const f of fs.readdirSync(dir).sort()) {
+      if (!/^produce-.+\.md$/i.test(f)) continue;
+      out.push({ name: f, content: readFileSafe(path.join(dir, f)) ?? "" });
     }
   } catch {
-    /* skip */
+    /* 폴더 접근 실패는 무시 */
   }
   return out;
+}
+
+/** 산출 기록의 `## 올린 곳` 절에서 `- {종류}: {주소}` 줄을 읽는다. 주소가 없는 줄은 건너뛴다. */
+function produceUploads(docs: ProduceDoc[]): ProduceUpload[] {
+  const out: ProduceUpload[] = [];
+  for (const d of docs) {
+    for (const line of sectionBody(d.content, /^올린 곳$/).split("\n")) {
+      const m = line.match(/^\s*[-*]\s+(.+?)\s*[:：]\s*(\S.*)$/);
+      const url = m?.[2].match(/https?:\/\/[^\s)>\]]+/)?.[0];
+      if (m && url) out.push({ kind: m[1].replace(/\*/g, "").trim(), url, from: d.name });
+    }
+  }
+  return out;
+}
+
+/**
+ * 설계 문서 `## 산출물` 표의 줄 — 이름과 때(앞: 구현의 근거가 되는 조사 · 뒤: 구현 결과를 쓰는 문서).
+ * 표가 없으면 산출물 하나(이름 "산출물", 앞)로 본다. go-dobby 의 _v2_deliverables·_v2_produce_pending 과 같은 규칙이다.
+ */
+function plannedDeliverables(designMd: string | null): { name: string; when: "앞" | "뒤" }[] {
+  const t = designMd ? takeTable(sectionBody(designMd, /^산출물$/)) : null;
+  const ni = t ? t.table.head.findIndex((h) => h.replace(/[`*]/g, "").trim() === "이름") : -1;
+  const wi = t ? t.table.head.findIndex((h) => h.replace(/[`*]/g, "").trim() === "언제") : -1;
+  const rows = t && ni >= 0
+    ? t.table.rows
+        .map((r) => ({
+          name: (r[ni] ?? "").replace(/[`*]/g, "").trim(),
+          when: (wi >= 0 && /뒤/.test(r[wi] ?? "") ? "뒤" : "앞") as "앞" | "뒤",
+        }))
+        .filter((r) => r.name && !/^-*$/.test(r.name))
+    : [];
+  return rows.length ? rows : [{ name: "산출물", when: "앞" }];
+}
+
+/**
+ * 산출자 카드 진척도. 에이전트에게 기록을 더 시키지 않고 이미 있는 파일만 본다.
+ * 만드는 중 = 이번에 만들 산출물 가운데 산출 기록이 생긴 수 / 고치는 중 = 최신 리뷰 지적 수.
+ */
+function produceProgress(
+  dir: string,
+  phaseRaw: string | null,
+  designMd: string | null,
+  agents: AgentRow[],
+  reviews: { round: number; content: string }[]
+): ProduceProgress {
+  if ((phaseRaw ?? "").trim() === "수정") {
+    const last = Math.max(0, ...reviews.map((r) => r.round));
+    const findings = reviews
+      .filter((r) => r.round === last)
+      .reduce((n, r) => n + (r.content.match(/^##\s*\[(blocker|major|minor|nit)\]/gim)?.length ?? 0), 0);
+    return { mode: "fix", findings };
+  }
+  const all = plannedDeliverables(designMd);
+  // 개발자도 일하는 오더는 구현이 끝나기 전에는 앞의 것만, 끝난 뒤에는 뒤의 것만 만든다.
+  const dev = agents.find((a) => isDevRole(a.name));
+  const devWorks = !!dev && !(dev.state === "완료" && /^할 일 없음/.test(dev.desc ?? ""));
+  const when = devWorks ? (dev!.state === "완료" ? "뒤" : "앞") : null;
+  const now = when ? all.filter((d) => d.when === when) : all;
+  const rec = (name: string) => path.join(dir, all.length <= 1 ? "produce.md" : `produce-${name}.md`);
+  return { mode: "make", done: now.filter((d) => fs.existsSync(rec(d.name))).length, total: now.length };
 }
 
 export type PrTarget = { repo: string; branch: string; repoUrl: string | null };
@@ -1256,12 +1391,39 @@ export function prTargets(key: string): PrTarget[] {
 }
 
 /**
- * 이 오더 브랜치에서 환경 브랜치로 이미 만들어진 PR(열림·머지됨). 키는 `{repo}|{branch}`.
+ * 변경요청으로 닫은 PR 번호들. 세 곳에서 모은다:
+ * 설계 문서의 `## 변경 N — PR 리뷰 지적` 절에 적힌 번호, 이벤트 기록의 "PR 닫음 … 변경요청" 줄,
+ * 그리고 새 PR 을 만들기 전까지 남아 있는 닫은 PR 기록(.v2-pr-closed).
+ */
+function redesignClosedPrs(key: string): Set<number> {
+  const dir = orderDir(key);
+  const out = new Set<number>();
+  const add = (text: string) => {
+    for (const m of text.matchAll(/#(\d+)/g)) out.add(Number(m[1]));
+  };
+  const design = readFileSafe(path.join(dir, "design.md")) ?? "";
+  const lines = design.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^## 변경 [0-9]+ — PR 리뷰 지적/.test(lines[i])) continue;
+    add(lines[i]);
+    for (let j = i + 1; j < lines.length && !/^## /.test(lines[j]); j++) add(lines[j]);
+  }
+  for (const l of (readFileSafe(path.join(dir, "orchestration.md")) ?? "").split("\n")) {
+    if (/PR 닫음 — /.test(l) && /변경요청/.test(l)) add(l.split("변경요청")[0]);
+  }
+  for (const l of (readFileSafe(path.join(dir, ".v2-pr-closed")) ?? "").split("\n")) add(l.split("\t")[2] ?? "");
+  return out;
+}
+
+/**
+ * 이 오더 브랜치에서 환경 브랜치로 이미 만들어진 PR(열림·합쳐짐·닫힘). 키는 `{repo}|{branch}`, 그 아래는 환경 브랜치.
+ * 환경마다 "지금 PR"과 "이전 PR"로 나눠 돌려준다(prEnv.splitEnvPrs). 닫힌 PR 에는 닫힌 이유를 붙인다.
  * GitHub 검색 `head:` 는 앞부분 일치라 충돌 해결 브랜치({브랜치}_into_{환경})까지 한 번에 찾는다.
  */
-export async function existingPrs(key: string): Promise<Record<string, ExistingPr[]>> {
+export async function existingPrs(key: string): Promise<Record<string, Record<string, EnvPrs>>> {
   const run = promisify(execFile);
-  const out: Record<string, ExistingPr[]> = {};
+  const out: Record<string, Record<string, EnvPrs>> = {};
+  const redesign = redesignClosedPrs(key);
   await Promise.all(
     prTargets(key).map(async (t) => {
       const slug = t.repoUrl?.match(/github\.com\/([^/]+\/[^/]+)/)?.[1];
@@ -1271,26 +1433,29 @@ export async function existingPrs(key: string): Promise<Record<string, ExistingP
         const { stdout } = await run(
           "gh",
           ["pr", "list", "--repo", slug, "--state", "all", "--limit", "100",
-            "--search", `head:${t.branch}`, "--json", "number,url,headRefName,baseRefName,state"],
+            "--search", `head:${t.branch}`, "--json", "number,url,headRefName,baseRefName,state,createdAt,closedAt,mergedAt"],
           { timeout: 15000 },
         );
         const rows = JSON.parse(stdout) as {
           number: number; url: string; headRefName: string; baseRefName: string; state: string;
+          createdAt?: string | null; closedAt?: string | null; mergedAt?: string | null;
         }[];
-        out[`${t.repo}|${t.branch}`] = rows
-          .filter(
-            (r) =>
-              (r.state === "OPEN" || r.state === "MERGED") &&
-              envs.includes(r.baseRefName) &&
-              (r.headRefName === t.branch || r.headRefName === `${t.branch}_into_${r.baseRefName}`),
-          )
-          .map((r) => ({
+        const byEnv: Record<string, ExistingPr[]> = {};
+        for (const r of rows) {
+          if (r.state !== "OPEN" && r.state !== "MERGED" && r.state !== "CLOSED") continue;
+          if (!envs.includes(r.baseRefName)) continue;
+          if (r.headRefName !== t.branch && r.headRefName !== `${t.branch}_into_${r.baseRefName}`) continue;
+          (byEnv[r.baseRefName] ??= []).push({
             number: r.number,
             url: r.url,
             head: r.headRefName,
             base: r.baseRefName,
-            state: r.state as ExistingPr["state"],
-          }));
+            state: r.state,
+            at: (r.state === "MERGED" ? r.mergedAt : r.state === "CLOSED" ? r.closedAt : r.createdAt) ?? "",
+            ...(r.state === "CLOSED" ? { reason: redesign.has(r.number) ? "변경요청으로 다시 설계" : "닫힘" } : {}),
+          });
+        }
+        out[`${t.repo}|${t.branch}`] = Object.fromEntries(Object.entries(byEnv).map(([env, prs]) => [env, splitEnvPrs(prs)]));
       } catch {
         /* gh 가 없거나 로그인 전이면 기존 PR 없이 보여 준다 */
       }
@@ -1364,12 +1529,16 @@ function groupUsageCounts(excludeKey: string): Record<AvatarGroup, number> {
 
 /**
  * 그룹 균형(decay): 지금까지 **가장 적게 쓰인 그룹**을 고른다(동률은 에픽 키 해시로 결정적).
+ * minSize 를 주면 그만큼의 멤버가 있는 그룹 가운데서 고른다.
  * → 이미 많이 나온 그룹은 가중치가 떨어지고, 비노출 그룹의 출현율이 올라간다.
  */
-function pickBalancedGroup(epicKey: string): AvatarGroup {
+function pickBalancedGroup(epicKey: string, minSize = 0): AvatarGroup {
   const counts = groupUsageCounts(epicKey);
-  const min = Math.min(...AVATAR_GROUPS.map((g) => counts[g]));
-  const cands = AVATAR_GROUPS.filter((g) => counts[g] === min);
+  // minSize: 켜진 담당자 수. 그보다 멤버가 적은 그룹은 후보에서 뺀다(여섯이 다 켜지면 여섯 명 이상인 그룹에서).
+  // 담당자 줄이 없는 오더는 0 이라 지금까지와 같은 후보다.
+  const fit = AVATAR_GROUPS.filter((g) => groupSize(g) >= minSize);
+  const min = Math.min(...fit.map((g) => counts[g]));
+  const cands = fit.filter((g) => counts[g] === min);
   return cands[avatarHash(epicKey) % cands.length];
 }
 
@@ -1384,7 +1553,8 @@ function epicAvatars(
   epicKey: string,
   dir: string,
   slugs: string[],
-  inlineSlug: string | null
+  inlineSlug: string | null,
+  minSize = 0
 ): Record<string, AssignedAvatar> {
   const existing = readPinnedAvatars(dir);
   const realSlugs = slugs.filter((s) => s && s !== "-");
@@ -1393,15 +1563,15 @@ function epicAvatars(
   //  해시 그룹(primaryGroup)으로 배정되고 대표가 그 그룹으로 재파생돼 뒤집힌다 —
   //  균형그룹→에이전트그룹 플리커(FE1-1421 류). 에이전트가 생긴 뒤 한 번에 핀한다.)
   if (Object.keys(existing).length === 0 && realSlugs.length === 0) {
-    return { [ORCHESTRATOR_SLUG]: groupFirstMember(pickBalancedGroup(epicKey)) };
+    return { [ORCHESTRATOR_SLUG]: groupFirstMember(pickBalancedGroup(epicKey, minSize)) };
   }
   const firstPin = Object.keys(existing).length === 0;
   // 최초 핀은 균형 그룹으로, 이후 핀은 **이미 확정된 그룹(기존 핀의 dominant)** 을 이어 쓴다.
   // undefined로 두면 assignOrderAvatars가 해시 primaryGroup으로 폴백해, 뒤늦게 붙는 에이전트
   // (예: review-agent)가 팀과 다른 그룹으로 튄다(FE1-1518: 팀=프로미스인데 리뷰어만 아이브).
   const forced = firstPin
-    ? pickBalancedGroup(epicKey)
-    : dominantGroup(existing) ?? pickBalancedGroup(epicKey);
+    ? pickBalancedGroup(epicKey, minSize)
+    : dominantGroup(existing) ?? pickBalancedGroup(epicKey, minSize);
   const obj = Object.fromEntries(assignOrderAvatars(epicKey, slugs, existing, forced));
   // 오케스트레이터 아바타 파생(핀 슬롯 미소비). 대표는 이 에픽 실제 그룹 기준으로 팀과 일치시킨다.
   const epicGroup = dominantGroup(obj) ?? forced ?? "dobby";
@@ -1475,6 +1645,11 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
   const commitChanges = opts.withDiffs && st && statusMd ? buildCommitChanges(statusMd, st.worktrees) : undefined;
   const dev = orchestration.agents.find((a) => isDevRole(a.name) && a.state === "작업중");
   const designMd = readFileSafe(path.join(dir, "design.md"));
+  const roles = st?.roles ?? null;
+  // 산출자가 켜진 /do 오더는 산출 기록과 산출물을 산출물 탭에서 보여 준다(하위 폴더, 올린 곳까지).
+  const producer = hasProducer(roles);
+  const producing = producer && orchestration.agents.find((a) => a.agent === "produce-agent" && a.state === "작업중");
+  const produceDocs = producer ? readProduceDocs(epicKey) : [];
   const avatars = epicAvatars(
     epicKey,
     dir,
@@ -1483,7 +1658,8 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
       ...contracts.map((c) => c.slug),
       ...agentWorks.map((w) => w.slug),
     ],
-    inlineOrchestratorSlug(dir, statusMd)
+    inlineOrchestratorSlug(dir, statusMd),
+    roles?.length ?? 0
   );
   return {
     epicKey,
@@ -1496,10 +1672,17 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     avatars,
     workType: workTypeOf(epicKey, statusMd),
     orderKind: st?.orderKind ?? null,
+    roles,
+    reviewingProduct: st?.reviewingProduct ?? false,
+    autoDecisions: autoDecisions(designMd),
+    prRedesigns: prRedesignCount(designMd),
+    produceProgress: producing ? produceProgress(dir, st?.phaseRaw ?? null, designMd, orchestration.agents, reviews) : null,
+    produceDocs,
+    uploads: produceUploads(produceDocs),
     title: st?.meta.title ?? null,
     worktreeRemoved: st ? worktreesGone(st.worktrees) : false,
     resolved: st ? worktreesGone(st.worktrees) || st.phase === "해결" || st.phase === "종료" : false,
-    phaseLabel: st ? phaseText(st.phaseRaw, st.phase) : null,
+    phaseLabel: st ? phaseText(st.phaseRaw, st.phase, st.roles) : null,
     phaseRaw: st?.phaseRaw ?? null,
     phase: st?.phase ?? "unknown",
     isV2: isV2Status(statusMd),
@@ -1521,8 +1704,8 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     decisionsMd: readFileSafe(path.join(dir, "decisions.md")),
     sideEffectsMd: readFileSafe(path.join(dir, "side-effects.md")),
     testGuideMd: readFileSafe(path.join(dir, "test-guide.md")),
-    deliverables: readDeliverables(epicKey),
-    otherDocs: readOtherDocs(epicKey, opts.withDocs === true),
+    deliverables: readDeliverables(epicKey, producer),
+    otherDocs: readOtherDocs(epicKey, opts.withDocs === true, producer),
     runs: readRuns(epicKey),
     hasJob: fs.existsSync(path.join(getMetaDir(), ".mentis-jobs", epicKey, "run.json")),
     explainerMd: readFileSafe(path.join(dir, "explainer.md")),

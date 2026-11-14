@@ -11,6 +11,8 @@ import V2RunButton from "@/components/V2RunButton";
 import OrderQuestion from "@/components/OrderQuestion";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
+import { useOrderRoles } from "@/components/OrderRoles";
+import { hasProducer, isProductOrder } from "@/lib/parseOrderStatus";
 import { dobbyColor } from "@/lib/dobby";
 import { isJiraIssueKey } from "@/lib/keys";
 
@@ -44,6 +46,7 @@ function routeFor(key: string, tab: string): string {
   if (tab === "data") return `/orchestration/${key}/data`;
   if (tab === "retro") return `/orchestration/${key}/retro`;
   if (tab === "docs") return `/orchestration/${key}/docs`;
+  if (tab === "deliverables") return `/orchestration/${key}/deliverables`;
   return `/orchestration/${key}`;
 }
 
@@ -59,6 +62,7 @@ function activeTab(pathname: string): string {
   if (pathname.endsWith("/data")) return "data";
   if (pathname.endsWith("/retro")) return "retro";
   if (pathname.endsWith("/docs")) return "docs";
+  if (pathname.endsWith("/deliverables")) return "deliverables";
   return "board";
 }
 
@@ -113,13 +117,21 @@ export default function OrderHeader({
     ? TABS.flatMap((t) => (t.key === "explain" ? [{ key: "design", label: "설계/결과" }, t] : [t]))
     : TABS;
   // QA 탭은 QA 감시가 돈 오더에만 보인다 — 개발 → 검증 → QA 순이라 "검증" 뒤에 끼운다.
-  const baseTabs = hasQa
+  const baseTabs1 = hasQa
     ? baseTabs0.flatMap((t) => (t.key === "verify" ? [t, { key: "qa", label: "QA" }] : [t]))
     : baseTabs0;
+  // 켜진 담당자(상태 문서의 담당자 줄)에 맞춘다. 줄이 없는 오더는 roles 가 null 이라 아래 둘 다 해당하지 않는다.
+  // 산출자가 켜진 오더는 "구현 내용" 뒤에 산출물 탭을 둔다. 개발자 없이 산출물만 만드는 오더는
+  // 배포 환경에서 확인할 것이 없어 검증 탭과 데이터 탭을 뺀다.
+  const roles = useOrderRoles();
+  const productOnly = isProductOrder(roles);
+  const baseTabs = baseTabs1
+    .flatMap((t) => (t.key === "explain" && hasProducer(roles) ? [t, { key: "deliverables", label: "산출물" }] : [t]))
+    .filter((t) => !(productOnly && t.key === "verify"));
   // 문서·아티팩트·회고는 내용이 없어도 항상 노출한다(빈 화면이 안내·생성 버튼을 제공).
   // 문서 탭 = 전용 탭이 없는 루트 .md 모음. 전체 메타 기준 75/109 오더가 이런 문서를 갖고 있다.
   // 데이터 탭은 해결된 Jira 오더에만(TASK- 작업 제외) — 회고 앞
-  const dataTab = resolved && hasJiraIssue ? [{ key: "data", label: "데이터" }] : [];
+  const dataTab = resolved && hasJiraIssue && !productOnly ? [{ key: "data", label: "데이터" }] : [];
   const items = isSummary
     ? [
         ...SUMMARY_TABS,

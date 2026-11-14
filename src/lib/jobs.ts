@@ -11,6 +11,7 @@ import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 import { fieldLine } from "@/lib/md";
 import { openAskTitle } from "@/lib/ask";
+import { isProductOrderKey } from "@/lib/orderRoles";
 
 export { ORDER_KEY_RE };
 
@@ -311,6 +312,8 @@ export function startRetro(
 function startData(key: string, cmd: "spec" | "run"): { ok: boolean; reason?: string; jobId?: string } {
   const k = key.trim();
   if (!isJiraIssueKey(k)) return { ok: false, reason: "invalid_key" };
+  // 개발자 없이 산출물만 만든 오더는 배포 환경의 동작이 바뀌지 않아 잴 것이 없다.
+  if (isProductOrderKey(k)) return { ok: false, reason: "산출물만 만든 오더는 데이터 분석 대상이 아닙니다" };
   if (isRunning(`data-spec-${k}`) || isRunning(`data-${k}`)) return { ok: false, reason: "already_running" };
   const jobId = cmd === "spec" ? `data-spec-${k}` : `data-${k}`;
   spawnClaude(jobId, ["-p", `/dobby-data ${cmd} ${k}`], false);

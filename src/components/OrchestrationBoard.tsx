@@ -31,6 +31,7 @@ import GroupAvatar, { type QuipPlacement } from "@/components/GroupAvatar";
 import QuipsControl from "@/components/QuipsControl";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
+import ReviewCards from "@/components/ReviewCards";
 import { ShipProgress } from "@/components/ShipProgress";
 import { ReleaseNoteList } from "@/components/ReleaseNoteTags";
 import { quipList, type QuipsFile, type Quip } from "@/lib/quipTypes";
@@ -42,12 +43,14 @@ import {
   STATE_ORDER,
   boardColumn,
   isDevRole,
-  FIVE_ROLES,
+  rolesOn,
+  roleRow,
   phaseOwner,
   whoMoves,
   type Mover,
 } from "@/lib/parseOrchestration";
-import { PHASE_ORDER } from "@/lib/parseOrderStatus";
+import { hasProducer, phaseBand, phaseName } from "@/lib/parseOrderStatus";
+import { PR_REDESIGN_MAX } from "@/lib/autoDecisions";
 import { parseReport } from "@/lib/parseReport";
 import type { DevProgress } from "@/lib/devProgress";
 import { isJiraIssueKey } from "@/lib/keys";
@@ -124,6 +127,11 @@ function roleColor(name: string): string {
   return ROLE_PALETTE[h % ROLE_PALETTE.length];
 }
 
+/** 표의 칸에 적힌 굵은 글씨·코드 표시를 떼어 한 줄 글로 만든다. */
+function stripMd(v: string): string {
+  return v.replace(/[*`]/g, "").trim();
+}
+
 /** 에이전트 상태 → 도비 표정. */
 /** 이벤트를 시(hour) 단위로 묶는다. 입력은 최신 먼저 정렬 가정(순서 유지). */
 function groupByHour(events: EventRow[]): { hour: string; events: EventRow[] }[] {
@@ -196,17 +204,35 @@ function ProgressBar({ parts, total, label }: { parts: BarPart[]; total: number;
   );
 }
 
-/** 단계 띠: 13개 단계값을 여덟 칸에 접어 그린다. 겹친 단계(설계확인·수정·실패분석·보류)는 칸 아래 작은 글씨로. */
-function PhaseBand({ phase, raw, retroHref, retroDone }: { phase: string; raw: string; retroHref: string; retroDone: boolean }) {
-  const cur = PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]);
+/**
+ * 단계 띠: 단계값을 칸에 접어 그린다. 겹친 단계(설계확인·수정·보류 등)는 칸 아래 작은 글씨로.
+ * 칸은 켜진 담당자에 맞춘다(담당자 줄이 없는 오더는 여덟 칸 그대로) — parseOrderStatus.phaseBand.
+ */
+function PhaseBand({
+  phase,
+  raw,
+  roles,
+  retroHref,
+  retroDone,
+}: {
+  phase: string;
+  raw: string;
+  roles: string[] | null;
+  retroHref: string;
+  retroDone: boolean;
+}) {
+  const cells = phaseBand(roles);
+  const cur = cells.findIndex((c) => c.key === phase);
+  const name = phaseName(raw, roles);
   return (
     <div style={{ display: "flex", gap: 4 }}>
-      {PHASE_ORDER.map((p, i) => {
+      {cells.map((c, i) => {
         const active = i === cur;
-        const sub = active && raw && raw !== p ? raw : null;
+        const sub = active && name && name !== c.label ? name : null;
         return (
           <div
-            key={p}
+            key={c.key}
+            data-phase-cell={c.label}
             style={{
               flex: "1 1 0",
               textAlign: "center",
@@ -218,7 +244,7 @@ function PhaseBand({ phase, raw, retroHref, retroDone }: { phase: string; raw: s
               fontWeight: active ? 600 : 400,
             }}
           >
-            {p}
+            {c.label}
             {sub && <div style={{ fontSize: 11, fontWeight: 400 }}>{sub}</div>}
           </div>
         );
@@ -268,7 +294,7 @@ function AgentCard({
   placement?: QuipPlacement;
   /** 이 에이전트의 가장 최근 콘솔(id)과 지금 진행 중인지. 콘솔 기록이 없으면 undefined. */
   console?: { id: string; live: boolean };
-  /** 아바타 아래 진행 막대(테스터·개발자). 없으면 그리지 않는다. */
+  /** 아바타 아래 진행 막대(테스터·개발자·산출자). 없으면 그리지 않는다. */
   progress?: ReactNode;
   /** 세션 점(/do 오더만). 없으면 그리지 않는다. */
   dot?: Dot;
@@ -556,15 +582,20 @@ export default function OrchestrationBoard({
     );
   }
 
-  // /do 오더: 담당자 다섯 중 상태표에 없는 행은 회색 빈 카드로 대기 열에 그린다.
+  // /do 오더: 켜진 담당자 가운데 상태표에 없는 행은 회색 빈 카드로 대기 열에 그린다.
+  // 켜지지 않은 담당자는 그리지 않는다(담당자 줄이 없는 오더는 지금까지처럼 다섯).
   const isV2 = epic?.isV2 ?? false;
+  const roles = epic?.roles ?? null;
+  const reviewingProduct = epic?.reviewingProduct ?? false;
+  // 산출자가 켜진 오더는 산출 기록과 산출물을 산출물 탭에서 본다.
+  const producer = hasProducer(roles);
   const sessions = epic?.sessions ?? {};
   const autoRunning = !!epic?.autoRun?.running;
   const phaseRaw = epic?.phaseRaw ?? "";
   const missing: AgentRow[] = isV2
-    ? FIVE_ROLES.filter((r) =>
-        !o.agents.some((a) => (r.slug ? a.agent === r.slug : isDevRole(a.name)))
-      ).map((r) => ({ agent: r.slug ?? "", name: r.name, issue: "", branch: "", state: "대기", round: "", updatedAt: "", startedAt: "" }))
+    ? rolesOn(roles)
+        .filter((r) => !roleRow(o.agents, r))
+        .map((r) => ({ agent: r.slug ?? "", name: r.name, issue: "", branch: "", state: "대기", round: "", updatedAt: "", startedAt: "" }))
     : [];
   const mover = isV2
     ? whoMoves({
@@ -576,13 +607,15 @@ export default function OrchestrationBoard({
         releaseDates: (epic?.releaseNote ?? []).map((r) => r.date),
         qa: epic?.qaRun ?? null,
         ask: epic?.openAsk ?? null,
+        roles,
+        reviewingProduct,
       })
     : null;
   const dotFor = (a: AgentRow): Dot | undefined =>
     !isV2 ? undefined : sessions[a.agent] ? "live" : a.state === "작업중" && !autoRunning ? "lost" : "none";
   // 보드가 스스로 잡아내는 모순. /do 는 한 번에 한 담당자만 일하고, 일하는 담당자는 단계의 담당자다.
   const workingNow = o.agents.filter((a) => a.state === "작업중");
-  const owner = phaseOwner(phaseRaw);
+  const owner = phaseOwner(phaseRaw, reviewingProduct);
   const contradictions: string[] = [];
   if (isV2) {
     for (const a of workingNow)
@@ -592,7 +625,7 @@ export default function OrchestrationBoard({
     if (workingNow.length > 1 && !qaOn)
       contradictions.push(`작업중인 담당자가 ${workingNow.length}명입니다(${workingNow.map((a) => a.name || a.agent).join(", ")})`);
     const off = workingNow.find((a) => owner && (owner === "개발자" ? !isDevRole(a.name) : a.name !== owner));
-    if (off && !qaOn) contradictions.push(`단계는 ${phaseRaw}(${owner} 차례)인데 ${off.name || off.agent}가 작업중입니다`);
+    if (off && !qaOn) contradictions.push(`단계는 ${phaseName(phaseRaw, roles)}(${owner} 차례)인데 ${off.name || off.agent}가 작업중입니다`);
     if (epic?.autoRun?.lost) contradictions.push("자동 실행이 실행 중으로 적혀 있지만 프로세스가 없습니다(자동 실행 끊김)");
   }
 
@@ -615,10 +648,27 @@ export default function OrchestrationBoard({
   const latestRun = epic?.runs?.[0];
   const testCounts = latestRun?.content ? parseReport(latestRun.content).counts : null;
   const dp: DevProgress | null = epic?.devProgress ?? null;
-  // 테스터 막대는 테스터 행(옛 오더는 단계 검증의 개발자 행), 개발자 막대는 개발자 행에 붙인다.
+  // 테스터 막대는 테스터 행(옛 오더는 단계 검증의 개발자 행), 개발자 막대는 개발자 행, 산출자 막대는 산출자 행에 붙인다.
   const qp = epic?.qaProgress ?? null;
+  const pp = epic?.produceProgress ?? null;
   const progressFor = (a: AgentRow): ReactNode => {
     if (a.state !== "작업중") return undefined;
+    if (a.agent === "produce-agent" && isV2) {
+      if (pp?.mode === "make")
+        return (
+          <ProgressBar
+            parts={[{ n: pp.done, color: "#1677ff" }]}
+            total={pp.total}
+            label={
+              pp.total > 0
+                ? `산출 ${pp.done} / ${pp.total} 문서 (${Math.round((pp.done / pp.total) * 100)}%)`
+                : "산출 중"
+            }
+          />
+        );
+      if (pp?.mode === "fix") return <ProgressBar parts={[]} total={0} label={`산출물 고치는 중 · 지적 ${pp.findings}건`} />;
+      return undefined;
+    }
     if (qp && (qp.stage === "QA 리뷰" ? a.name === "리뷰어" : isDevRole(a.name)))
       return (
         <ProgressBar
@@ -731,6 +781,7 @@ export default function OrchestrationBoard({
             <PhaseBand
               phase={epic?.phase ?? "unknown"}
               raw={phaseRaw}
+              roles={roles}
               retroHref={`/orchestration/${epicKey}/retro`}
               retroDone={epic?.hasRetroDoc ?? false}
             />
@@ -756,6 +807,68 @@ export default function OrchestrationBoard({
                 자동 실행: {epic.autoRun.lost ? "끊김 — 프로세스가 없습니다" : epic.autoRun.text}
               </Text>
             )}
+          </Space>
+        </Card>
+      )}
+
+      {/* 스스로 정한 결정 — 사람의 확정 없이 기획자가 정한 것. 설계 문서에서 직접 읽는다. 없으면 그리지 않는다. */}
+      {isV2 && ((epic?.autoDecisions.length ?? 0) > 0 || (epic?.prRedesigns ?? 0) > 0) && (
+        <Card
+          id="auto-decisions"
+          size="small"
+          style={{ marginBottom: 16, scrollMarginTop: 220 }}
+          title={
+            <Space size={8} wrap>
+              <Text strong>스스로 정한 결정</Text>
+              <Tag color="purple" style={{ margin: 0 }}>
+                {epic!.autoDecisions.length}건
+              </Tag>
+              {epic!.autoDecisions.some((d) => d.check) && (
+                <Tag color="orange" style={{ margin: 0 }}>
+                  확인해 보세요 {epic!.autoDecisions.filter((d) => d.check).length}건
+                </Tag>
+              )}
+            </Space>
+          }
+          extra={epic?.hasDesignDoc ? <Link href={`/orchestration/${epicKey}/design`}>설계 문서에서 보기 →</Link> : undefined}
+        >
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              사람에게 묻지 않고 진행하면서 정한 것입니다. 생각과 다르면 설계를 고쳐 달라고 요청해 주세요.
+            </Text>
+            {(epic?.prRedesigns ?? 0) > 0 && (
+              <Text style={{ fontSize: 13 }}>
+                PR 에 달린 변경 요청으로 설계를 다시 본 횟수: <Text strong>{epic!.prRedesigns}번</Text>
+                <Text type="secondary"> ({PR_REDESIGN_MAX}번을 넘으면 사람에게 묻습니다)</Text>
+              </Text>
+            )}
+            {epic!.autoDecisions.map((d, i) => (
+              <div
+                key={i}
+                data-auto-decision
+                style={{ borderLeft: `3px solid ${d.check ? "#fa8c16" : "#b37feb"}`, paddingLeft: 10 }}
+              >
+                <Space size={[6, 4]} wrap>
+                  <Text strong>{stripMd(d.what)}</Text>
+                  {d.check && (
+                    <Tag color="orange" style={{ margin: 0 }}>
+                      확인해 보세요
+                    </Tag>
+                  )}
+                </Space>
+                <div className="markdown-body" style={{ fontSize: 13 }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {[
+                      d.pick && `- **고른 답**: ${d.pick}`,
+                      d.why && `- **이유**: ${d.why}`,
+                      ...d.rest.map((r) => `- **${stripMd(r.label)}**: ${r.value}`),
+                    ]
+                      .filter(Boolean)
+                      .join("\n")}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            ))}
           </Space>
         </Card>
       )}
@@ -949,13 +1062,8 @@ export default function OrchestrationBoard({
                   items={g.reviews.map((rv) => ({
                     key: `${rv.slug}-${rv.round}`,
                     label: `round-${rv.round}`,
-                    children: (
-                      <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {rv.content}
-                        </ReactMarkdown>
-                      </div>
-                    ),
+                    // 지적 카드 형식이면 카드로, 아니면 원래 마크다운 그대로 그린다.
+                    children: <ReviewCards md={rv.content} />,
                   }))}
                 />
               ),
@@ -990,18 +1098,42 @@ export default function OrchestrationBoard({
         md={epic!.decisionsMd}
       />
 
-      {/* 구현 / 산출 */}
-      {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
-        <div style={{ marginTop: 20 }}>
-          <Title level={4}>{epic!.workType === "nonsource" ? "산출" : "구현"}</Title>
-          <Card size="small">
-            <div className="markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) ?? ""}
-              </ReactMarkdown>
+      {/* 구현 / 산출 — 산출자가 켜진 오더의 산출 기록은 산출물 탭에 있다. 여기에는 구현 기록만 둔다. */}
+      {producer ? (
+        <>
+          {epic!.implementationMd && (
+            <div style={{ marginTop: 20 }}>
+              <Title level={4}>구현</Title>
+              <Card size="small">
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{epic!.implementationMd}</ReactMarkdown>
+                </div>
+              </Card>
             </div>
-          </Card>
-        </div>
+          )}
+          {(epic!.produceDocs.length > 0 || epic!.deliverables.length > 0) && (
+            <div style={{ marginTop: 20 }}>
+              <Link href={`/orchestration/${epicKey}/deliverables`}>
+                <Tag icon={<FileTextOutlined />} color="blue" style={{ margin: 0, cursor: "pointer" }}>
+                  산출 기록과 산출물은 산출물 탭에 있습니다 →
+                </Tag>
+              </Link>
+            </div>
+          )}
+        </>
+      ) : (
+        (epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) && (
+          <div style={{ marginTop: 20 }}>
+            <Title level={4}>{epic!.workType === "nonsource" ? "산출" : "구현"}</Title>
+            <Card size="small">
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {(epic!.workType === "nonsource" ? epic!.produceMd : epic!.implementationMd) ?? ""}
+                </ReactMarkdown>
+              </div>
+            </Card>
+          </div>
+        )
       )}
 
 
@@ -1032,8 +1164,8 @@ export default function OrchestrationBoard({
         </div>
       )}
 
-      {/* 산출물 (deliverables/) */}
-      {epic!.deliverables.length > 0 && (
+      {/* 산출물 (deliverables/) — 산출자가 켜진 오더는 산출물 탭에서 본다 */}
+      {!producer && epic!.deliverables.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <Title level={4}>산출물</Title>
           <Space orientation="vertical" size={12} style={{ width: "100%" }}>

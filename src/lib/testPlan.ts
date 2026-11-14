@@ -28,10 +28,17 @@ export type TestPlan = {
   /** 시나리오가 아닌 `##` 절(사전 준비·영향 번들 등) */
   sections: PlanSection[];
   scenarios: PlanScenario[];
+  /**
+   * 제목 아래 `- **검증**: 필요 없음 — {이유}` 줄이 있으면 그 이유(이유를 안 적었으면 빈 문자열). 줄이 없으면 null.
+   * 브라우저로 확인할 것이 없는 변경과 테스터를 켜지 않은 오더에 적힌다.
+   */
+  skipReason: string | null;
 };
 
 const SCENARIO_RE = /^(S\d+|TC-?\d+|시나리오\s*\d+)(?![\w])\s*[.:)]?\s*(?:[—–-]\s*)?(.*)$/;
 const FIELD_RE = /^[-*]\s+\*\*(.+?)\*\*\s*[:：]?\s*(.*)$/;
+/** go-dobby 의 판정(_v2_test_skip)과 같은 줄: `- **검증**: 필요 없음 — 이유` */
+const SKIP_RE = /^- \*\*검증\*\*:[ \t]*필요 없음[ \t]*(?:[—–-]+[ \t]*)?(.*)$/m;
 
 /** `## 제목` 단위로 자른다. 맨 앞 `# 제목` 은 문서 제목으로 따로 돌려준다. */
 function splitHeadings(md: string, level: 2 | 3): { title: string; body: string }[] {
@@ -114,11 +121,14 @@ export function parseTestPlan(md: string): TestPlan {
     }
     sections.push(sec);
   }
-  // `##` 제목이 하나도 없는 계획은 본문 전체를 한 절로 보여 준다.
+  // 첫 `##` 앞에 적는 "검증: 필요 없음" 줄은 절에 들지 않는다. 따로 읽어 검증 탭 맨 위에 보여 준다.
+  const skip = md.split(/^##\s+/m)[0].match(SKIP_RE);
+  // `##` 제목이 하나도 없는 계획은 본문 전체를 한 절로 보여 준다. 제목과 "검증: 필요 없음" 줄뿐이면 절을 만들지 않는다.
   if (sections.length === 0 && scenarios.length === 0) {
-    sections.push({ title: "테스트 계획", body: md.replace(/^#\s+.+$/m, "").trim() });
+    const body = md.replace(/^#\s+.+$/m, "").replace(skip ? SKIP_RE : /^$/, "").trim();
+    if (body || !skip) sections.push({ title: "테스트 계획", body });
   }
-  return { title: titleMatch?.[1].trim() ?? null, sections, scenarios };
+  return { title: titleMatch?.[1].trim() ?? null, sections, scenarios, skipReason: skip ? skip[1].trim() : null };
 }
 
 /** 오더 폴더의 test-plan.md 를 읽어 나눈다. 없으면 null. */

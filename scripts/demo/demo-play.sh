@@ -121,6 +121,10 @@ step_1() { # 설계
   dobby_agent_add "$KEY" review-agent 리뷰어 "코드 리뷰" 대기 0
   dobby_agent_add "$KEY" deploy-agent 배포담당 "통합과 배포" 대기 0
   dobby_agent_add "$KEY" test-agent 테스터 "검증" 대기 0
+  # 켜진 담당자 줄 — 화면 동작이 바뀌는 개발 오더라 산출자를 뺀 다섯이 켜진다.
+  # 이 줄을 쓰는 헬퍼(dobby_v2_set_roles)는 설치된 플러그인 판에 따라 없을 수 있어, 같은 모양의 줄을 직접 적는다.
+  grep -q '^- \*\*담당자\*\*:' "$ROOT/$KEY/status.md" || \
+    sed -i '' 's/^- \*\*단계 규칙\*\*: 다섯 담당자$/- **단계 규칙**: 다섯 담당자\n- **담당자**: 기획자, 개발자, 리뷰어, 배포담당, 테스터/' "$ROOT/$KEY/status.md"
   dobby_phase "$KEY" 설계
   log_session analysis-agent design 설계
   dobby_agent_state "$KEY" analysis-agent 작업중 0 "지금 코드를 읽고 설계 문서 작성 중"
@@ -172,7 +176,10 @@ step_2() { # 설계확인 (사람 차례 ❓)
 - 왜: 응답 역전 방지
 
 ## 결정과 근거
-- 디바운스가 아니라 잠금을 쓴다 — 신청은 한 번이면 되는 동작이라 잠금이 단순하다.
+| 정한 것 | 고른 답 | 왜 | 버린 안 |
+|---|---|---|---|
+| 연타를 막는 방법 | 요청 중에는 버튼을 잠근다 | 신청은 한 번이면 되는 동작이라 잠금이 단순하다 | 디바운스 — 마지막 클릭을 기다리는 동안 반응이 늦어 보인다 |
+| 실패했을 때 버튼 문구 | "다시 시도"로 통일한다 | 자동 결정 — 이슈에 문구가 적혀 있지 않아 다른 화면의 관례를 따랐다. 확인해 보세요: 신청이 실패하면 버튼 글자가 "다시 시도"로 바뀝니다 | "알림 신청" 그대로 둔다 — 실패했는지 알 수 없다 |
 
 ## 닫히는 조건
 - C1 연타해도 신청이 한 번만 간다
@@ -242,12 +249,18 @@ EOF
   cat > "$ROOT/$KEY/reviews/round-1/review-agent.md" <<'EOF'
 # FE1-4242 1차 리뷰
 
-- [major] src/components/openplan/NotifyButton.tsx:58 — 요청 실패(reject) 경로에서
-  잠금 해제가 빠졌다. 네트워크 오류가 나면 버튼이 영영 비활성으로 남는다.
-  finally 에서 해제해야 한다.
-- [nit] useNotifyState.ts:21 — seq 비교에 주석 한 줄(왜 >= 가 아니라 > 인지).
+## [major] 요청이 실패하면 버튼이 계속 잠겨 있습니다
+- 설계와 구현: 구현이 설계와 다름
+- 근거: `src/components/openplan/NotifyButton.tsx:58` — 요청이 실패한 경로에서 잠금을 풀지 않는다. 설계는 "완료/실패 시 해제"다.
+- 재현 조건: 네트워크를 끊고 알림 신청 버튼을 누른다. 버튼이 계속 비활성으로 남는다.
+- 수정 제안: 요청을 try/finally 로 감싸 finally 에서 잠금을 푼다.
 
-막는 지적: 1건
+## [nit] 일련번호 비교에 이유가 적혀 있지 않습니다
+- 근거: `src/hooks/useNotifyState.ts:21` — 왜 `>=` 가 아니라 `>` 인지 주석 한 줄이 있으면 좋다.
+
+## 지적이 없는 영역
+- 성능: 확인함 — 문제 없음
+- 데이터 수집: 해당 없음 — 수집 코드에 닿지 않는다
 EOF
   dobby_event "$KEY" "1차 리뷰 — [major] 1건 (실패 경로 잠금 해제 누락)"
   presence review-agent
@@ -275,7 +288,9 @@ step_6() { # 리뷰 2차 통과 → 통합
 
 1차 지적(실패 경로 잠금 해제) 반영 확인. 추가 지적 없음.
 
-막는 지적: 0건 — 통과
+## 지적이 없는 영역
+- 정확성: 확인함 — 문제 없음
+- 성능: 확인함 — 문제 없음
 EOF
   dobby_agent_state "$KEY" review-agent 완료 2 "2차 리뷰 — 통과"
   dobby_agent_state "$KEY" "$DEV_SLUG" 완료 1 "구현·수정 완료"
@@ -293,10 +308,41 @@ step_7() { # 배포 (PR → 머지 → 빌드 대기)
   dobby_ship_stage "$KEY" wadiz-frontend dev "PR 생성" 5178 >/dev/null 2>&1 || true
   dobby_ship_stage "$KEY" wadiz-frontend dev "머지" 5178 >/dev/null 2>&1 || true
   dobby_ship_stage "$KEY" wadiz-frontend dev "빌드 대기" 5178 >/dev/null 2>&1 || true
+  # 빌드가 30분을 넘겨 자동 실행이 사람에게 묻는 장면 — 일곱 칸을 가진 새 형식 질문.
+  # 자동 실행(run.sh)이 남기는 것과 같은 모양이다. 질문을 남기는 헬퍼는 설치된 플러그인 판에 따라
+  # 새 형식을 모를 수 있어 파일을 직접 쓴다. 다음 단계에서 답한 것으로 닫는다.
+  jq -n --arg id "$(date '+%Y%m%d-%H%M%S')" --arg at "$(now)" --arg cwd "$ROOT/.workspace/$KEY" '{
+    v: 2, id: $id, kind: "choice",
+    title: "빌드가 30분째 끝나지 않습니다. 더 기다릴까요?",
+    what: "dev 로 가는 PR 을 합쳤고 빌드가 끝나기를 기다리고 있습니다.",
+    why: "기다려도 오지 않는 것인지 조금 늦는 것인지 여기서는 알 수 없습니다",
+    tried: ["30분 동안 기다렸습니다 → 아직 끝나지 않았습니다"],
+    options: [
+      {label: "30분 더 기다리기", does: "같은 자리에서 30분을 더 기다립니다", effect: "그 사이 끝나면 배포를 이어 갑니다", recommended: true, reason: "조금 늦는 경우가 많습니다"},
+      {label: "그만 기다리기", does: "자동 실행을 끝냅니다", effect: "원인을 확인한 뒤 자동 실행을 다시 시작해야 합니다", recommended: false, reason: ""}
+    ],
+    choices: ["30분 더 기다리기", "그만 기다리기"],
+    todo: "빌드 화면에서 빌드가 돌고 있는지 확인해 주세요",
+    after: "30분 더 기다리기를 고르면 같은 자리에서 30분을 더 기다립니다",
+    from: {role: "shell", session: "", cwd: $cwd, resume: false},
+    created: $at, answer: null, note: ""
+  }' > "$ROOT/$KEY/ask.json"
+  dobby_event "$KEY" "질문 — 빌드가 30분째 끝나지 않습니다. 더 기다릴까요?"
   presence deploy-agent
 }
 
+# 열린 질문에 답을 적고 닫아 둔다(asks/ 로 옮긴다). 질문이 없으면 아무것도 하지 않는다.
+answer_ask() { # 답
+  local f="$ROOT/$KEY/ask.json"
+  [ -f "$f" ] || return 0
+  mkdir -p "$ROOT/$KEY/asks"
+  jq --arg a "$1" --arg at "$(now)" '.answer = {value: $a, at: $at} | .closed = {result: $a, at: $at}' "$f" \
+    > "$ROOT/$KEY/asks/$(jq -r .id "$f").json" && rm -f "$f"
+  dobby_event "$KEY" "질문에 답함 — $1"
+}
+
 step_8() { # 배포 확인 → 검증 시작
+  answer_ask "30분 더 기다리기"
   dobby_ship_stage "$KEY" wadiz-frontend dev "배포 확인" 5178 >/dev/null 2>&1 || true
   dobby_phase "$KEY" 검증
   log_session test-agent verify-V1 "검증 V1"
@@ -550,7 +596,7 @@ EOF
   dobby_retro_office "$KEY" end "잘못한 판단 1건"
 }
 
-LABELS=("시작 전" "설계" "설계확인 (사람 차례)" "구현" "리뷰 (1차)" "수정 (1차)" "리뷰 통과 → 통합" "배포 (빌드 대기)" "배포 확인 → 검증" "검증 통과 → 해결" "데이터 — 측정 명세" "데이터 — 1회차 (판단 이르다)" "데이터 — 2회차 (성과 있음)" "회고 — 다섯 담당자가 돌아보는 중" "회고 — 회고록 완성")
+LABELS=("시작 전" "설계" "설계확인 (사람 차례)" "구현" "리뷰 (1차)" "수정 (1차)" "리뷰 통과 → 통합" "배포 (빌드 대기 — 질문)" "배포 확인 → 검증" "검증 통과 → 해결" "데이터 — 측정 명세" "데이터 — 1회차 (판단 이르다)" "데이터 — 2회차 (성과 있음)" "회고 — 다섯 담당자가 돌아보는 중" "회고 — 회고록 완성")
 
 do_next() {
   guard

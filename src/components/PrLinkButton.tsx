@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Button, Popover, Input, Space, Typography, message, Empty, Spin, Divider, Tooltip, Tag } from "antd";
-import { BranchesOutlined, CopyOutlined, ExportOutlined } from "@ant-design/icons";
+import { BranchesOutlined, CopyOutlined, DownOutlined, ExportOutlined, RightOutlined } from "@ant-design/icons";
 import { copyText } from "@/lib/clipboard";
-import { envBranchesOf, type ExistingPr } from "@/lib/prEnv";
+import { envBranchesOf, type EnvPrs, type ExistingPr } from "@/lib/prEnv";
 
 const { Text } = Typography;
 
@@ -14,7 +14,9 @@ type Target = { repo: string; branch: string; repoUrl: string | null };
  * "Jira" 옆 버튼 — 병합 대상(base) 브랜치를 입력하면,
  * 이 오더의 개발 브랜치를 그 브랜치로 머지하는 GitHub PR 생성 링크를 repo별로 만들어 준다.
  * 아래에는 환경 브랜치(dev·rc1·rc4·stage 등)로 가는 링크를 입력 없이 미리 만들어 두고,
- * 그 환경으로 이미 만들어진 PR(열림·머지됨)도 함께 보여 준다(?prExisting, 창을 열 때마다 조회).
+ * 그 환경으로 이미 만들어진 PR 도 함께 보여 준다(?prExisting, 창을 열 때마다 조회).
+ * 환경마다 지금 PR(열린 PR, 없으면 가장 최근에 머지된 PR)만 보이고, 그 전의 닫힌 PR 과 머지된 PR 은
+ * "이전 PR N개" 한 줄로 접어 둔다. 누르면 번호·상태·닫힌 이유가 펼쳐진다.
  * 대상 브랜치·repo·GitHub 주소는 서버(?prTargets)에서 받아온다.
  */
 export default function PrLinkButton({ epicKey }: { epicKey: string }) {
@@ -22,7 +24,9 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
   const [base, setBase] = useState("");
   const [targets, setTargets] = useState<Target[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [prs, setPrs] = useState<Record<string, ExistingPr[]> | null>(null);
+  const [prs, setPrs] = useState<Record<string, Record<string, EnvPrs>> | null>(null);
+  /** 펼쳐 둔 "이전 PR" 묶음 — `{repo}|{branch}|{환경}` */
+  const [shown, setShown] = useState<Set<string>>(new Set());
 
   const load = async () => {
     setLoading(true);
@@ -73,6 +77,32 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
         열기
       </Button>
     </>
+  );
+
+  const STATE_TAG: Record<ExistingPr["state"], { color: string; label: string }> = {
+    OPEN: { color: "green", label: "열림" },
+    MERGED: { color: "purple", label: "머지됨" },
+    CLOSED: { color: "default", label: "닫힘" },
+  };
+  /** PR 한 줄 — 번호, 상태, (닫힌 PR 이면) 닫힌 이유, 출발 브랜치, 복사·열기 */
+  const prRow = (p: ExistingPr, indent: number) => (
+    <div key={p.number} data-pr-row={p.state} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: indent }}>
+      <Text style={{ flex: 1, fontSize: 12 }}>
+        #{p.number}{" "}
+        <Tag color={STATE_TAG[p.state].color} style={{ marginInline: 4 }}>
+          {STATE_TAG[p.state].label}
+        </Tag>
+        {p.state === "CLOSED" && p.reason && p.reason !== "닫힘" && (
+          <Tag color="orange" style={{ marginInlineEnd: 4 }}>
+            {p.reason}
+          </Tag>
+        )}
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {p.head}
+        </Text>
+      </Text>
+      {linkButtons(p.url)}
+    </div>
   );
 
   const compareUrl = (t: Target, b: string): string | null =>
@@ -186,25 +216,39 @@ export default function PrLinkButton({ epicKey }: { epicKey: string }) {
                         </Text>
                         {linkButtons(compareUrl(t, b)!)}
                       </div>
-                      {(prs?.[`${t.repo}|${t.branch}`] ?? [])
-                        .filter((p) => p.base === b)
-                        .map((p) => (
-                          <div
-                            key={p.number}
-                            style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 18 }}
-                          >
-                            <Text style={{ flex: 1, fontSize: 12 }}>
-                              #{p.number}{" "}
-                              <Tag color={p.state === "OPEN" ? "green" : "purple"} style={{ marginInline: 4 }}>
-                                {p.state === "OPEN" ? "열림" : "머지됨"}
-                              </Tag>
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {p.head}
-                              </Text>
-                            </Text>
-                            {linkButtons(p.url)}
-                          </div>
-                        ))}
+                      {(() => {
+                        const env = prs?.[`${t.repo}|${t.branch}`]?.[b];
+                        if (!env) return null;
+                        const id = `${t.repo}|${t.branch}|${b}`;
+                        const open = shown.has(id);
+                        return (
+                          <>
+                            {env.current.map((p) => prRow(p, 18))}
+                            {env.previous.length > 0 && (
+                              <>
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  data-pr-previous
+                                  icon={open ? <DownOutlined /> : <RightOutlined />}
+                                  style={{ marginTop: 2, marginLeft: 10, paddingInline: 4, fontSize: 12 }}
+                                  onClick={() =>
+                                    setShown((cur) => {
+                                      const next = new Set(cur);
+                                      if (next.has(id)) next.delete(id);
+                                      else next.add(id);
+                                      return next;
+                                    })
+                                  }
+                                >
+                                  이전 PR {env.previous.length}개
+                                </Button>
+                                {open && env.previous.map((p) => prRow(p, 36))}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>

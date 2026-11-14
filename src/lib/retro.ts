@@ -69,6 +69,15 @@ export function parseRetroJson(raw: string | null): RetroData | null {
 export const RETRO_STAGES = ["설계", "구현", "리뷰", "통합", "배포", "검증", "사람 확인"] as const;
 
 /**
+ * 한 건의 판단을 그릴 단계 띠. 산출(문서·조사) 단계에서 잡혔거나 잡을 수 있었던 판단이면 구현 다음에 산출 칸을 더한다.
+ * 그 밖의 회고는 지금까지와 같은 일곱 칸이다.
+ */
+export function retroStages(found: string, could?: string): readonly string[] {
+  if (found !== "산출" && could !== "산출") return RETRO_STAGES;
+  return RETRO_STAGES.flatMap((s) => (s === "구현" ? [s, "산출"] : [s]));
+}
+
+/**
  * 회고를 막는 이유. 없으면 null. go-dobby `dobby_retro_gate` 와 같은 조건이다 —
  * 회고는 멈춘 오더에서만 한다. 진행 중에 만든 회고는 곧 낡고, 아직 쌓이는 세션을 잘못 센다.
  */

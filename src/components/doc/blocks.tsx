@@ -1,6 +1,7 @@
 "use client";
 
 import MarkdownDoc from "@/components/MarkdownDoc";
+import { autoDecisionCell, stripAutoMark } from "@/lib/autoDecisions";
 import { diffLines, shortPath, parseCodeChange, splitH3, takeTable, verdictOf, DIFF_HEAD_RE, type Table, type Verdict } from "./parse";
 
 /** 표 칸·짧은 글 한 조각을 마크다운으로 그린다. */
@@ -78,7 +79,10 @@ export function OutcomeTable({ body }: { body: string }) {
   );
 }
 
-/** 결정과 근거 표 — 줄마다 카드 하나. 첫 칸이 카드 제목, 나머지 칸은 머리줄 이름을 붙여 보인다. */
+/**
+ * 결정과 근거 표 — 줄마다 카드 하나. 첫 칸이 카드 제목, 나머지 칸은 머리줄 이름을 붙여 보인다.
+ * 이유 칸이 `자동 결정 —` 으로 시작하는 줄은 사람의 확정 없이 스스로 정한 결정이다. 카드에 꼬리표를 붙이고 그 글자는 뗀다.
+ */
 export function DecisionList({ body }: { body: string }) {
   const t = takeTable(body);
   if (!t || t.table.head.length < 3) return null;
@@ -90,19 +94,25 @@ function Cards({ table, before, after }: { table: Table; before: string; after: 
     <>
       <Around md={before} />
       <div className="sd-cards">
-        {table.rows.map((r, i) => (
-          <div key={i} className="sd-card">
-            <div className="sd-card-title">
-              <Md md={r[0] ?? ""} />
-            </div>
-            {table.head.slice(1).map((h, c) => (
-              <div key={h + c} className="sd-field">
-                <span className="sd-field-label">{h}</span>
-                <Md md={r[c + 1] ?? ""} />
+        {table.rows.map((r, i) => {
+          const auto = autoDecisionCell(r);
+          const check = auto >= 0 && r.some((c) => /확인해 보세요/.test(c));
+          return (
+            <div key={i} className={auto >= 0 ? "sd-card sd-auto" : "sd-card"}>
+              <div className="sd-card-title">
+                <Md md={r[0] ?? ""} />
+                {auto >= 0 && <span className="sd-badge sd-added">스스로 정한 결정</span>}
+                {check && <span className="sd-badge sd-changed">확인해 보세요</span>}
               </div>
-            ))}
-          </div>
-        ))}
+              {table.head.slice(1).map((h, c) => (
+                <div key={h + c} className="sd-field">
+                  <span className="sd-field-label">{h}</span>
+                  <Md md={c + 1 === auto ? stripAutoMark(r[c + 1] ?? "") : r[c + 1] ?? ""} />
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
       <Around md={after} />
     </>

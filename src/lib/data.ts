@@ -3,6 +3,7 @@ import path from "node:path";
 import { getMetaDir } from "@/lib/issues";
 import { listEpics } from "@/lib/orchestration";
 import { isJiraIssueKey } from "@/lib/keys";
+import { isProductOrder } from "@/lib/parseOrderStatus";
 import type { CardStats } from "@/lib/lifecycle";
 
 /** dobby-data 가 `{메타}/{키}/data/` 에 남긴 파일을 읽는다. 홈 카드·/data·오더 데이터 탭이 모두 이 모듈만 읽는다. */
@@ -101,8 +102,12 @@ function kstNow(): string {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:00`;
 }
 
-/** 해결 판정 — orchestration.ts getEpic 의 resolved 와 같은 규칙. TASK- 는 대상이 아니다. */
-export function isDataTarget(e: { epicKey: string; phase: string; worktreeRemoved: boolean }): boolean {
+/**
+ * 해결 판정 — orchestration.ts getEpic 의 resolved 와 같은 규칙. TASK- 는 대상이 아니다.
+ * 개발자 없이 산출물만 만든 /do 오더도 대상이 아니다(배포 환경의 동작이 바뀌지 않아 잴 것이 없다).
+ */
+export function isDataTarget(e: { epicKey: string; phase: string; worktreeRemoved: boolean; roles?: string[] | null }): boolean {
+  if (isProductOrder(e.roles)) return false;
   return isJiraIssueKey(e.epicKey) && (e.worktreeRemoved || e.phase === "해결" || e.phase === "종료");
 }
 

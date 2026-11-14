@@ -50,22 +50,59 @@ export function boardColumn(state: AgentState): string {
   return state === "사람 차례" || state === "막힘" ? HUMAN_COL : state;
 }
 
-/** /do 오더의 담당자 다섯. 개발자 슬러그는 오더마다 달라 이름으로 찾는다. */
-export const FIVE_ROLES: { slug: string | null; name: string }[] = [
+/** /do 오더의 담당자 여섯. 개발자 슬러그는 오더마다 달라 이름으로 찾는다. */
+export const ROLE_DEFS: { slug: string | null; name: string }[] = [
   { slug: "analysis-agent", name: "기획자" },
   { slug: null, name: "개발자" },
+  { slug: "produce-agent", name: "산출자" },
   { slug: "review-agent", name: "리뷰어" },
   { slug: "deploy-agent", name: "배포담당" },
   { slug: "test-agent", name: "테스터" },
 ];
 
-/** 단계값 → 그 단계를 맡는 담당자 이름(단계값은 "지금 누구 차례인가"다). */
-export function phaseOwner(phase: string): string | null {
+/**
+ * 이 오더에 켜진 담당자. roles 는 상태 문서의 담당자 줄이다.
+ * 줄이 없으면(null) 지금까지처럼 산출자를 뺀 다섯이다.
+ */
+export function rolesOn(roles: string[] | null | undefined): { slug: string | null; name: string }[] {
+  if (!roles) return ROLE_DEFS.filter((r) => r.name !== "산출자");
+  return ROLE_DEFS.filter((r) => roles.includes(r.name));
+}
+
+/** 그 담당자의 상태표 행. 개발자는 이름으로, 나머지는 식별 이름으로 찾는다. */
+export function roleRow(agents: AgentRow[], role: { slug: string | null; name: string }): AgentRow | undefined {
+  return agents.find((a) => (role.slug ? a.agent === role.slug : isDevRole(a.name)));
+}
+
+/** 일이 없어져 "할 일 없음"과 이유를 남기고 끝낸 담당자인가(go-dobby dobby_v2_role_skip). */
+export function isIdleRow(a: AgentRow | undefined): boolean {
+  return !!a && a.state === "완료" && /^할 일 없음/.test(a.desc ?? "");
+}
+
+/**
+ * 테스터 없이 끝난 오더인가 — 담당자 줄이 있고, 켜진 담당자가 모두 완료이고, 테스터가 없거나 할 일 없음으로 끝났다.
+ * 테스터가 일하는 오더는 지금까지처럼 검증 통과로 끝을 본다. go-dobby 의 _v2_finished 와 같은 조건이다(남은 질문은 부르는 쪽이 본다).
+ */
+export function finishedWithoutTester(agents: AgentRow[], roles: string[] | null | undefined): boolean {
+  if (!roles) return false;
+  const on = rolesOn(roles);
+  const tester = on.find((r) => r.name === "테스터");
+  if (tester && !isIdleRow(roleRow(agents, tester))) return false;
+  return on.every((r) => roleRow(agents, r)?.state === "완료");
+}
+
+/**
+ * 단계값 → 그 단계를 맡는 담당자 이름(단계값은 "지금 누구 차례인가"다).
+ * 수정은 산출물을 고치는 중이면(reviewingProduct) 산출자, 아니면 개발자다.
+ */
+export function phaseOwner(phase: string, reviewingProduct = false): string | null {
   switch (phase) {
     case "설계": case "설계확인": case "실패분석": case "보류": case "분석": return "기획자";
-    case "구현": case "수정": case "통합": return "개발자";
+    case "구현": return "개발자";
+    case "수정": return reviewingProduct ? "산출자" : "개발자";
+    case "산출": return "산출자";
     case "리뷰": return "리뷰어";
-    case "배포": return "배포담당";
+    case "통합": case "배포": return "배포담당";
     case "검증": return "테스터";
     default: return null;
   }
@@ -273,7 +310,8 @@ const HEARTBEAT_MIN = 5;
 /**
  * 담당자 상태표·세션 생존·자동 실행·릴리즈 노트를 맞춰 지금 누가 움직이는지 고른다. 처음 맞는 규칙 하나다.
  * 1 막힘 · 답 없는 질문 · 2 사람 차례 · QA 감시(끊김·진행 중) · 3 작업중+세션 · 4 작업중인데 세션 없음(끊김) · 5 기다림(심박 5분)
- * 6·7 단계 담당자가 대기면 자동 실행 유무로 · 8~10 검증 통과 뒤 릴리즈 노트.
+ * 6·7 단계 담당자가 대기면 자동 실행 유무로 · 8~10 검증 통과 뒤(테스터 없는 개발 오더는 켜진 담당자가 모두 끝난 뒤) 릴리즈 노트.
+ * 개발자 없는 산출물 오더는 릴리즈 노트 대신 "해결 처리" 안내로 끝난다.
  */
 export function whoMoves(p: {
   key: string;
@@ -286,6 +324,10 @@ export function whoMoves(p: {
   qa?: "active" | "lost" | null;
   /** 아직 답을 받지 못한 질문의 제목. 있으면 누가 일하는 중이 아니라 사람의 답을 기다리는 중이다. */
   ask?: string | null;
+  /** 켜진 담당자(상태 문서의 담당자 줄). 줄이 없는 오더는 null — 지금까지와 같은 규칙으로 본다. */
+  roles?: string[] | null;
+  /** 지금 리뷰·수정이 다루는 것이 산출물인가. 수정 차례의 담당을 가른다. */
+  reviewingProduct?: boolean;
   now?: Date;
 }): Mover | null {
   const now = p.now ?? new Date();
@@ -315,14 +357,21 @@ export function whoMoves(p: {
       ? { tone: "auto", text: `자동 진행 — ${waiting.desc ?? "기다림"}` }
       : { tone: "human", text: `${label(waiting)} 기다림 — 자동 실행이 지켜보지 않음`, cmd: doCmd, slug: waiting.agent };
   }
-  const owner = phaseOwner(p.phase);
+  const owner = phaseOwner(p.phase, p.reviewingProduct);
   const next = owner ? p.agents.find((a) => (owner === "개발자" ? isDevRole(a.name) : a.name === owner)) : undefined;
   if (next?.state === "대기")
     return p.autoRunning
       ? { tone: "auto", text: `자동 진행 — 곧 ${owner} 차례` }
       : { tone: "human", text: `${owner} 차례 — 자동 실행이 꺼져 있습니다`, cmd: doCmd, slug: next.agent };
+  const closed = /^(해결|종료)$/.test(p.phase);
+  // 개발자 없이 산출물만 만든 오더는 정기 배포에 실리지 않는다. 마지막 담당자가 끝나면 해결 처리만 남는다.
+  if (p.roles && !p.roles.includes("개발자")) {
+    if (!closed && finishedWithoutTester(p.agents, p.roles))
+      return { tone: "after", text: "산출물 완료 — 해결 처리 차례", cmd: `/dobby-resolve ${p.key}` };
+    return null;
+  }
   const tester = p.agents.find((a) => a.name === "테스터");
-  if (/^(해결|종료)$/.test(p.phase) || (p.phase === "검증" && tester?.state === "완료")) {
+  if (closed || (p.phase === "검증" && tester?.state === "완료") || finishedWithoutTester(p.agents, p.roles)) {
     if (p.releaseDates.length === 0) return { tone: "after", text: "릴리즈 노트 등록", cmd: `/dobby-release ${p.key}` };
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const ahead = p.releaseDates.filter((d) => d >= today).sort()[0];

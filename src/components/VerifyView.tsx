@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Typography } from "antd";
+import { Alert, Card, Typography } from "antd";
 import OrderHeader from "@/components/OrderHeader";
 import MarkdownCards from "@/components/MarkdownCards";
 import IssueReport from "@/components/IssueReport";
@@ -44,6 +44,8 @@ export default function VerifyView({
   /** 설계 때 만든 테스트 계획(test-plan.md). 없으면 null. */
   testPlan?: TestPlan | null;
 }) {
+  const skipReason = testPlan?.skipReason ?? null;
+  const planHasBody = !!testPlan && (testPlan.sections.length > 0 || testPlan.scenarios.length > 0);
   return (
     <div>
       <OrderHeader
@@ -59,10 +61,21 @@ export default function VerifyView({
       />
       <div style={{ marginTop: 16 }}>
         <Title level={4}>검증</Title>
-        {testPlan && <TestPlanView plan={testPlan} defaultOpen={runs.length === 0} />}
+        {/* 테스트 계획 제목 아래의 "검증: 필요 없음 — 이유" 줄. 이 오더는 배포 환경에서 확인할 것이 없다. */}
+        {skipReason !== null && (
+          <Alert
+            data-verify-skip
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={`검증: 필요 없음${skipReason ? ` — ${skipReason}` : ""}`}
+            description="이 오더는 배포 환경에서 화면을 확인하지 않습니다. 테스트 회차를 만들지 않고 넘어갑니다."
+          />
+        )}
+        {testPlan && planHasBody && <TestPlanView plan={testPlan} defaultOpen={runs.length === 0} />}
         {runs.length > 0 ? (
           <IssueReport issueKey={epicKey} runs={runs} summary={summary} embedded />
-        ) : (
+        ) : skipReason !== null ? null : (
           <Card size="small">
             <Text type="secondary">
               아직 테스트 회차가 없습니다 — code 오더에서 <Text code>dobby-test</Text> 실행 시

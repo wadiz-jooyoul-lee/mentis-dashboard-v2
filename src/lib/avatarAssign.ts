@@ -3,6 +3,8 @@
  * 규칙:
  *  - 한 오더의 에이전트는 같은 그룹으로 묶어 배정한다(그룹 응집).
  *  - 그룹 멤버가 오더의 에이전트 수보다 적으면 다음 그룹에서 이어 채운다(도움).
+ *    /do 오더는 켜진 담당자만 상태표에 행을 갖고 그 수만큼만 배정한다. 처음 그룹을 고를 때
+ *    켜진 담당자 수보다 멤버가 적은 그룹은 뺀다(orchestration.ts pickBalancedGroup) — 여섯이 다 켜지면 여섯 명 이상인 그룹.
  *  - 오더별 primary 그룹은 20씩(BTS:프로미스:IVE:리센느:도비) 균등으로 결정적으로 고른다.
  *    → 여러 오더에 걸쳐 대략 그 비율로 분포. (도비는 무한 풀이라 소진되지 않는다.)
  */
@@ -40,6 +42,11 @@ export function avatarHash(s: string): number {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return h >>> 0;
+}
+
+/** 그룹의 멤버 수. 도비는 끝없이 쓸 수 있다. 켜진 담당자 수만큼 멤버가 있는 그룹을 고르는 데 쓴다. */
+export function groupSize(g: AvatarGroup): number {
+  return g === "dobby" ? Infinity : POOL[g].length;
 }
 
 /** 그룹 대표 아바타(멤버 #0). 에픽 대표·오케스트레이터 폴백용. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Card, Col, Collapse, Row, Space, Table, Tag, Typography } from "antd";
-import { RETRO_STAGES, type RetroData, type RetroFix, type RetroSegment } from "@/lib/retro";
+import { retroStages, type RetroData, type RetroFix, type RetroSegment } from "@/lib/retro";
 
 const { Text, Paragraph, Title } = Typography;
 
@@ -38,10 +38,11 @@ const PROPOSAL_WHERE: Record<string, RetroFix["where"]> = { 스킬: "스킬", "�
 
 /** 단계 띠: 잡을 수 있었던 곳(노랑)과 실제로 잡힌 곳(빨강)을 점으로, 그 사이를 늦어진 구간으로 칠한다. */
 function StageBand({ could, found }: { could?: string; found: string }) {
-  const fi = RETRO_STAGES.indexOf(found as (typeof RETRO_STAGES)[number]);
-  const ci = could ? RETRO_STAGES.indexOf(could as (typeof RETRO_STAGES)[number]) : -1;
+  const stages = retroStages(found, could);
+  const fi = stages.indexOf(found);
+  const ci = could ? stages.indexOf(could) : -1;
   if (fi < 0) return null;
-  const n = RETRO_STAGES.length;
+  const n = stages.length;
   const x = (i: number) => ((i + 0.5) / n) * 100;
   return (
     <div style={{ margin: "8px 0 4px" }}>
@@ -52,7 +53,7 @@ function StageBand({ could, found }: { could?: string; found: string }) {
             style={{ position: "absolute", left: `${x(ci)}%`, width: `${x(fi) - x(ci)}%`, top: 8, height: 6, background: "#ffccc7", borderRadius: 3 }}
           />
         )}
-        {RETRO_STAGES.map((s, i) => {
+        {stages.map((s, i) => {
           const color = i === fi ? "#cf1322" : i === ci ? "#d48806" : "#d9d9d9";
           const size = i === fi || i === ci ? 14 : 8;
           return (
@@ -72,7 +73,7 @@ function StageBand({ could, found }: { could?: string; found: string }) {
         })}
       </div>
       <div style={{ display: "flex" }}>
-        {RETRO_STAGES.map((s, i) => (
+        {stages.map((s, i) => (
           <div
             key={s}
             style={{
@@ -224,7 +225,7 @@ export default function RetroReport({ data }: { data: RetroData }) {
       {defects.map((d, i) => (
         <Card key={d.title} size="small" style={{ marginBottom: 12 }} title={`${i + 1}. ${d.title}`}>
           <StageBand could={d.couldAt} found={d.foundAt} />
-          {!RETRO_STAGES.includes(d.foundAt as (typeof RETRO_STAGES)[number]) && (
+          {!retroStages(d.foundAt, d.couldAt).includes(d.foundAt) && (
             <Space size={6} wrap>
               <Tag>실제로 잡힌 곳: {d.foundAt}</Tag>
               {d.couldAt && <Tag color="gold">잡을 수 있었던 곳: {d.couldAt}</Tag>}

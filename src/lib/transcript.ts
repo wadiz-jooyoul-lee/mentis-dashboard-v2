@@ -209,6 +209,8 @@ const STEP_NAMES: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/^round-(\d+)$/, (m) => `${m[1]}차 리뷰`],
   [/^fix-(\d+)$/, (m) => `${m[1]}차 수정`],
   [/^fix-test-/, () => "검증 실패 수정"],
+  [/^produce$/, () => "산출"],
+  [/^produce-fix-(\d+)$/, (m) => `${m[1]}차 산출 수정`],
   [/^integrate$/, () => "통합"],
   [/^verify$/, () => "검증"],
 ];

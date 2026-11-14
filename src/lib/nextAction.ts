@@ -13,6 +13,9 @@ import { resumeCommand, resumeTargets } from "@/lib/resumeCommand";
 import { DO_AUTO_ENVS, goDobbyLib, listFinishedV2Runs, startResolve, startV2Run } from "@/lib/jobs";
 import { readAsk, type AskInfo } from "@/lib/ask";
 import { autoRunState } from "@/lib/presence";
+import { readOrderRoles } from "@/lib/orderRoles";
+import { isProductOrder } from "@/lib/parseOrderStatus";
+import { autoDecisions } from "@/lib/autoDecisions";
 
 export type { AskInfo, AskKind, AskOption } from "@/lib/ask";
 
@@ -44,12 +47,67 @@ export type NextItem = {
   detail: string;
   /** 질문(kind ask)일 때만 — 오더 폴더의 ask.json */
   ask?: AskInfo;
+  /** 개발자 없이 산출물만 만드는 오더인가. 배포·검증으로 가는 버튼을 숨기고 확인 문구를 바꾼다 */
+  product: boolean;
+};
+
+/**
+ * 스스로 정한 결정 알림 — 진행 중인 오더의 설계 문서에 `자동 결정 —` 줄이 있으면 오더마다 한 건.
+ * 다음 할 일(items)에 끼워 넣지 않는다. 오더 하나에 할 일 한 건을 전제하는 화면이 있고, 사람 차례 숫자에도 세지 않기 때문이다.
+ */
+export type AutoDecisionNote = {
+  key: string;
+  title: string;
+  /** 스스로 정한 결정 수 */
+  count: number;
+  /** 그 가운데 "확인해 보세요"가 적힌 수 */
+  check: number;
+  /** 가장 최근(표의 마지막) 결정: 무엇을 · 고른 답 */
+  what: string;
+  pick: string;
+  /** 결정 목록의 지문. 결정이 더해지거나 바뀌면 달라져 알림이 한 번 더 뜬다 */
+  sig: string;
 };
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 const CACHE_MS = 10_000;
-let cache: { at: number; items: NextItem[]; error: string | null } | null = null;
-let inflight: Promise<{ items: NextItem[]; error: string | null }> | null = null;
+type Loaded = { items: NextItem[]; error: string | null; notes: AutoDecisionNote[] };
+let cache: (Loaded & { at: number }) | null = null;
+let inflight: Promise<Loaded> | null = null;
+
+const plain = (v: string) => v.replace(/[*`]/g, "").trim();
+
+/** 짧은 지문(FNV-1a). 결정 목록이 바뀌었는지만 가린다. */
+function hash(s: string): string {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/** 그 오더의 설계 문서에서 스스로 정한 결정을 읽어 알림 한 건으로 만든다. 없으면 null. */
+function autoDecisionNote(key: string, title: string): AutoDecisionNote | null {
+  let md: string;
+  try {
+    md = fs.readFileSync(path.join(getMetaDir(), key, "design.md"), "utf8");
+  } catch {
+    return null;
+  }
+  const list = autoDecisions(md);
+  if (!list.length) return null;
+  const last = list[list.length - 1];
+  return {
+    key,
+    title,
+    count: list.length,
+    check: list.filter((d) => d.check).length,
+    what: plain(last.what),
+    pick: plain(last.pick),
+    sig: `${list.length}-${hash(list.map((d) => `${d.what}|${d.pick}|${d.why}`).join("\n"))}`,
+  };
+}
 
 /** dobby-lib.sh 를 읽고 설정을 불러온 뒤 body 를 실행한다. stdout 을 돌려준다. */
 function dobbyBash(body: string, timeoutMs = 60_000): Promise<string> {
@@ -90,13 +148,13 @@ function decisionDetail(key: string): string {
   }
 }
 
-async function load(): Promise<{ items: NextItem[]; error: string | null }> {
+async function load(): Promise<Loaded> {
   let out: string;
   try {
     out = await dobbyBash("declare -F dobby_v2_next_all >/dev/null || exit 5; dobby_v2_next_all");
   } catch (e) {
     const err = e as Error & { exitCode?: number };
-    return { items: [], error: err.exitCode === 5 ? "go-dobby 플러그인을 업데이트해 주세요(다음 할 일 판정 없음)" : err.message };
+    return { items: [], notes: [], error: err.exitCode === 5 ? "go-dobby 플러그인을 업데이트해 주세요(다음 할 일 판정 없음)" : err.message };
   }
   const stopped = new Map(
     listFinishedV2Runs()
@@ -104,6 +162,7 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       .map((r) => [r.key, (r.result ?? "").replace(/\s*복기:.*$/, "").replace(/^자동 실행 중단:\s*/, "")])
   );
   const items: NextItem[] = [];
+  const notes: AutoDecisionNote[] = [];
   for (const line of out.split("\n")) {
     if (!line.trim()) continue;
     let raw: Record<string, string>;
@@ -114,6 +173,7 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
     }
     const key = raw.key ?? "";
     if (!ORDER_KEY_RE.test(key)) continue;
+    const roles = readOrderRoles(key);
     let command = "";
     if (raw.cmd) {
       const s = readOrderSession(key);
@@ -127,7 +187,8 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       // 모르는 묶음 값이 와도 화면이 멈추지 않게 알림으로 받는다.
       group: (GROUPS as readonly string[]).includes(raw.group ?? "mine") ? ((raw.group ?? "mine") as NextGroup) : "notice",
       kind: raw.kind ?? "",
-      text: raw.text ?? "",
+      // 담당자 줄이 있는 오더에서 기획자가 설계를 다시 보는 차례는 화면 이름이 "설계 다시 보기"다(단계값은 그대로 실패분석).
+      text: roles ? (raw.text ?? "").replaceAll("실패분석", "설계 다시 보기") : raw.text ?? "",
       since: raw.since ?? "",
       env: raw.env ?? "",
       cmd: raw.cmd ?? "",
@@ -137,13 +198,16 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       note: raw.group === "mine" ? stopped.get(key) ?? "" : "",
       detail: raw.kind === "decision" ? decisionDetail(key) : "",
       ...(raw.kind === "ask" ? { ask: readAsk(key, askWaiting(key, raw.text ?? "")) } : {}),
+      product: isProductOrder(roles),
     });
+    const note = autoDecisionNote(key, raw.title ?? "");
+    if (note) notes.push(note);
   }
-  return { items, error: null };
+  return { items, notes, error: null };
 }
 
 /** 판정 결과. 판정 한 번이 수 초라 10초 동안은 저장해 둔 것을 주고, 동시에 온 요청은 한 번의 판정을 함께 기다린다. fresh 면 저장분을 건너뛴다. */
-export async function nextActions(fresh = false): Promise<{ items: NextItem[]; error: string | null; at: number }> {
+export async function nextActions(fresh = false): Promise<Loaded & { at: number }> {
   if (!fresh && cache && Date.now() - cache.at < CACHE_MS) return cache;
   inflight ??= load().finally(() => {
     inflight = null;

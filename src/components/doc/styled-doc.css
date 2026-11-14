@@ -457,6 +457,10 @@
   padding: 14px 18px;
   background: #fff;
 }
+/* 스스로 정한 결정 — 사람의 확정 없이 정한 줄은 왼쪽에 보라 띠를 둔다. */
+.sd-card.sd-auto {
+  border-left: 4px solid #b37feb;
+}
 .sd-card-title {
   display: flex;
   align-items: baseline;
