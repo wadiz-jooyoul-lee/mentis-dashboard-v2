@@ -118,7 +118,7 @@ export default function OrderLauncher({ initialJobs }: { initialJobs: JobWithKey
         <Paragraph type="secondary" style={{ margin: 0 }}>
           <code>/do {"{입력}"} auto</code> 로 설계 세션을 띄워 설계를 스스로 확정하고, 이어서 같은 잡이 단계마다 새 세션으로
           구현·리뷰·통합(커밋·푸시)까지 진행합니다. 환경을 고르면 그 환경에 배포(머지·빌드·argocd sync)하고 검증까지 합니다. TASK- 작업은 환경을 골라도 통합에서 PR 까지 만들고 끝납니다.
-          끝나거나 사람 판단이 필요하면 슬랙과 메일로 알립니다.
+          끝나면 이 화면의 알림 카드로 알립니다. 사람 판단이 필요하면 멈추지 않고 질문을 남긴 채 답을 기다리며, 질문은 알림 카드와 오더 화면 맨 위에 뜹니다.
           <br />
           받는 것: <b>이슈 키</b>(FE1-1187) · <b>이슈 URL</b>. 인자: <code>base=</code>. 진행 로그는 아래에서 실시간으로 볼 수 있습니다.
           <br />

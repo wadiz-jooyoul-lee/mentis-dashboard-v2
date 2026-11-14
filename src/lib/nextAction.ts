@@ -11,21 +11,16 @@ import { ORDER_KEY_RE } from "@/lib/keys";
 import { readOrderSession } from "@/lib/orchestration";
 import { resumeCommand, resumeTargets } from "@/lib/resumeCommand";
 import { DO_AUTO_ENVS, goDobbyLib, listFinishedV2Runs, startResolve, startV2Run } from "@/lib/jobs";
+import { readAsk, type AskInfo } from "@/lib/ask";
+import { autoRunState } from "@/lib/presence";
+
+export type { AskInfo, AskKind, AskOption } from "@/lib/ask";
 
 /** mine 사람이 할 일 있음(TODO) · notice 알림만 · auto 자동 진행 중 · wait 날짜나 조건 기다림 · work 터미널에서 작업 중 */
 export type NextGroup = "mine" | "notice" | "auto" | "wait" | "work";
 export type NextAction = "resolve" | "approve" | "approve-deploy" | "autorun" | "deploy" | "drift" | "ask" | "";
 
-/** 자동 실행이 남긴 부탁(오더 폴더 ask.json). action 은 확인 명령이 통과하면 저절로 이어 간다 */
-export type AskInfo = {
-  kind: "action" | "choice" | "input";
-  title: string;
-  why: string;
-  todo: string;
-  choices: string[];
-  /** 했다고 답했는데 확인이 안 됐을 때 남는 메모 */
-  note: string;
-};
+const GROUPS: readonly NextGroup[] = ["mine", "notice", "auto", "wait", "work"];
 
 export type NextItem = {
   key: string;
@@ -45,9 +40,9 @@ export type NextItem = {
   action: NextAction;
   /** 자동 실행이 멈춘 이유(최근 24시간 안에 멈췄을 때) */
   note: string;
-  /** 판단 요청이면 설계 문서 '확인이 필요했던 것' 절 */
+  /** 판단 요청(단계 보류)이면 설계 문서 '확인이 필요했던 것' 절. 오더 화면 맨 위 카드가 보여 준다 */
   detail: string;
-  /** 부탁 카드(kind ask)일 때만 */
+  /** 질문(kind ask)일 때만 — 오더 폴더의 ask.json */
   ask?: AskInfo;
 };
 
@@ -75,19 +70,14 @@ function dobbyBash(body: string, timeoutMs = 60_000): Promise<string> {
   });
 }
 
-function readAsk(key: string): AskInfo | undefined {
+/** 자동 실행이 살아서 답을 기다리는가. 판정 문구(플러그인이 프로세스를 보고 고른다)와 상태 문서의 자동 실행 줄 가운데 하나라도 그렇다고 하면 살아 있다. */
+function askWaiting(key: string, text: string): boolean {
+  if (text.startsWith("자동 실행이 ")) return true;
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(getMetaDir(), key, "ask.json"), "utf8"));
-    return {
-      kind: j.kind,
-      title: String(j.title ?? ""),
-      why: String(j.why ?? ""),
-      todo: String(j.todo ?? ""),
-      choices: Array.isArray(j.choices) ? j.choices.map(String) : [],
-      note: String(j.note ?? ""),
-    };
+    const md = fs.readFileSync(path.join(getMetaDir(), key, "status.md"), "utf8");
+    return autoRunState(md.match(/^- \*\*자동 실행\*\*:[ \t]*(.+)$/m)?.[1].trim() ?? null)?.running ?? false;
   } catch {
-    return undefined;
+    return false;
   }
 }
 
@@ -134,7 +124,8 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       key,
       title: raw.title ?? "",
       phase: raw.phase ?? "",
-      group: (raw.group as NextGroup) ?? "mine",
+      // 모르는 묶음 값이 와도 화면이 멈추지 않게 알림으로 받는다.
+      group: (GROUPS as readonly string[]).includes(raw.group ?? "mine") ? ((raw.group ?? "mine") as NextGroup) : "notice",
       kind: raw.kind ?? "",
       text: raw.text ?? "",
       since: raw.since ?? "",
@@ -145,7 +136,7 @@ async function load(): Promise<{ items: NextItem[]; error: string | null }> {
       action: (raw.action as NextAction) ?? "",
       note: raw.group === "mine" ? stopped.get(key) ?? "" : "",
       detail: raw.kind === "decision" ? decisionDetail(key) : "",
-      ...(raw.kind === "ask" ? { ask: readAsk(key) } : {}),
+      ...(raw.kind === "ask" ? { ask: readAsk(key, askWaiting(key, raw.text ?? "")) } : {}),
     });
   }
   return { items, error: null };
@@ -168,7 +159,7 @@ export async function runNextAction(
   action: NextAction,
   env?: string,
   value?: string
-): Promise<{ ok: boolean; reason?: string; jobId?: string }> {
+): Promise<{ ok: boolean; reason?: string; jobId?: string; restarted?: boolean; note?: string }> {
   if (!ORDER_KEY_RE.test(key)) return { ok: false, reason: "잘못된 오더 키입니다" };
   const k = shq(key);
   cache = null;
@@ -220,10 +211,23 @@ export async function runNextAction(
         return startV2Run(key);
       }
       case "ask": {
-        // 답만 적는다. 기다리던 run.sh 가 1분 안에 읽고 이어 간다(멈추기면 끝낸다).
-        if (!value?.trim()) return { ok: false, reason: "답이 비었습니다" };
-        await dobbyBash(`dobby_v2_ask_answer ${k} ${shq(value.trim())}`);
-        return { ok: true };
+        // 답을 적는다. 기다리던 run.sh 가 살아 있으면 1분 안에 읽고 이어 간다(멈추기면 끝낸다).
+        // 죽어 있으면(8시간 넘게 답이 없어 멈춘 뒤 등) 자동 실행을 다시 띄워 잇는다. 살아 있는지는 플러그인의 판정과 같은 방법으로 본다.
+        const v = value?.trim();
+        if (!v) return { ok: false, reason: "답이 비었습니다" };
+        const alive = (
+          await dobbyBash(
+            `dobby_v2_ask_answer ${k} ${shq(v)} || exit 1; ` +
+              `if ps -axo command 2>/dev/null | grep -Eq "run\\.sh'? '?"${k}"'?( |\$)"; then echo alive; else echo dead; fi`
+          )
+        )
+          .trim()
+          .endsWith("alive");
+        if (alive || v === "멈추기") return { ok: true, restarted: false };
+        const r = startV2Run(key);
+        if (r.ok) return { ok: true, jobId: r.jobId, restarted: true };
+        // 답은 이미 적혔다. 다시 띄우지 못한 이유만 알린다(이미 도는 잡이 있으면 그 잡이 이어 간다).
+        return { ok: true, restarted: false, ...(r.reason === "already_running" ? {} : { note: r.reason }) };
       }
       default:
         return { ok: false, reason: "모르는 동작입니다" };

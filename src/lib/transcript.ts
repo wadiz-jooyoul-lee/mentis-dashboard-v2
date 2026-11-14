@@ -317,6 +317,8 @@ export type ConsoleStatus =
       live?: boolean;
       /** 소스 설명 라벨. */
       label?: string;
+      /** /do 자동 실행(run.sh) 잡. 세션을 스스로 이어 띄우므로 "이어서"와 피드백 전달을 막는다. */
+      autoRun?: boolean;
     };
 
 function transcriptView(p: string, label: string): ConsoleStatus {

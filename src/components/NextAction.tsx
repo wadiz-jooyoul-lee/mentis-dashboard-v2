@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
-import { BellFilled, ClockCircleOutlined, CopyOutlined, ExclamationCircleFilled } from "@ant-design/icons";
+import { BellFilled, ClockCircleOutlined, CopyOutlined, ExclamationCircleFilled, QuestionCircleOutlined } from "@ant-design/icons";
 import { useCanAct } from "@/components/CanAct";
 import { copyText } from "@/lib/clipboard";
 import type { NextAction, NextGroup, NextItem } from "@/lib/nextAction";
@@ -80,10 +80,61 @@ export function formatSince(since: string, now = Date.now()): string {
   return `${+m[2]}/${+m[3]}(${DAYS[d.getDay()]}) ${m[4]}:${m[5]} · ${ago}`;
 }
 
+/** 묶음 표시. 모르는 묶음 값이 와도(플러그인이 먼저 새 값을 낼 때) 화면이 멈추지 않게 알림으로 그린다. */
+const groupLabel = (g: string) => (GROUP_LABEL as Record<string, { label: string; color: string }>)[g] ?? GROUP_LABEL.notice;
+
+/** 질문에 답을 보낸 뒤의 안내. 자동 실행이 살아서 기다리는 중이었는지, 죽어 있어 다시 띄웠는지에 따라 다르다. */
+function answerNotice(value: string | undefined, res: { restarted?: boolean; note?: string }): { warn: boolean; text: string } {
+  if (value === "멈추기") return { warn: false, text: "자동 실행을 멈춥니다." };
+  if (res.restarted) return { warn: false, text: "답을 보냈습니다. 멈춰 있던 자동 실행을 다시 시작해 이어 갑니다." };
+  if (res.note) return { warn: true, text: `답은 적어 두었습니다. 자동 실행은 다시 시작하지 못했습니다 — ${res.note}` };
+  return { warn: false, text: "답을 보냈습니다. 기다리던 자동 실행이 1분 안에 읽고 이어 갑니다." };
+}
+
+/** 다음 할 일 버튼의 요청 — 동작을 서버에 보내고 결과를 알린 뒤 판정을 다시 받는다. 질문 카드도 함께 쓴다. */
+export function useNextPost(item: NextItem, onDone?: () => void) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const post = async (action: NextAction, extra: Record<string, string> = {}) => {
+    if (typeof Notification !== "undefined" && window.isSecureContext && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    setBusy(true);
+    let res: { ok?: boolean; error?: string; restarted?: boolean; note?: string } = {};
+    try {
+      res = await (
+        await fetch("/api/orders", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ next: action, key: item.key, ...extra }),
+        })
+      ).json();
+    } catch {
+      /* 아래에서 실패로 알린다 */
+    }
+    setBusy(false);
+    if (res.ok) {
+      if (action === "ask") {
+        const n = answerNotice(extra.value, res);
+        if (n.warn) message.warning(n.text, 8);
+        else message.success(n.text);
+      } else {
+        message.success(action === "resolve" ? "해결 처리를 시작했습니다." : "시작했습니다. 진행은 오더 콘솔에서 볼 수 있습니다.");
+      }
+      onDone?.();
+      refreshNextActions(true);
+      router.refresh();
+    } else {
+      message.error(res.error === "already_running" ? "이미 실행 중입니다." : res.error || "요청에 실패했습니다.");
+    }
+  };
+  return { busy, post };
+}
+
 /** 목록 칸용 — 묶음 표시와 한 줄 설명 */
 export function NextActionTag({ item }: { item?: NextItem }) {
   if (!item) return <Text type="secondary">-</Text>;
-  const g = GROUP_LABEL[item.group];
+  const g = groupLabel(item.group);
   const icon = GROUP_ICON[item.group];
   if (icon)
     return (
@@ -136,42 +187,8 @@ export function NextActionControls({
 }) {
   const canAct = useCanAct();
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const { busy, post } = useNextPost(item, onDone);
   const [env, setEnv] = useState(item.env || "rc4");
-
-  const post = async (action: NextAction, extra: Record<string, string> = {}) => {
-    if (typeof Notification !== "undefined" && window.isSecureContext && Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {});
-    }
-    setBusy(true);
-    let res: { ok?: boolean; error?: string } = {};
-    try {
-      res = await (
-        await fetch("/api/orders", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ next: action, key: item.key, ...extra }),
-        })
-      ).json();
-    } catch {
-      /* 아래에서 실패로 알린다 */
-    }
-    setBusy(false);
-    if (res.ok) {
-      message.success(
-        action === "resolve"
-          ? "해결 처리를 시작했습니다."
-          : action === "ask"
-            ? "답을 보냈습니다. 자동 실행이 1분 안에 읽고 이어 갑니다."
-            : "시작했습니다. 진행은 오더 콘솔에서 볼 수 있습니다."
-      );
-      onDone?.();
-      refreshNextActions();
-      router.refresh();
-    } else {
-      message.error(res.error === "already_running" ? "이미 실행 중입니다." : res.error || "요청에 실패했습니다.");
-    }
-  };
 
   const copy = async () => {
     if (await copyText(item.command || item.cmd)) message.success("명령을 복사했습니다. 터미널에 붙여넣으세요.");
@@ -193,9 +210,22 @@ export function NextActionControls({
   const withDeploy = item.kind === "design-confirm" || item.kind === "run-ready" || item.kind === "resume";
 
   const buttons: React.ReactNode[] = [];
-  if (canAct && item.action === "ask" && item.ask) {
+  if (canAct && item.action === "ask" && item.ask && item.ask.v >= 2) {
+    // 새 형식의 질문은 일곱 칸을 다 읽어야 답할 수 있다. 여기(알림 카드)에는 싣지 않고 오더 화면 맨 위의 질문 카드로 보낸다.
+    buttons.push(
+      <Button
+        key="ask"
+        size="small"
+        type="primary"
+        icon={<QuestionCircleOutlined />}
+        onClick={() => router.push(`/orchestration/${encodeURIComponent(item.key)}#order-question`)}
+      >
+        질문 보고 답하기
+      </Button>
+    );
+  } else if (canAct && item.action === "ask" && item.ask) {
     const a = item.ask;
-    const stopBtn = (
+    const stopBtn = a.waiting && (
       <Popconfirm key="stop" title="자동 실행을 멈출까요?" okText="멈추기" cancelText="취소" onConfirm={() => post("ask", { value: "멈추기" })}>
         <Button size="small" danger loading={busy}>
           멈추기
@@ -307,7 +337,8 @@ export function NextActionControls({
       </Button>
     );
   }
-  if (showOpen) {
+  // 새 형식의 질문은 위 "질문 보고 답하기"가 오더 화면을 연다.
+  if (showOpen && !(item.action === "ask" && item.ask && item.ask.v >= 2)) {
     buttons.push(
       <Button key="open" size="small" onClick={() => router.push(`/orchestration/${encodeURIComponent(item.key)}`)}>
         오더 열기

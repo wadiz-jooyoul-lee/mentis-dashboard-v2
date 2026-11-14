@@ -115,7 +115,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, key: r.jobId }, { status: 202 });
   }
 
-  // 다음 할 일 버튼: { next: 동작, key, env?, value? } — value 는 부탁 카드의 답 — 셸 헬퍼로 상태를 바꾸고 필요하면 자동 실행을 띄운다.
+  // 다음 할 일 버튼: { next: 동작, key, env?, value? } — 셸 헬퍼로 상태를 바꾸고 필요하면 자동 실행을 띄운다.
+  // 질문에 답하기는 { next: "ask", key, value } — value 는 답(예·아니오, 방법 이름이나 적은 글, 했어요, 멈추기).
   if (body?.next) {
     const r = await runNextAction(
       String(body?.key ?? ""),
@@ -124,7 +125,16 @@ export async function POST(req: NextRequest) {
       body?.value != null ? String(body.value) : undefined
     );
     if (!r.ok) return NextResponse.json({ ok: false, error: r.reason }, { status: 409 });
-    return NextResponse.json({ ok: true, key: r.jobId ?? null }, { status: 202 });
+    // 질문에 답했을 때만 restarted(자동 실행을 다시 띄웠는가)와 note(다시 띄우지 못한 이유)가 붙는다.
+    return NextResponse.json(
+      {
+        ok: true,
+        key: r.jobId ?? null,
+        ...(r.restarted !== undefined ? { restarted: r.restarted } : {}),
+        ...(r.note ? { note: r.note } : {}),
+      },
+      { status: 202 }
+    );
   }
 
   // 워크트리 삭제(dobby-end와 동일 절차): 제거 전 code-changes/ 스냅샷 + 브랜치 보존.

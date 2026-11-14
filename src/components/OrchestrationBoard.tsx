@@ -575,6 +575,7 @@ export default function OrchestrationBoard({
         autoRunning,
         releaseDates: (epic?.releaseNote ?? []).map((r) => r.date),
         qa: epic?.qaRun ?? null,
+        ask: epic?.openAsk ?? null,
       })
     : null;
   const dotFor = (a: AgentRow): Dot | undefined =>

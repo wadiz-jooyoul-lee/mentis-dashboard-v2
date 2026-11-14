@@ -8,6 +8,7 @@ import PrLinkButton from "@/components/PrLinkButton";
 import JiraButton from "@/components/JiraButton";
 import ResumeV2Button from "@/components/ResumeV2Button";
 import V2RunButton from "@/components/V2RunButton";
+import OrderQuestion from "@/components/OrderQuestion";
 import ResolveButton from "@/components/ResolveButton";
 import BundleTags from "@/components/BundleTags";
 import { dobbyColor } from "@/lib/dobby";
@@ -64,6 +65,7 @@ function activeTab(pathname: string): string {
 /**
  * 오더 상세(보드·코드 변경·구현 내용·콘솔) 공통 헤더.
  * 브레드크럼 + 제목/태그 + 탭 네비를 상단 sticky 풀블리드로 그려, 모든 상세 페이지에서 동일하게 보인다.
+ * 머리 바로 아래(본문 맨 위)에는 답을 기다리는 질문 카드가 붙는다.
  * `extra`에는 페이지별 우측 컨트롤(예: 보드의 소감 컨트롤)을 넣는다.
  */
 export default function OrderHeader({
@@ -136,6 +138,7 @@ export default function OrderHeader({
       ];
 
   return (
+    <>
     <div
       data-order-header
       style={{
@@ -238,5 +241,8 @@ export default function OrderHeader({
       />
       </div>
     </div>
+    {/* 사람의 답을 기다리는 질문 — 어느 탭에서든 본문 맨 위에 보인다. 없으면 아무것도 그리지 않는다. */}
+    <OrderQuestion epicKey={epicKey} />
+    </>
   );
 }

@@ -47,6 +47,7 @@ import type { ReportRun } from "@/lib/issues";
 import { shipFromTestRuns } from "@/lib/shipFromTests";
 import { devProgress, type DevProgress } from "@/lib/devProgress";
 import { parseRetroJson, retroBlockReason, type RetroData } from "@/lib/retro";
+import { openAskTitle } from "@/lib/ask";
 import { autoRunState, liveSessions, qaProgress, qaRun, type AutoRun, type QaProgress, type QaRun } from "@/lib/presence";
 
 /** 이슈 키(FE1-1187) 또는 문서 전용 작업 키(TASK-slug). */
@@ -786,6 +787,8 @@ export type EpicDetail = {
   isV2: boolean;
   /** 자동 실행 표지 줄과 실제 프로세스 생존. 줄이 없으면 null. */
   autoRun: AutoRun | null;
+  /** 아직 답을 받지 못한 질문(ask.json)의 제목. 없으면 null. */
+  openAsk: string | null;
   /** 이 오더를 잡고 일하는 살아 있는 세션: 담당자 슬러그 → 세션 아이디. */
   sessions: Record<string, string>;
   /** QA 감시 진행(active 진행 중 · lost 감시 끊김). 감시 중이 아니면 null. */
@@ -1501,6 +1504,7 @@ export function getEpic(epicKey: string, opts: EpicLoadOpts = {}): EpicDetail | 
     phase: st?.phase ?? "unknown",
     isV2: isV2Status(statusMd),
     autoRun: autoRunState(st?.autoRunLine ?? null),
+    openAsk: openAskTitle(epicKey),
     sessions: liveSessions(epicKey),
     qaRun: qaRun(epicKey),
     qaProgress: qaRun(epicKey) === "active" ? qaProgress(epicKey) : null,

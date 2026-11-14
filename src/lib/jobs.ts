@@ -7,10 +7,10 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { getMetaDir, getWorkspaceDir, getReposRoot } from "@/lib/issues";
 import { ORDER_KEY_RE, isJiraIssueKey } from "@/lib/keys";
 import { fieldLine } from "@/lib/md";
+import { openAskTitle } from "@/lib/ask";
 
 export { ORDER_KEY_RE };
 
@@ -335,12 +335,43 @@ function v2RunScript(): string | null {
   return fs.existsSync(p) ? p : null;
 }
 
-/** run.sh 의 design_approved 와 같은 판정 — 승인 기록이 지금 design.md 지문(sha256 앞 8자)과 같은가. */
-function v2DesignApproved(dir: string): boolean {
+/**
+ * 플러그인의 단계 판정(`dobby_v2_step`) 한 줄 — "단계<TAB>담당자<TAB>설명<TAB>지시 문서", 멈출 때는 "멈춤<TAB>이유".
+ * 판정을 못 하면(플러그인이 없거나 옛 판이라 헬퍼가 없음) error 에 이유를 담는다.
+ */
+function v2Step(key: string): { stage: string; text: string } | { error: string } {
+  const lib = goDobbyLib();
+  if (!lib) return { error: "go-dobby 플러그인을 찾지 못했습니다" };
+  const cfg = path.join(os.homedir(), ".config/go-dobby/config.env");
+  const script =
+    `source ${shq(cfg)} 2>/dev/null; source ${shq(lib)} >/dev/null 2>&1 || exit 4; ` +
+    `dobby_load_config >/dev/null 2>&1; [ -n "$ORCHESTRATION_META" ] || exit 3; ` +
+    `declare -F dobby_v2_step >/dev/null || exit 5; dobby_v2_step ${shq(key)}`;
   try {
-    const rev = createHash("sha256").update(fs.readFileSync(path.join(dir, "design.md"))).digest("hex").slice(0, 8);
-    const ack = JSON.parse(fs.readFileSync(path.join(dir, "design-ack.json"), "utf8"));
-    return ack["사용자"] === rev || ack.auto === rev;
+    const out = execFileSync("bash", ["-c", script], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 });
+    const line = out.split("\n").find((l) => l.includes("\t")) ?? "";
+    const [stage, text = ""] = line.split("\t");
+    if (!stage) return { error: "다음 할 일을 정하지 못했습니다. 상태 문서를 확인해 주세요" };
+    return { stage, text: stage === "멈춤" ? text : (line.split("\t")[2] ?? "") };
+  } catch (e) {
+    const code = (e as { status?: number }).status;
+    return {
+      error:
+        code === 3
+          ? "설정(config.env)을 찾지 못했습니다. /dobby-init 을 확인해 주세요"
+          : code === 4 || code === 5
+            ? "go-dobby 플러그인을 업데이트해 주세요(단계 판정 없음)"
+            : "단계를 판정하지 못했습니다. 잠시 뒤 다시 시도해 주세요",
+    };
+  }
+}
+
+/** 오더 폴더에 그 담당자가 남긴, 답이 달린 질문이 있는가(멈추기는 답으로 치지 않는다). */
+function answeredAskFrom(dir: string, role: string): boolean {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, "ask.json"), "utf8"));
+    const v = String(j?.answer?.value ?? "").trim();
+    return !!v && v !== "멈추기" && j?.from?.role === role;
   } catch {
     return false;
   }
@@ -361,24 +392,26 @@ export function v2RunCheck(key: string): { ok: boolean; reason?: string; running
   if (!/(?:^|\n)##\s*지난 세션/.test(md)) {
     return { ok: false, reason: "dobby-order 로 진행한 오더입니다. /do 오더에서만 쓸 수 있습니다" };
   }
+  if (!v2RunScript()) return { ok: false, reason: "go-dobby 플러그인에서 run.sh 를 찾지 못했습니다" };
   const phase = md.match(/^- \*\*단계\*\*: *(.*)$/m)?.[1]?.trim() ?? "";
   // `/do {키} auto env=` 오더는 통합 뒤 배포·검증까지 run.sh 가 이어 간다(판단 요청에 답한 뒤 다시 띄울 때도 여기로 온다).
   const autoEnv = md.match(/^- \*\*자동 배포 환경\*\*: *(\S+)/m)?.[1];
-  const autoDeploy = !!autoEnv;
-  // 단계값은 "지금 누구 차례인가"다. 배포는 자동 배포 오더만 셸이 잇고, 보류는 사람의 판단 답이 먼저다.
-  if (phase === "설계" || phase === "설계확인" || phase === "분석") {
-    if (!v2DesignApproved(dir)) return { ok: false, reason: "설계가 확정되지 않았습니다" };
-  } else if (phase === "배포" && !autoDeploy) {
+  // 자동 배포 오더의 배포 차례는 run.sh 가 리뷰봇·빌드를 스스로 기다리고 막힘도 스스로 묻는다. 판정이 원격을 조회하므로 여기서는 부르지 않는다.
+  if (autoEnv && phase === "배포") return { ok: true, autoEnv };
+  // 그 밖에는 플러그인의 단계 판정(run.sh 가 차례마다 부르는 것)을 그대로 불러, run.sh 가 멈추는 경우에만 거부한다.
+  // 단계 이름을 여기 적어 두지 않으므로 플러그인에 새 단계가 생겨도 고칠 일이 없다.
+  const step = v2Step(k);
+  if ("error" in step) return { ok: false, reason: step.error };
+  if (step.stage === "멈춤") return { ok: false, reason: step.text };
+  if (step.stage === "설계" || step.stage === "설계확인") {
+    if (phase === "보류") return { ok: false, reason: `판단 요청에 답해야 합니다. 터미널에서 /do ${k} 로 답해 주세요` };
+    if (!phase || phase === "착수") return { ok: false, reason: "설계 전입니다" };
+    // 사람 없이 돌던 설계 세션이 남긴 질문에 답이 왔으면 run.sh 가 설계 세션을 다시 띄운다. 그 밖에는 사람이 설계를 확정할 차례다.
+    if (!answeredAskFrom(dir, "analysis-agent")) return { ok: false, reason: "설계가 확정되지 않았습니다" };
+  } else if (step.stage === "검증" && phase === "배포") {
+    // 배포 확인 전의 검증은 run.sh 도 띄우지 않는다(배포가 먼저다).
     return { ok: false, reason: `배포 차례입니다. 터미널에서 /dobby-ship ${k} {환경} 으로 배포해 주세요` };
-  } else if (phase === "보류") {
-    return { ok: false, reason: `판단 요청에 답해야 합니다. 터미널에서 /do ${k} 로 답해 주세요` };
-  } else if (!["구현", "리뷰", "수정", "통합", "배포", "검증", "실패분석"].includes(phase)) {
-    return {
-      ok: false,
-      reason: !phase || phase === "착수" ? "설계 전입니다" : `지금 단계(${phase})에서는 자동으로 진행할 일이 없습니다`,
-    };
   }
-  if (!v2RunScript()) return { ok: false, reason: "go-dobby 플러그인에서 run.sh 를 찾지 못했습니다" };
   return { ok: true, autoEnv };
 }
 
@@ -488,6 +521,11 @@ export function jobResultText(key: string): string | null {
   }
 }
 
+/** 이 잡이 질문을 남기고 사람의 답을 기다리는 /do 자동 실행인가. */
+function waitingForAnswer(jobKey: string): boolean {
+  return readMeta(jobKey)?.kind === "v2run" && openAskTitle(jobKey) !== null;
+}
+
 /**
  * 아바타 소감(재미기능) 생성: `/avatar-quips {키} [슬러그...]`를 백그라운드로 실행. 잡 id는 `quips-{키}`.
  * slugs를 주면 그 에이전트들 소감만 다시 만들어 병합한다(없으면 전체).
@@ -509,7 +547,9 @@ export function startQuips(
   //
   // ① 다른 잡(오케스트레이션·구현 내용·회고·Jira·설계 등)이 하나라도 돌고 있으면 시작하지
   //    않는다. 다른 오더의 소감 잡도 여기에 걸려 동시 실행이 1건으로 제한된다.
-  const busy = runningJobKeys().filter((k2) => k2 !== jobId);
+  //    사람의 답을 기다리는 자동 실행은 바쁜 잡으로 치지 않는다 — 기다리는 동안 아무 일도 하지 않는데,
+  //    세면 답이 올 때까지(최대 8시간) 모든 오더의 소감이 막힌다.
+  const busy = runningJobKeys().filter((k2) => k2 !== jobId && !waitingForAnswer(k2));
   if (busy.length > 0) return { ok: false, reason: `busy:${busy[0]}` };
   const prompt = `/avatar-quips ${k}${safe.length ? " " + safe.join(" ") : ""}`;
   // ② 가장 저렴한 모델(Haiku) + ③ nice로 OS 최하위 우선순위(dev 서버·본 작업에 CPU 양보).
@@ -655,6 +695,10 @@ export function unarchiveJob(key: string): { ok: boolean; reason?: string } {
 export function resumeOrder(key: string, message?: string): { ok: boolean; reason?: string } {
   if (!JOB_ID_RE.test(key)) return { ok: false, reason: "invalid_key" };
   if (isRunning(key)) return { ok: false, reason: "already_running" };
+  // /do 자동 실행 잡은 run.sh 가 세션을 스스로 이어 띄운다. 로그의 첫 세션(설계 세션)을 여기서 또 이어 띄우면 한 오더에 세션이 둘이 된다.
+  if (readMeta(key)?.kind === "v2run") {
+    return { ok: false, reason: "자동 실행은 세션을 스스로 이어 띄웁니다. 멈췄으면 자동 실행 버튼으로 다시 시작해 주세요" };
+  }
   const sid = parseSessionId(readLog(key));
   if (!sid) return { ok: false, reason: "no_session" };
   const msg = (message && message.trim()) || "중단된 지점부터 이어서 계속 진행해줘.";
@@ -687,6 +731,8 @@ export type JobStatus =
       sessionId: string | null;
       /** 예약된 피드백(다음 턴 자동 주입 대기 중). 없으면 null. */
       pending: string | null;
+      /** /do 자동 실행(run.sh) 잡. 세션을 스스로 이어 띄우므로 콘솔의 "이어서"와 피드백 전달을 막는다. */
+      autoRun?: boolean;
     };
 
 function parseSessionId(log: string): string | null {
@@ -824,5 +870,6 @@ export function getJobStatus(key: string): JobStatus {
     feed: feed.slice(-80),
     sessionId: parseSessionId(log),
     pending: getPending(key),
+    ...(m.kind === "v2run" ? { autoRun: true } : {}),
   };
 }

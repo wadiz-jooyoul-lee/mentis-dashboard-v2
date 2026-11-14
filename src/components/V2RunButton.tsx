@@ -4,14 +4,15 @@ import { useCanAct } from "@/components/CanAct";
 import { NextActionControls, refreshNextActions, useNextActions } from "@/components/NextAction";
 import { useState } from "react";
 import { Button, Tooltip } from "antd";
-import { PlayCircleOutlined } from "@ant-design/icons";
+import { PlayCircleOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import { ORDER_QUESTION_ID } from "@/components/OrderQuestion";
 
 /** 마우스를 올렸을 때 마지막 판정이 이보다 오래됐으면 다시 판정한다. */
 const STALE_MS = 5_000;
 
 /**
  * 오더 머리글의 "자동 실행" 자리 — 알림 카드와 같은 판정(다음 할 일)으로 같은 버튼을 그린다.
- * 할 일이 없으면 꺼진 버튼에 카드 문구를 보여 준다.
+ * 할 일이 없으면 꺼진 버튼에 카드 문구를 보여 준다. 질문이 있으면 본문 맨 위 질문 카드로 내려가는 버튼을 그린다.
  */
 export default function V2RunButton({ epicKey }: { epicKey: string }) {
   const canAct = useCanAct();
@@ -28,6 +29,21 @@ export default function V2RunButton({ epicKey }: { epicKey: string }) {
   // 다른 기기에서 열람 중이면 실행 버튼을 그리지 않는다(서버 가드는 별도).
   if (!canAct) return null;
   const item = items.find((i) => i.key === epicKey);
+  // 질문은 버튼 줄에 다 들어가지 않는다. 오더 화면 본문 맨 위의 질문 카드가 그리고, 여기서는 그 카드로 내려가는 버튼만 둔다.
+  if (item?.action === "ask" && item.ask) {
+    return (
+      <Tooltip title={item.text}>
+        <Button
+          type="link"
+          icon={<QuestionCircleOutlined />}
+          style={{ color: "#fa541c" }}
+          onClick={() => document.getElementById(ORDER_QUESTION_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        >
+          답을 기다리는 중
+        </Button>
+      </Tooltip>
+    );
+  }
   const actionable = !!item && !!(item.action || item.cmd || item.link);
   return (
     <span onMouseEnter={recheck}>

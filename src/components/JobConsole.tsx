@@ -64,6 +64,8 @@ export default function JobConsole({
   // 다른 기기 열람이면 정지·재개·예약 등 조작 불가 — 기존 '읽기 전용' 경로에 합류
   const controllable = canAct && (nn ? nn.controllable ?? true : true);
   const live = nn?.live ?? s.state === "running";
+  // /do 자동 실행 잡은 run.sh 가 단계마다 세션을 스스로 이어 띄운다. 여기서 로그의 첫 세션을 또 이어 띄우면 세션이 겹친다.
+  const autoRun = nn?.autoRun === true;
 
   const query = new URLSearchParams({ key: orderKey });
   if (agent) query.set("agent", agent);
@@ -102,7 +104,7 @@ export default function JobConsole({
 
   // 예약 자동 주입(제어형 잡만): 실행이 끝났고 예약+세션이 있으면 즉시 이어서.
   useEffect(() => {
-    if (!controllable || s.state === "none" || s.state === "running") return;
+    if (!controllable || autoRun || s.state === "none" || s.state === "running") return;
     if (pending && sessionId && !injecting.current) {
       injecting.current = true;
       fetch("/api/orders", {
@@ -120,7 +122,7 @@ export default function JobConsole({
           onChange?.();
         });
     }
-  }, [controllable, s.state, pending, sessionId, orderKey, refresh, onChange]);
+  }, [controllable, autoRun, s.state, pending, sessionId, orderKey, refresh, onChange]);
 
   const post = (body: object) =>
     fetch("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -158,7 +160,7 @@ export default function JobConsole({
   const cancelQueue = () => act(() => post({ key: orderKey, unqueue: true }), "예약 취소");
 
   const running = s.state === "running";
-  const canResume = controllable && (s.state === "failed" || s.state === "stopped") && !!sessionId;
+  const canResume = controllable && !autoRun && (s.state === "failed" || s.state === "stopped") && !!sessionId;
 
   // 배지: 기록형이면 추적중/재생, 제어형이면 실행중/완료/…
   const badge =
@@ -191,7 +193,7 @@ export default function JobConsole({
         )}
       </Space>
 
-      {controllable && pending && (
+      {controllable && !autoRun && pending && (
         <Tag icon={<ClockCircleOutlined />} color="processing" closable onClose={cancelQueue}>
           예약된 피드백: {pending.length > 40 ? pending.slice(0, 40) + "…" : pending}
         </Tag>
@@ -200,7 +202,13 @@ export default function JobConsole({
       <FeedView feed={s.state === "none" ? [] : s.feed} height={height} alwaysBottom={mode === "transcript"} />
 
       {/* 피드백 입력 — 제어형(대시보드 실행 잡)에서만. 기록형은 읽기전용. */}
-      {controllable && s.state !== "none" && (
+      {controllable && autoRun && s.state !== "none" && (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          자동 실행은 단계마다 세션을 스스로 이어 띄웁니다. 그래서 여기서는 이어서 지시할 수 없습니다. 멈췄으면 오더 화면의 자동 실행
+          버튼으로 다시 시작하고, 방향을 바꾸려면 정지한 뒤 터미널에서 변경을 요청해 주세요.
+        </Text>
+      )}
+      {controllable && !autoRun && s.state !== "none" && (
         <Space.Compact style={{ width: "100%" }}>
           <TextArea
             placeholder={

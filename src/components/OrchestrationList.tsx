@@ -99,7 +99,7 @@ export default function OrchestrationList({
   const GROUP_RANK = { mine: 0, notice: 1, auto: 2, work: 3, wait: 4 } as const;
   const rank = (k: string) => {
     const g = next.get(k)?.group;
-    return g ? GROUP_RANK[g] : 5;
+    return g ? GROUP_RANK[g] ?? 5 : 5;
   };
 
   const canAct = useCanAct();
